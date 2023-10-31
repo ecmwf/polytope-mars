@@ -51,6 +51,18 @@ class Time_Series:
                 self.lat.append(point1)
                 self.long.append(point2)
             self.shape = 'point'
+        elif list(request['extraction'].keys())[0] == 'disk':
+            it = iter(request["extraction"]["points"])
+            for point1, point2 in zip(it, it):
+                self.lat.append(point1)
+                self.long.append(point2)
+            self.shape = 'disk'
+        elif list(request['extraction'].keys())[0] == 'box':
+            it = iter(request["extraction"]["points"])
+            for point1, point2 in zip(it, it):
+                self.lat.append(point1)
+                self.long.append(point2)
+            self.shape = 'box'
         self.step = request["step"]
 
 
@@ -62,6 +74,22 @@ class Time_Series:
                 Span("time", self.start_time, self.end_time),
                 Select("latitude", self.lat),
                 Select("longitude", self.long),
+                Select("step", [np.timedelta64(self.step, "s")]),
+            )
+        elif self.shape == 'disk':
+            request = Request(
+                Span("number", 0.0, self.num),
+                Span("isobaricInhPa", self.min_height, self.max_height),
+                Span("time", self.start_time, self.end_time),
+                Disk(["latitude", "longitude"], [self.lat, self.long], [1, 1]),
+                Select("step", [np.timedelta64(self.step, "s")]),
+            )
+        elif self.shape == 'box':
+            request = Request(
+                Span("number", 0.0, self.num),
+                Span("isobaricInhPa", self.min_height, self.max_height),
+                Span("time", self.start_time, self.end_time),
+                Box(["latitude", "longitude"], lower_corner=[self.lat[0], self.long[0]], upper_corner=[self.lat[1], self.long[1]]),
                 Select("step", [np.timedelta64(self.step, "s")]),
             )
 
