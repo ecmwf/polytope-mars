@@ -16,9 +16,9 @@ request = {
     "step" : "0",  # Span
     "levtype" : "pl",
     "expver" : 1, 
-    "levelist" : "1/2/7/100/150/700/800/850", # Span
+    #"levelist" : "1/2/7/100/150/700/800/850", # Span
     "extraction" : {
-        "points" : [3, 7, 4, 8, 0, 7] # Select
+        "vertical profile" : [3, 7] # Select
     },
     "format": "GeoJSON" # JSON, FlatJSON
 }
@@ -38,31 +38,7 @@ class VerticalProfile:
            "isobaricInhPa": {"transformation": {"reverse": {True}}}}
         self.API = Polytope(datacube=self.array, engine=self.slicer, axis_options=options)
 
-        self.num = request["expver"]
-        self.min_height = request["levelist"].split('/')[0]
-        self.max_height = request["levelist"].split('/')[-1]
-        self.time = request["date"] + "T" + request["time"]
-        self.lat = []
-        self.long = []
-        if list(request['extraction'].keys())[0] == 'points':
-            it = iter(request["extraction"]["points"])
-            for point1, point2 in zip(it, it):
-                self.lat.append(point1)
-                self.long.append(point2)
-            self.shape = 'point'
-        elif list(request['extraction'].keys())[0] == 'disk':
-            it = iter(request["extraction"]["points"])
-            for point1, point2 in zip(it, it):
-                self.lat.append(point1)
-                self.long.append(point2)
-            self.shape = 'disk'
-        elif list(request['extraction'].keys())[0] == 'box':
-            it = iter(request["extraction"]["points"])
-            for point1, point2 in zip(it, it):
-                self.lat.append(point1)
-                self.long.append(point2)
-            self.shape = 'box'
-        self.step = request["step"]
+        self.parse_request(request)
 
 
     def vertical_profile(self):
@@ -98,6 +74,42 @@ class VerticalProfile:
         json.dump( cj, open( "vertical_profile.covjson", 'w' ) )
         return result
     
+    def parse_request(self, request):
+        self.num = request["expver"]
+        if "levellist" in request:
+            raise AttributeError()
+        else:
+            self.min_height = 0 #request["levelist"].split('/')[0]
+            self.max_height = 1100 #request["levelist"].split('/')[-1]
+        self.start_time = request["date"].split('/')[0] + "T" + request["time"]
+        self.end_time = request["date"].split('/')[-1] + "T" + request["time"]
+        self.lat = []
+        self.long = []
+        if list(request['extraction'].keys())[0] == 'vertical profile':
+            it = iter(request["extraction"]["vertical profile"])
+            for point1, point2 in zip(it, it):
+                self.lat.append(point1)
+                self.long.append(point2)
+            self.shape = 'point'
+        else:
+            raise AttributeError()
+        """
+        elif list(request['extraction'].keys())[0] == 'disk':
+            it = iter(request["extraction"]["points"])
+            for point1, point2 in zip(it, it):
+                self.lat.append(point1)
+                self.long.append(point2)
+            self.shape = 'disk'
+        elif list(request['extraction'].keys())[0] == 'box':
+            it = iter(request["extraction"]["points"])
+            for point1, point2 in zip(it, it):
+                self.lat.append(point1)
+                self.long.append(point2)
+            self.shape = 'box'
+        """
+        self.step = request["step"]
+
+    
     def convert_to_coverage(self, result):
         values = [val.get_ancestors() for val in result.leaves]
         coords = []
@@ -117,7 +129,76 @@ class VerticalProfile:
                 elif str(feature).split("=")[0] == "time":
                     times.append(str(feature).split("=")[1])
             coords.append(coord)
+        zs = [coord[2] for coord in coords]
 
+
+        cj = {
+        "type" : "Coverage",
+        "domain" : {
+            "type" : "Domain",
+            "domainType" : "VerticalProfile",
+            "axes": {
+            "x" : { "values": [coord[0]] },
+            "y" : { "values": [coord[1]] },
+            "z" : { "values": zs },
+            "t" : { "values": [times] }
+            },
+            "referencing": [{
+            "coordinates": ["x","y"],
+            "system": {
+                "type": "GeographicCRS",
+                "id": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+            }
+            }, {
+            "coordinates": ["z"],
+            "system": {
+                "type": "VerticalCRS",
+                "cs": {
+                "csAxes": [{
+                    "name": {
+                    "en": "Pressure"
+                    },
+                    "direction": "down",
+                    "unit": {
+                    "symbol": "Pa"
+                    }
+                }]
+                }
+            }
+            }, {
+            "coordinates": ["t"],
+            "system": {
+                "type": "TemporalRS",
+                "calendar": "Gregorian"
+            }
+            }]
+        },
+        "parameters" : {},
+        "ranges" : {}
+        }
+
+        parameter = {
+            "type": "Parameter",
+            "description": self.array.long_name,
+            "unit": {"symbol": self.array.GRIB_units},
+            "observedProperty": {
+                "id": self.array.GRIB_shortName,
+                "label": {"en": self.array.long_name},
+            },
+        }
+
+        cj["parameters"][self.array.GRIB_shortName] = parameter
+
+        for key in cj["parameters"].keys():
+            cj["ranges"][key] = {
+                "type": "NdArray",
+                "dataType": str("float"),
+                "axisNames": ["z"],
+                "shape": [len(result.leaves)],
+            }
+            cj["ranges"][key]["values"] = [val.result[1] for val in result.leaves]  # noqa
+
+        """
         for number in numbers:
             cj = {
                 "type": "Coverage",
@@ -172,5 +253,6 @@ class VerticalProfile:
                     "shape": [len(result.leaves)],
                 }
                 cj["ranges"][key]["values"] = [val.result[1] for val in result.leaves]  # noqa
+        """
 
         return cj

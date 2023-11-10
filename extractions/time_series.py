@@ -38,32 +38,7 @@ class Time_Series:
            "isobaricInhPa": {"transformation": {"reverse": {True}}}}
         self.API = Polytope(datacube=self.array, engine=self.slicer, axis_options=options)
 
-        self.num = request["expver"]
-        self.min_height = request["levelist"].split('/')[0]
-        self.max_height = request["levelist"].split('/')[-1]
-        self.start_time = request["date"].split('/')[0] + "T" + request["time"]
-        self.end_time = request["date"].split('/')[-1] + "T" + request["time"]
-        self.lat = []
-        self.long = []
-        if list(request['extraction'].keys())[0] == 'points':
-            it = iter(request["extraction"]["points"])
-            for point1, point2 in zip(it, it):
-                self.lat.append(point1)
-                self.long.append(point2)
-            self.shape = 'point'
-        elif list(request['extraction'].keys())[0] == 'disk':
-            it = iter(request["extraction"]["points"])
-            for point1, point2 in zip(it, it):
-                self.lat.append(point1)
-                self.long.append(point2)
-            self.shape = 'disk'
-        elif list(request['extraction'].keys())[0] == 'box':
-            it = iter(request["extraction"]["points"])
-            for point1, point2 in zip(it, it):
-                self.lat.append(point1)
-                self.long.append(point2)
-            self.shape = 'box'
-        self.step = request["step"]
+        self.parse_request(request)
 
 
     def time_series(self):
@@ -96,8 +71,37 @@ class Time_Series:
         result = self.API.retrieve(request)
         result.pprint()
         cj = self.convert_to_coverage(result)
-        json.dump( cj, open( "vertical_profile.covjson", 'w' ) )
+        json.dump( cj, open( "time_series.covjson", 'w' ) )
         return result
+    
+
+    def parse_request(self, request):
+        self.num = request["expver"]
+        self.min_height = 0 #request["levelist"].split('/')[0]
+        self.max_height = 1100 #request["levelist"].split('/')[-1]
+        self.start_time = request["date"].split('/')[0] + "T" + request["time"]
+        self.end_time = request["date"].split('/')[-1] + "T" + request["time"]
+        self.lat = []
+        self.long = []
+        if list(request['extraction'].keys())[0] == 'point':
+            it = iter(request["extraction"]["vertical profile"])
+            for point1, point2 in zip(it, it):
+                self.lat.append(point1)
+                self.long.append(point2)
+            self.shape = 'point'
+        elif list(request['extraction'].keys())[0] == 'disk':
+            it = iter(request["extraction"]["points"])
+            for point1, point2 in zip(it, it):
+                self.lat.append(point1)
+                self.long.append(point2)
+            self.shape = 'disk'
+        elif list(request['extraction'].keys())[0] == 'box':
+            it = iter(request["extraction"]["points"])
+            for point1, point2 in zip(it, it):
+                self.lat.append(point1)
+                self.long.append(point2)
+            self.shape = 'box'
+        self.step = request["step"]
     
     def convert_to_coverage(self, result):
         values = [val.get_ancestors() for val in result.leaves]
