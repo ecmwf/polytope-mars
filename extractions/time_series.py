@@ -6,6 +6,7 @@ from polytope.engine.hullslicer import HullSlicer
 from polytope.polytope import Polytope, Request
 from polytope.shapes import Box, Select, Span, Disk
 import json
+from output_to_coverage import convert_to_coverage
 
 request = {
     "class": "od",
@@ -20,15 +21,13 @@ request = {
     "extraction" : {
         "points" : [3, 7] # Select
     },
-    "format": "GeoJSON" # JSON, FlatJSON
+    "format": "coverageJSON" # JSON, FlatJSON
 }
 
 
 
 class Time_Series:
     def setup_method(self, request):
-        #nexus_url = "https://get.ecmwf.int/test-data/polytope/test-data/era5-levels-members.grib"
-        #download_test_data(nexus_url, "era5-levels-members.grib")
 
         ds = data.from_source("file", "./era5-test.grib")
         self.array = ds.to_xarray().isel(step=0).t
@@ -49,7 +48,7 @@ class Time_Series:
                 Span("time", self.start_time, self.end_time),
                 Select("latitude", self.lat),
                 Select("longitude", self.long),
-                Select("step", [np.timedelta64(self.step, "s")]),
+                Span("step", np.timedelta64(self.min_step, "s"), np.timedelta64(self.max_step, "s") ),
             )
         elif self.shape == 'disk':
             request = Request(
@@ -70,7 +69,7 @@ class Time_Series:
 
         result = self.API.retrieve(request)
         result.pprint()
-        cj = self.convert_to_coverage(result)
+        cj = convert_to_coverage(self.array, result)
         json.dump( cj, open( "time_series.covjson", 'w' ) )
         return result
     
@@ -83,8 +82,9 @@ class Time_Series:
         self.end_time = request["date"].split('/')[-1] + "T" + request["time"]
         self.lat = []
         self.long = []
+        self.shape = 'point'
         if list(request['extraction'].keys())[0] == 'point':
-            it = iter(request["extraction"]["vertical profile"])
+            it = iter(request["extraction"]["point"])
             for point1, point2 in zip(it, it):
                 self.lat.append(point1)
                 self.long.append(point2)
@@ -101,81 +101,6 @@ class Time_Series:
                 self.lat.append(point1)
                 self.long.append(point2)
             self.shape = 'box'
-        self.step = request["step"]
+        self.min_step = request["step"]
+        self.max_step = request["step"]
     
-    def convert_to_coverage(self, result):
-        values = [val.get_ancestors() for val in result.leaves]
-        coords = []
-        numbers = []
-        times = []
-        for ancestor in values:
-            coord = [0] * 3
-            for feature in ancestor:
-                if str(feature).split("=")[0] == "latitude":
-                    coord[0] = str(feature).split("=")[1]
-                elif str(feature).split("=")[0] == "longitude":
-                    coord[1] = str(feature).split("=")[1]
-                elif str(feature).split("=")[0] == "isobaricInhPa":
-                    coord[2] = str(feature).split("=")[1]
-                elif str(feature).split("=")[0] == "number":
-                    numbers.append(str(feature).split("=")[1])
-                elif str(feature).split("=")[0] == "time":
-                    times.append(str(feature).split("=")[1])
-            coords.append(coord)
-
-        for number in numbers:
-            cj = {
-                "type": "Coverage",
-                "domain": {
-                    "type": "Domain",
-                    "domainType": "MultiPoint",
-                    "axes": {
-                        "t": {"values": times},
-                        "composite": {"dataType": "tuple", "coordinates": ["x", "y", "z"], "values": []},
-                    },
-                    "referencing":[
-                        {
-                            "coordinates":[
-                                "x",
-                                "y",
-                                "z"
-                            ],
-                            "system":{
-                                "type":"GeographicCRS",
-                                "id":"http://www.opengis.net/def/crs/OGC/1.3/CRS84"
-                            }
-                        }
-                    ],
-                    "number": number,
-                    "valid time": str(times[0]),
-                },
-                "parameters": {},
-                "ranges": {},
-            }
-
-            cj["domain"]["axes"]["composite"]["values"] = coords
-
-            for variable in ['t']:
-
-                parameter = {
-                    "type": "Parameter",
-                    "description": self.array.long_name,
-                    "unit": {"symbol": self.array.GRIB_units},
-                    "observedProperty": {
-                        "id": self.array.GRIB_shortName,
-                        "label": {"en": self.array.long_name},
-                    },
-                }
-
-                cj["parameters"][self.array.GRIB_shortName] = parameter
-
-            for key in cj["parameters"].keys():
-                cj["ranges"][key] = {
-                    "type": "NdArray",
-                    "dataType": str("float"),
-                    "axisNames": ["x", "y", "z"],
-                    "shape": [len(result.leaves)],
-                }
-                cj["ranges"][key]["values"] = [val.result[1] for val in result.leaves]  # noqa
-
-        return cj
