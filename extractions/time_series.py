@@ -6,7 +6,7 @@ from polytope.engine.hullslicer import HullSlicer
 from polytope.polytope import Polytope, Request
 from polytope.shapes import Box, Select, Span, Disk
 import json
-from output_to_coverage import convert_to_coverage
+from output_to_coverage import convert_to_coverage, convert_to_pointseries_coverage
 
 request = {
     "class": "od",
@@ -19,7 +19,7 @@ request = {
     "expver" : 1, 
     "levelist" : "1/2/7/100/150/700/800/850", # Span
     "extraction" : {
-        "points" : [3, 7] # Select
+        "point" : [3, 7] # Select
     },
     "format": "coverageJSON" # JSON, FlatJSON
 }
@@ -36,7 +36,7 @@ class Time_Series:
         options = {"latitude": {"transformation": {"reverse": {True}}},
            "isobaricInhPa": {"transformation": {"reverse": {True}}}}
         self.API = Polytope(datacube=self.array, engine=self.slicer, axis_options=options)
-
+        self.request = request
         self.parse_request(request)
 
 
@@ -69,15 +69,15 @@ class Time_Series:
 
         result = self.API.retrieve(request)
         result.pprint()
-        cj = convert_to_coverage(self.array, result)
+        cj = convert_to_pointseries_coverage(self.array, result, self.request)
         json.dump( cj, open( "time_series.covjson", 'w' ) )
         return result
     
 
     def parse_request(self, request):
         self.num = request["expver"]
-        self.min_height = 0 #request["levelist"].split('/')[0]
-        self.max_height = 1100 #request["levelist"].split('/')[-1]
+        self.min_height = request["levelist"].split('/')[0]
+        self.max_height = request["levelist"].split('/')[-1]
         self.start_time = request["date"].split('/')[0] + "T" + request["time"]
         self.end_time = request["date"].split('/')[-1] + "T" + request["time"]
         self.lat = []
