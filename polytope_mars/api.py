@@ -8,8 +8,8 @@ from .features.verticalprofile import VerticalProfile
 from polytope import polytope, shapes
 
 features = {
-    "timeseries" : TimeSeries,
-    "verticalprofile" : VerticalProfile
+    "timeseries": TimeSeries,
+    "verticalprofile": VerticalProfile
 }
 
 
@@ -20,7 +20,7 @@ class PolytopeMars():
         pass
 
     def extract(self, request):
-        
+
         # request expected in JSON or dict
         if not isinstance(request, dict):
             try:
@@ -38,7 +38,7 @@ class PolytopeMars():
         try:
             feature_type = feature_config["type"]
         except KeyError:
-            raise KeyError("Request does not contain a 'feature' keyword")
+            raise KeyError("The 'feature' does not contain a 'type' keyword")
 
         feature = self._feature_factory(feature_type, feature_config)
 
@@ -53,8 +53,6 @@ class PolytopeMars():
         # TODO: make polytope request to get data
         # TODO: convert output to coveragejson (defer to feature specialisation to handle particular outputs?)
 
-
-
     def _create_base_shapes(self, request: dict) -> List[shapes.Shape]:
 
         base_shapes = []
@@ -68,7 +66,7 @@ class PolytopeMars():
         #   * AREA, GRID
         # do we need to filter this... it will fail later anyway
 
-        for k,v in request.items():
+        for k, v in request.items():
             split = str(v).split("/")
 
             # ALL -> All
@@ -77,18 +75,18 @@ class PolytopeMars():
 
             # Single value -> Select
             elif len(split) == 1:
-                base_shapes.append(shapes.Select(k, split[0]))
+                base_shapes.append(shapes.Select(k, [split[0]]))
 
             # Range a/to/b, "by" not supported -> Span
             elif len(split) == 3 and split[1] == "to":
                 base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))
-            
+
             elif "by" in split:
                 raise ValueError(f"Ranges with step-size specified with 'by' keyword is not supported")
-            
+
             # List of individual values -> Union of Selects
             else:
-                base_shapes.append(shapes.Union([k], *[shapes.Select(k, val) for val in split]))
+                base_shapes.append(shapes.Select(k, split))
 
         return base_shapes
 
@@ -99,6 +97,3 @@ class PolytopeMars():
             return feature_class(feature_config)
         else:
             raise NotImplementedError(f"Feature '{feature_name}' not found")
-
-        
-
