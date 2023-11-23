@@ -20,7 +20,9 @@ class TestFeatureFactory:
             "levelist" : "1/2/7/100/150/700/800/850",
             "feature" : {
                 "type" : "timeseries",
-                "points": [[3, 7]]
+                "points": [[3, 7]],
+                "start": 0,
+                "end" : 240
             },
         }
 
