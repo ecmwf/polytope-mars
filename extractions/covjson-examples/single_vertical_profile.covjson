@@ -1,11 +1,12 @@
 {
 	"type": "Coverage",
-    "mars:metadata" : {
+    "ecmwf:metadata" : {
         "class": "od",
         "stream": "oper",
         "levtype": "PL",
         "date": "2023115",
-        "step": 0,
+		"time" : "1200",
+		"step" : 0
     },
 	"domain": {
 		"type": "Domain",
@@ -30,7 +31,7 @@
 				]
 			},
 
-            // for convenience we could put the datetime here (date + step), but it is optional
+            // we put valid time here (datetime + step)
 			"t": {
 				"values": [
 					["2023-07-03T12:00:00Z"]
@@ -69,7 +70,7 @@
 					}
 				}
 			},
-			{   // not used if we omit the "t"
+			{
 				"coordinates": [
 					"t"
 				],
@@ -78,7 +79,7 @@
 					"calendar": "Gregorian"
 				}
 			}
-		],
+		]
 	},
 	"parameters": {
         // we can return multiple parameters in a single coverage
