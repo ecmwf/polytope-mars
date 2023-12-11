@@ -12,14 +12,15 @@ request = {
     "class": "od",
     "stream" : "oper",
     "type" : "fc",
-    "date" : "20170101/to/20170102",
+    "date" : "20170101",
     "time" : "00:00:00",
     "step" : "0",  # Span
     "levtype" : "pl",
     "expver" : 1, 
     "levelist" : "1/2/7/100/150/700/800/850", # Span
     "extraction" : {
-        "point" : [3, 7] # Select
+        "point" : [3, 7], # Select
+        "step" : "0/1/2/3/4"
     },
     "format": "coverageJSON" # JSON, FlatJSON
 }
