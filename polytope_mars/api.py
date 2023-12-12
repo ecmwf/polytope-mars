@@ -1,5 +1,6 @@
 import json
 import logging
+import eccovjson
 
 from typing import List
 
@@ -17,7 +18,7 @@ class PolytopeMars():
 
     def __init__(self, datacube_config):
         # Initialise polytope
-        pass
+        self.api = datacube_config
 
     def extract(self, request):
 
@@ -39,6 +40,11 @@ class PolytopeMars():
             feature_type = feature_config["type"]
         except KeyError:
             raise KeyError("The 'feature' does not contain a 'type' keyword")
+        
+        feature_start = feature_config["start"]
+        feature_end = feature_config["end"]
+        feature_lat = feature_config["points"][0][0]
+        feature_long = feature_config["points"][0][0]
 
         feature = self._feature_factory(feature_type, feature_config)
 
@@ -49,9 +55,22 @@ class PolytopeMars():
         shapes.extend(feature.get_shapes())
 
         preq = polytope.Request(*shapes)
+        print(preq)
 
         # TODO: make polytope request to get data
+
+        result = self.api.retrieve(preq)
+        result.pprint()
+
         # TODO: convert output to coveragejson (defer to feature specialisation to handle particular outputs?)
+
+        encoder = eccovjson.encoder.TimeSeries.TimeSeries("CoverageCollection", "PointSeries")
+        request["step"] = list(range(feature_start, feature_end))
+        request["latitude"] = feature_lat
+        request["longitude"] = feature_long
+        coverage = encoder.from_polytope(result, request)
+        with open('result.covjson', 'w') as fp:
+            json.dump(coverage, fp)
 
     def _create_base_shapes(self, request: dict) -> List[shapes.Shape]:
 

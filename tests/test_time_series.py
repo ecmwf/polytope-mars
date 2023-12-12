@@ -1,9 +1,24 @@
 
 import pytest
 import json
+import os
 
 from polytope_mars.api import PolytopeMars
 from polytope_mars.api import features
+
+
+from datetime import date, datetime, timedelta
+import datetime
+import random
+
+os.environ['ECCODES_DEFINITION_PATH'] = '/Users/maaw/bundles/build/share/eccodes/definitions/'
+os.environ['DYLD_LIBRARY_PATH'] = '/Users/maaw/bundles/build/lib/'
+os.environ['FDB_HOME'] = '/Users/maaw/fdb_store'
+
+from polytope.datacube.backends.fdb import FDBDatacube
+from polytope.engine.hullslicer import HullSlicer
+from polytope.polytope import Polytope, Request
+from polytope.shapes import Box, Select, Disk, Span, All, Point
 
 class TestFeatureFactory:
 
@@ -11,20 +26,36 @@ class TestFeatureFactory:
         
         self.request = {
             "class": "od",
-            "stream" : "oper",
-            "type" : "fc",
-            "date" : "20170101/to/20170102",
-            "time" : "00:00:00",
-            "levtype" : "pl",
+            "stream" : "enfo",
+            "type" : "pf",
+            "date" : "20231205T000000",
+            #"time" : "00:00:00",
+            "levtype" : "sfc",
             "expver" : "0001", 
-            "levelist" : "1/2/7/100/150/700/800/850",
+            "domain" : "g",
+            "param" : "167",
+            "number" : "1/2/3/4/5",
             "feature" : {
                 "type" : "timeseries",
-                "points": [[3, 7]],
+                "points": [[0.035149384216, 0.0]],
                 "start": 0,
-                "end" : 240
+                "end" : 9
             },
         }
+
+        options = {
+            "values": {
+                "transformation": {
+                    "mapper": {"type": "octahedral", "resolution": 1280, "axes": ["latitude", "longitude"]}
+                }
+            },
+            "date": {"transformation": {"merge": {"with": "time", "linkers": ["T", "00"]}}},
+            "step": {"transformation": {"type_change": "int"}},
+        }
+        config = {"class": "od", "expver": "0001", "levtype": "sfc", "type": "pf"}
+        fdbdatacube = FDBDatacube(config, axis_options=options)
+        slicer = HullSlicer()
+        self.API = Polytope(datacube=fdbdatacube, engine=slicer, axis_options=options)
 
     def test_timeseries_invalid(self):
 
@@ -44,4 +75,25 @@ class TestFeatureFactory:
 
     def test_timeseries_valid(self):
         
-        PolytopeMars({}).extract(self.request)
+        PolytopeMars(self.API).extract(self.request)
+
+"""
+request = Request(
+            #Select("step", [0,1,2,3,4,5,6,7,8,9]),
+            All("step"),
+            Select("levtype", ["sfc"]),
+            Select("date", [pd.Timestamp("20231205T000000")]),
+            Select("domain", ["g"]),
+            Select("expver", ["0001"]),
+            Select("param", ["167"]),
+            Select("class", ["od"]),
+            Select("stream", ["enfo"]),
+            Select("type", ["pf"]),
+            Select("latitude", [0.035149384216]),
+            Select("longitude", [0.0]),
+            #Point(["latitude", "longitude"], [0.035149384216, 0.0], method="surronding"),
+            #Box(["latitude", "longitude"], [0, 0], [0.2, 0.2]),
+            Select("number", ["1","2","3","4","5"]),
+            #All("number"),
+        )
+"""
