@@ -45,11 +45,6 @@ class PolytopeMars():
             feature_type = feature_config["type"]
         except KeyError:
             raise KeyError("The 'feature' does not contain a 'type' keyword")
-        
-        feature_start = feature_config["start"]
-        feature_end = feature_config["end"]
-        feature_lat = feature_config["points"][0][0]
-        feature_long = feature_config["points"][0][0]
 
         feature = self._feature_factory(feature_type, feature_config)
 
@@ -60,19 +55,17 @@ class PolytopeMars():
         shapes.extend(feature.get_shapes())
 
         preq = polytope.Request(*shapes)
-        print(preq)
+        #print(preq)
 
         # TODO: make polytope request to get data
 
         result = self.api.retrieve(preq)
-        result.pprint()
+        #result.pprint()
 
         # TODO: convert output to coveragejson (defer to feature specialisation to handle particular outputs?)
 
         encoder = eccovjson.encoder.TimeSeries.TimeSeries("CoverageCollection", "PointSeries")
-        request["step"] = list(range(feature_start, feature_end))
-        request["latitude"] = feature_lat
-        request["longitude"] = feature_long
+        request = self._parse_request(feature, request)
 
         coverage = encoder.from_polytope(result, request)
         with open('result.covjson', 'w') as fp:
@@ -86,6 +79,9 @@ class PolytopeMars():
         #   * strings to integers for step, number, etc.
         #   * date/times to datetime (and merging of date + time)
         #   * enforcing strings are actually strings (e.g. type=fc)
+
+        time = request.pop("time").replace(":", "")
+        request["date"] = request["date"] + "T" + time
 
         # TODO: not restricting certain keywords:
         #   * AREA, GRID
@@ -122,3 +118,14 @@ class PolytopeMars():
             return feature_class(feature_config)
         else:
             raise NotImplementedError(f"Feature '{feature_name}' not found")
+
+    def _parse_request(self, feature, request):
+        feature_start = feature.start_step
+        feature_end = feature.end_step
+        feature_lat = feature.points[0][0]
+        feature_long = feature.points[0][1]
+
+        request["step"] = list(range(feature_start, feature_end))
+        request["latitude"] = feature_lat
+        request["longitude"] = feature_long
+        return request
