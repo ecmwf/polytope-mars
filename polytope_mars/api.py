@@ -7,6 +7,9 @@ from typing import List
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
 from polytope import polytope, shapes
+from polytope.polytope import Polytope, Request
+from polytope.datacube.backends.fdb import FDBDatacube
+from polytope.engine.hullslicer import HullSlicer
 
 features = {
     "timeseries": TimeSeries,
@@ -16,9 +19,11 @@ features = {
 
 class PolytopeMars():
 
-    def __init__(self, datacube_config):
+    def __init__(self, datacube_config, datacube_options):
         # Initialise polytope
-        self.api = datacube_config
+        fdbdatacube = FDBDatacube(datacube_config, axis_options=datacube_options)
+        slicer = HullSlicer()
+        self.api = Polytope(datacube=fdbdatacube, engine=slicer)
 
     def extract(self, request):
 
@@ -68,6 +73,7 @@ class PolytopeMars():
         request["step"] = list(range(feature_start, feature_end))
         request["latitude"] = feature_lat
         request["longitude"] = feature_long
+
         coverage = encoder.from_polytope(result, request)
         with open('result.covjson', 'w') as fp:
             json.dump(coverage, fp)
