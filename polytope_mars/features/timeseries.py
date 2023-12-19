@@ -25,7 +25,7 @@ class TimeSeries(Feature):
         
 
     def incompatible_keys(self):
-        return ["step"]
+        return ["step", "levellist"]
 
     def coverage_type(self):
         return "PointSeries"
