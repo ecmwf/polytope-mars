@@ -1,6 +1,6 @@
 retrieve,
     class=od,
-    date=2017-01-01,
+    date=20170101/to/20170102,
     expver=1,
     levelist=1/2/7/100/150/700/800/850,
     levtype=pl,
@@ -9,5 +9,5 @@ retrieve,
     stream=oper,
     time=00:00:00,
     type=fc,
-    grid=0.25/0.25,
-    target="era5-test.grib"
+    grid=0.5/0.5,
+    target="era5-timeseries.grib"

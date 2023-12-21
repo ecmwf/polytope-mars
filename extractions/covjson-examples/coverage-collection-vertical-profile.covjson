@@ -1,14 +1,16 @@
 {
 	"type": "CoverageCollection",
     "domainType" : "VerticalProfile",
+    "ecmwf:metadata" : {
+        "class": "od",
+        "stream": "oper",
+        "levtype": "PL",
+        "date": "2023115"
+    },
     "coverages": [
         {
             // possible to put this at the top, and only override each coverage
-            "mars:metadata" : {
-                "class": "od",
-                "stream": "oper",
-                "levtype": "PL",
-                "date": "2023115",
+            "ecmwf:metadata" : {
                 "step": 0
             },
             "domain": {
