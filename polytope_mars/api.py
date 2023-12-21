@@ -57,7 +57,6 @@ class PolytopeMars():
         shapes.extend(feature.get_shapes())
 
         preq = Request(*shapes)
-        #print(preq)
 
         # TODO: make polytope request to get data
 
@@ -70,8 +69,10 @@ class PolytopeMars():
         request = self._parse_request(feature, request)
 
         self.coverage = encoder.from_polytope(result, request)
-        with open('result.covjson', 'w') as fp:
-            json.dump(self.coverage, fp)
+        #with open('result.covjson', 'w') as fp:
+        #    json.dump(self.coverage, fp)
+
+        return self.coverage
 
     def _create_base_shapes(self, request: dict) -> List[shapes.Shape]:
 
