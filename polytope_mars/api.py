@@ -66,7 +66,7 @@ class PolytopeMars():
         # TODO: convert output to coveragejson (defer to feature specialisation to handle particular outputs?)
 
         encoder = Eccovjson().encode(
-            "CoverageCollection", "PointSeries", feature_type
+            "CoverageCollection", feature_type
         )
         request = self._parse_request(feature, request)
 
