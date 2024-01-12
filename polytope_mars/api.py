@@ -1,6 +1,6 @@
 import json
 import logging
-import eccovjson
+from eccovjson.api import Eccovjson
 
 from typing import List
 
@@ -65,7 +65,9 @@ class PolytopeMars():
 
         # TODO: convert output to coveragejson (defer to feature specialisation to handle particular outputs?)
 
-        encoder = eccovjson.encoder.TimeSeries.TimeSeries("CoverageCollection", "PointSeries")
+        encoder = Eccovjson().encode(
+            "CoverageCollection", "PointSeries", feature_type
+        )
         request = self._parse_request(feature, request)
 
         self.coverage = encoder.from_polytope(result, request)
