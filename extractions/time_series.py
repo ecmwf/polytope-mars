@@ -14,17 +14,31 @@ request = {
     "type" : "fc",
     "date" : "20170101",
     "time" : "00:00:00",
-    "step" : "0",  # Span
+    "step" : "0",  
     "levtype" : "pl",
     "expver" : 1, 
-    "levelist" : "1/2/7/100/150/700/800/850", # Span
+    "levelist" : "1/2/7/100/150/700/800/850", 
     "extraction" : {
-        "point" : [3, 7], # Select
+        "point" : [3, 7], 
         "step" : "0/1/2/3/4"
     },
-    "format": "coverageJSON" # JSON, FlatJSON
+    "format": "coverageJSON" 
 }
 
+# need types for each of the fields in mars e.g.
+# step = integer
+# date = timestamp
+# number = integer
+#
+# parse this request and get back from fdb 
+# 
+# feature for coverage
+# abstract feature coverage
+# then fill in based on feature type
+# also look at collections of these
+# Create data for different ensembles to be passed to the meteograms
+# talk to mathilde about setting up an fdb with ensemble data with data before june
+# 
 
 
 class Time_Series:
