@@ -6,6 +6,7 @@ from typing import List
 
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
+from .features.boundingbox import BoundingBox
 from polytope import polytope, shapes
 from polytope.polytope import Polytope, Request
 from polytope.datacube.backends.fdb import FDBDatacube
@@ -13,7 +14,8 @@ from polytope.engine.hullslicer import HullSlicer
 
 features = {
     "timeseries": TimeSeries,
-    "verticalprofile": VerticalProfile
+    "verticalprofile": VerticalProfile,
+    "boundingbox": BoundingBox
 }
 
 
@@ -64,11 +66,12 @@ class PolytopeMars():
         #result.pprint()
 
         # TODO: convert output to coveragejson (defer to feature specialisation to handle particular outputs?)
-
+        print(feature_type)
         encoder = Eccovjson().encode(
             "CoverageCollection", feature_type
         )
-        request = self._parse_request(feature, request)
+        if feature_type == "timeseries":
+            request = self._parse_request(feature, request)
 
         self.coverage = encoder.from_polytope(result, request)
         #with open('result.covjson', 'w') as fp:

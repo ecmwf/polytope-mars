@@ -26,13 +26,12 @@ class TestFeatureFactory:
             "levtype" : "sfc",
             "expver" : "0001", 
             "domain" : "g",
-            "param" : "167",
-            "number" : "1/2/3/4/5",
+            "param" : "165/166",
+            "number" : "1",
+            "step" : "0",
             "feature" : {
-                "type" : "timeseries",
-                "points": [[0.035149384216, 0.0]],
-                "start": 0,
-                "end" : 9
+                "type" : "boundingbox",
+                "points": [[0, 0], [0.2, 0.2]],
             },
         }
 
@@ -48,7 +47,7 @@ class TestFeatureFactory:
 
         self.config = {"class": "od", "expver": "0001", "levtype": "sfc", "type": "pf"}
 
-    def test_timeseries_invalid(self):
+    def test_boundingbox_invalid(self):
 
         with pytest.raises(ValueError):
             PolytopeMars(self.options,self.config).extract("invalid")
@@ -68,7 +67,7 @@ class TestFeatureFactory:
         with pytest.raises(KeyError):
             PolytopeMars(self.options,self.config).extract(self.request)
 
-    def test_timeseries_valid(self):
+    def test_boudningbox_valid(self):
         
         coverage = PolytopeMars(self.config, self.options).extract(self.request)
         print(coverage)
