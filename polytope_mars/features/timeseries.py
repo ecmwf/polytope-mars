@@ -21,7 +21,7 @@ class TimeSeries(Feature):
                        #lower_corner=[p[0], p[1], self.start_step],
                        #upper_corner=[p[0], p[1], self.end_step])
                             #for p in self.points])]
-            *[shapes.Point(["latitude", "longitude"], [[p[0],p[1]]], method="surrounding") for p in self.points]), shapes.Span("step", self.start_step, self.end_step)]
+            *[shapes.Point(["latitude", "longitude"], [[p[0],p[1]]], method="nearest") for p in self.points]), shapes.Span("step", self.start_step, self.end_step)]
 
         
 
