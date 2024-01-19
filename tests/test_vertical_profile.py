@@ -11,9 +11,7 @@ from datetime import date, datetime, timedelta
 import datetime
 import random
 
-os.environ['ECCODES_DEFINITION_PATH'] = '/Users/maaw/bundles/build/share/eccodes/definitions/'
-os.environ['DYLD_LIBRARY_PATH'] = '/Users/maaw/bundles/build/lib/'
-os.environ['FDB_HOME'] = '/Users/maaw/fdb_store'
+# If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
 
 
 class TestFeatureFactory:

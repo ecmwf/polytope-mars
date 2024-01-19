@@ -17,24 +17,27 @@ import random
 class TestFeatureFactory:
 
     def setup_method(self):
-        
+
+
         self.request = {
             "class": "od",
-            "stream" : "enfo",
-            "type" : "pf",
-            "date" : "20231205",
+            "expver": "0001",
+            "levtype": "sfc",
+            "type": "pf",
             "time" : "00:00:00",
-            "levtype" : "sfc",
-            "expver" : "0001", 
-            "domain" : "g",
-            "param" : "165/166",
-            "number" : "1",
-            "step" : "0",
-            "feature" : {
-                "type" : "boundingbox",
-                "points": [[0, 0], [0.2, 0.2]],
+            "date" : "20231205",
+            "step": "0",
+            "domain": "g",
+            "param": "165/166",
+            "stream": "enfo",
+            "feature": {
+                "type" : "frame",
+                "outer_box": [[0,0], [0.2,0.2]],
+                "inner_box": [[0.1,0.1], [0.15,0.15]],
             },
+            "number": "1",
         }
+    
 
         self.options = {
             "values": {
@@ -46,7 +49,7 @@ class TestFeatureFactory:
 
         self.config = {"class": "od", "expver": "0001", "levtype": "sfc", "type": "pf"}
 
-    def test_boundingbox_invalid(self):
+    def test_frame_invalid(self):
 
         with pytest.raises(TypeError):
             PolytopeMars(self.options,self.config).extract("invalid")
@@ -66,7 +69,7 @@ class TestFeatureFactory:
         with pytest.raises(TypeError):
             PolytopeMars(self.options,self.config).extract(self.request)
 
-    def test_boundingbox_valid(self):
+    def test_frame_valid(self):
         
         coverage = PolytopeMars(self.config, self.options).extract(self.request)
         print(coverage)
