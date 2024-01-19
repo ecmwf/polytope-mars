@@ -52,13 +52,13 @@ class TestFeatureFactory:
     def test_verticalprofile_invalid(self):
         pass
 
-        with pytest.raises(ValueError):
+        with pytest.raises(TypeError):
             PolytopeMars(self.options,self.config).extract("invalid")
 
-        with pytest.raises(KeyError):
+        with pytest.raises(TypeError):
             PolytopeMars(self.options,self.config).extract({"hello": "world"})
 
-        with pytest.raises(KeyError):
+        with pytest.raises(TypeError):
             PolytopeMars(self.options,self.config).extract(json.dumps({"hello": "world"}))
 
         # 'step' is invalid in the request

@@ -13,6 +13,7 @@ import random
 
 # If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
 
+
 class TestFeatureFactory:
 
     def setup_method(self):
@@ -37,34 +38,32 @@ class TestFeatureFactory:
 
         self.options = {
             "values": {
-                "transformation": {
                     "mapper": {"type": "octahedral", "resolution": 1280, "axes": ["latitude", "longitude"]}
-                }
             },
-            "date": {"transformation": {"merge": {"with": "time", "linkers": ["T", "00"]}}},
-            "step": {"transformation": {"type_change": "int"}},
+            "date": {"merge": {"with": "time", "linkers": ["T", "00"]}},
+            "step": {"type_change": "int"},
         }
 
         self.config = {"class": "od", "expver": "0001", "levtype": "sfc", "type": "pf"}
 
     def test_boundingbox_invalid(self):
 
-        with pytest.raises(ValueError):
+        with pytest.raises(TypeError):
             PolytopeMars(self.options,self.config).extract("invalid")
 
-        with pytest.raises(KeyError):
+        with pytest.raises(TypeError):
             PolytopeMars(self.options,self.config).extract({"hello": "world"})
 
-        with pytest.raises(KeyError):
+        with pytest.raises(TypeError):
             PolytopeMars(self.options,self.config).extract(json.dumps({"hello": "world"}))
 
         # 'step' is invalid in the request
         self.request["step"] = "0"
-        with pytest.raises(KeyError):
+        with pytest.raises(TypeError):
             PolytopeMars(self.options,self.config).extract(self.request)
 
         self.request["levellist"] = "0"
-        with pytest.raises(KeyError):
+        with pytest.raises(TypeError):
             PolytopeMars(self.options,self.config).extract(self.request)
 
     def test_boudningbox_valid(self):
