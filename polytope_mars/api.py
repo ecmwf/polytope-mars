@@ -137,4 +137,6 @@ class PolytopeMars():
         request["step"] = list(range(feature_start, feature_end))
         request["latitude"] = feature_lat
         request["longitude"] = feature_long
+        if "number" not in request:
+            request["number"] = 0
         return request
