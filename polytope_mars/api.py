@@ -71,12 +71,8 @@ class PolytopeMars():
         encoder = Eccovjson().encode(
             "CoverageCollection", feature_type
         )
-        if feature_type == "timeseries":
-            request = self._parse_request(feature, request)
 
-        self.coverage = encoder.from_polytope(result, request)
-        #with open('result.covjson', 'w') as fp:
-        #    json.dump(self.coverage, fp)
+        self.coverage = encoder.from_polytope(result)
 
         return self.coverage
 
@@ -127,16 +123,3 @@ class PolytopeMars():
             return feature_class(feature_config)
         else:
             raise NotImplementedError(f"Feature '{feature_name}' not found")
-
-    def _parse_request(self, feature, request):
-        feature_start = feature.start_step
-        feature_end = feature.end_step
-        feature_lat = feature.points[0][0]
-        feature_long = feature.points[0][1]
-
-        request["step"] = list(range(feature_start, feature_end))
-        request["latitude"] = feature_lat
-        request["longitude"] = feature_long
-        if "number" not in request:
-            request["number"] = 0
-        return request
