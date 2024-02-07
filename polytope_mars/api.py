@@ -113,6 +113,11 @@ class PolytopeMars():
             # List of individual values -> Union of Selects
             else:
                 base_shapes.append(shapes.Select(k, split))
+            #else:
+            #    if k == 'number':
+            #        base_shapes.append(shapes.Span(k, lower=split[0], upper=split[-1]))
+            #    else:
+            #        base_shapes.append(shapes.Select(k, split))
 
         return base_shapes
 
