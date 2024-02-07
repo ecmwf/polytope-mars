@@ -8,6 +8,7 @@ from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
 from .features.boundingbox import BoundingBox
 from .features.frame import Frame
+from .features.path import Path
 from polytope import polytope, shapes
 from polytope.polytope import Polytope, Request
 from polytope.datacube.backends.fdb import FDBDatacube
@@ -18,6 +19,7 @@ features = {
     "verticalprofile": VerticalProfile,
     "boundingbox": BoundingBox,
     "frame": Frame,
+    "path": Path,
 }
 
 
