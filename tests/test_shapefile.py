@@ -32,7 +32,7 @@ class TestFeatureFactory:
             "step" : "0",
             "feature" : {
                 "type" : "shapefile",
-                "file": "tests/test_file.shp",
+                "file": "tests/data/NUTS_RG_01M_2021_4326.shp",
             },
         }
 

@@ -13,3 +13,10 @@ top_level.txt
 *.covjson
 *.grib
 *.ipynb
+*.prj
+*.shx
+*.dbf
+*.cpg
+*.xml
+*.csv
+*.zip
