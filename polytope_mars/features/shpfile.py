@@ -6,12 +6,18 @@ import geopandas as gpd
 # Function to convert POLYGON and MULTIPOLYGON to points 
 def get_coords(geom):
     if geom.geom_type == 'Polygon':
-        coords = list(geom.exterior.coords)
+        coords = []
+        for point in geom.exterior.coords:
+            coords.append([point[0], point[1]])
+        return [coords]
     else:
         coords = []
         for geom in geom.geoms:
-            coords = list(geom.exterior.coords)
-    return (coords)
+            coord = []
+            for point in geom.exterior.coords:
+                coord.append([point[0], point[1]])
+            coords.append(coord)
+    return coords
 
 class Shapefile(Feature):
 
@@ -25,13 +31,13 @@ class Shapefile(Feature):
 
     def get_shapes(self):
 
+        self.df = self.df.head(2)
+
         coordinates = self.df.geometry.apply(get_coords)
         polygons = []
-        for coord in coordinates:
-            points = []
-            for point in coord:
-                points.append([point[0], point[1]])
-            polygons.append(shapes.Polygon(["latitude", "longitude"], points))
+        for coords in coordinates:
+            for coord in coords:
+                polygons.append(shapes.Polygon(["latitude", "longitude"], coord))
         return [shapes.Union(["latitude", "longitude"], *polygons)]
 
     def incompatible_keys(self):

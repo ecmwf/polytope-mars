@@ -7,11 +7,11 @@ from shapely import wkt
 # Function to convert POLYGON and MULTIPOLYGON to points 
 def get_coords(geom):
     if geom.geom_type == 'Polygon':
-        coords = list(geom.exterior.coords)
+        coords = [list(geom.exterior.coords)]
     else:
         coords = []
         for geom in geom.geoms:
-            coords = list(geom.exterior.coords)
+            coords.append(list(geom.exterior.coords))
     return (coords)
 
 class Wkt(Feature):
@@ -28,10 +28,11 @@ class Wkt(Feature):
 
         coordinates = get_coords(self.df)
         polygons = []
-        points = []
-        for point in coordinates:
-            points.append([point[0], point[1]])
-        polygons.append(shapes.Polygon(["latitude", "longitude"], points))
+        for coord in coordinates:
+            points = []
+            for point in coord:
+                points.append([point[0], point[1]])
+            polygons.append(shapes.Polygon(["latitude", "longitude"], points))
         return [shapes.Union(["latitude", "longitude"], *polygons)]
 
     def incompatible_keys(self):
