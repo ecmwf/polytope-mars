@@ -3,6 +3,16 @@ from ..feature import Feature
 from polytope import shapes
 import geopandas as gpd
 
+# Function to convert POLYGON and MULTIPOLYGON to points 
+def get_coords(geom):
+    if geom.geom_type == 'Polygon':
+        coords = list(geom.exterior.coords)
+    else:
+        coords = []
+        for geom in geom.geoms:
+            coords = list(geom.exterior.coords)
+    return (coords)
+
 class Shapefile(Feature):
 
     def __init__(self, config):
@@ -15,20 +25,13 @@ class Shapefile(Feature):
 
     def get_shapes(self):
 
-        self.df = self.df.head(2)
+        coordinates = self.df.geometry.apply(get_coords)
         polygons = []
-        for row in self.df.iterrows():
-            if row[1]['geometry'].geom_type == 'Polygon':
-                points = []
-                for point in row[1]['geometry'].exterior.coords:
-                    points.append([point[0], point[1]])
-                polygons.append(shapes.Polygon(["latitude", "longitude"], points))
-            else:
-                for geom in row[1]["geometry"].geoms:
-                    points = []
-                    for point in geom.exterior.coords:
-                        points.append([point[0], point[1]])
-                    polygons.append(shapes.Polygon(["latitude", "longitude"], points))
+        for coord in coordinates:
+            points = []
+            for point in coord:
+                points.append([point[0], point[1]])
+            polygons.append(shapes.Polygon(["latitude", "longitude"], points))
         return [shapes.Union(["latitude", "longitude"], *polygons)]
 
     def incompatible_keys(self):
