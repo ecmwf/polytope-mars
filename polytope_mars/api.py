@@ -9,6 +9,7 @@ from .features.verticalprofile import VerticalProfile
 from .features.boundingbox import BoundingBox
 from .features.frame import Frame
 from .features.path import Path
+from .features.shpfile import Shapefile
 from polytope import polytope, shapes
 from polytope.polytope import Polytope, Request
 from polytope.datacube.backends.fdb import FDBDatacube
@@ -20,6 +21,7 @@ features = {
     "boundingbox": BoundingBox,
     "frame": Frame,
     "path": Path,
+    "shapefile": Shapefile,
 }
 
 
