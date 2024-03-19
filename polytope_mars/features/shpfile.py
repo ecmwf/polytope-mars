@@ -31,7 +31,7 @@ class Shapefile(Feature):
 
     def get_shapes(self):
 
-        self.df = self.df.head(2)
+        #self.df = self.df.head(1)
 
         coordinates = self.df.geometry.apply(get_coords)
         polygons = []
