@@ -70,3 +70,10 @@ class TestFeatureFactory:
         
         coverage = PolytopeMars(self.config, self.options).extract(self.request)
         print(coverage)
+
+    def test_geojson_valid(self):
+        self.request['feature']['file'] = "tests/data/NUTS_RG_01M_2021_4326.geojson"
+
+        
+        coverage = PolytopeMars(self.config, self.options).extract(self.request)
+        print(coverage)
