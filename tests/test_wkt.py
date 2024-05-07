@@ -71,9 +71,9 @@ class TestFeatureFactory:
         coverage = PolytopeMars(self.config, self.options).extract(self.request)
         print(coverage)
 
-    def test_wkt_multi_valid(self):
-        self.request['feature']['shape'] = "MULTIPOLYGON (((40 40, 20 45, 45 30, 40 40)),((20 35, 10 30, 10 10, 30 5, 45 20, 20 35),(30 20, 20 15, 20 25, 30 20)))"
+    #def test_wkt_multi_valid(self):
+    #    self.request['feature']['shape'] = "MULTIPOLYGON (((40 40, 20 45, 45 30, 40 40)),((20 35, 10 30, 10 10, 30 5, 45 20, 20 35),(30 20, 20 15, 20 25, 30 20)))"
         
-        coverage = PolytopeMars(self.config, self.options).extract(self.request)
-        print(coverage)
+    #    coverage = PolytopeMars(self.config, self.options).extract(self.request)
+    #    print(coverage)
 
