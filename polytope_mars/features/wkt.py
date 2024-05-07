@@ -7,28 +7,26 @@ from shapely import wkt
 from ..feature import Feature
 
 
-# Function to convert POLYGON and MULTIPOLYGON to points 
+# Function to convert POLYGON and MULTIPOLYGON to points
 def get_coords(geom):
-    if geom.geom_type == 'Polygon':
+    if geom.geom_type == "Polygon":
         coords = [list(geom.exterior.coords)]
     else:
         coords = []
         for geom in geom.geoms:
             coords.append(list(geom.exterior.coords))
-    return (coords)
+    return coords
+
 
 class Wkt(Feature):
-
     def __init__(self, config):
-        
-        assert config.pop('type') == "wkt"
-        self.shape = config.pop('shape')
+        assert config.pop("type") == "wkt"
+        self.shape = config.pop("shape")
         self.df = wkt.loads(self.shape)
 
         assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
 
     def get_shapes(self):
-
         coordinates = get_coords(self.df)
         polygons = []
         for coord in coordinates:
@@ -43,8 +41,6 @@ class Wkt(Feature):
 
     def coverage_type(self):
         return "wkt"
-    
+
     def name(self):
         return "Wkt"
-    
-

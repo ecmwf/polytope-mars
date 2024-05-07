@@ -1,4 +1,3 @@
-
 from abc import ABC, abstractmethod
 from typing import List
 
@@ -6,7 +5,6 @@ from polytope import shapes
 
 
 class Feature(ABC):
-
     @abstractmethod
     def name(self):
         pass
@@ -23,11 +21,10 @@ class Feature(ABC):
     def coverage_type(self):
         pass
 
-
     def validate(self, request):
-
         incompatible_keys = self.incompatible_keys()
         for key in incompatible_keys:
             if key in request:
-                raise KeyError(f"Request contains a '{key}' keyword which is not compatible with feature {self.name()}")
-
+                raise KeyError(
+                    f"Request contains a '{key}' keyword which is not compatible with feature {self.name()}"
+                )

@@ -27,8 +27,7 @@ features = {
 }
 
 
-class PolytopeMars():
-
+class PolytopeMars:
     def __init__(self, datacube_config, datacube_options):
         # Initialise polytope
         fdbdatacube = FDBDatacube(datacube_config, axis_options=datacube_options)
@@ -38,7 +37,6 @@ class PolytopeMars():
         self.coverage = {}
 
     def extract(self, request):
-
         # request expected in JSON or dict
         if not isinstance(request, dict):
             try:
@@ -71,19 +69,16 @@ class PolytopeMars():
         # TODO: make polytope request to get data
 
         result = self.api.retrieve(preq)
-        #result.pprint()
+        # result.pprint()
 
         # TODO: convert output to coveragejson (defer to feature specialisation to handle particular outputs?)
-        encoder = Eccovjson().encode(
-            "CoverageCollection", feature_type
-        )
+        encoder = Eccovjson().encode("CoverageCollection", feature_type)
 
         self.coverage = encoder.from_polytope(result)
 
         return self.coverage
 
     def _create_base_shapes(self, request: dict) -> List[shapes.Shape]:
-
         base_shapes = []
 
         # TODO: not handling type conversion
@@ -114,12 +109,14 @@ class PolytopeMars():
                 base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))
 
             elif "by" in split:
-                raise ValueError(f"Ranges with step-size specified with 'by' keyword is not supported")
+                raise ValueError(
+                    f"Ranges with step-size specified with 'by' keyword is not supported"
+                )
 
             # List of individual values -> Union of Selects
             else:
                 base_shapes.append(shapes.Select(k, split))
-            #else:
+            # else:
             #    if k == 'number':
             #        base_shapes.append(shapes.Span(k, lower=split[0], upper=split[-1]))
             #    else:
@@ -128,7 +125,6 @@ class PolytopeMars():
         return base_shapes
 
     def _feature_factory(self, feature_name, feature_config):
-
         feature_class = features.get(feature_name)
         if feature_class:
             return feature_class(feature_config)

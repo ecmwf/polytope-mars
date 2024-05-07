@@ -6,9 +6,9 @@ from polytope import shapes
 from ..feature import Feature
 
 
-# Function to convert POLYGON and MULTIPOLYGON to points 
+# Function to convert POLYGON and MULTIPOLYGON to points
 def get_coords(geom):
-    if geom.geom_type == 'Polygon':
+    if geom.geom_type == "Polygon":
         coords = []
         for point in geom.exterior.coords:
             coords.append([point[0], point[1]])
@@ -22,18 +22,16 @@ def get_coords(geom):
             coords.append(coord)
     return coords
 
-class Shapefile(Feature):
 
+class Shapefile(Feature):
     def __init__(self, config):
-        
-        assert config.pop('type') == "shapefile"
-        self.file = config.pop('file')
+        assert config.pop("type") == "shapefile"
+        self.file = config.pop("file")
         self.df = gpd.read_file(self.file)
 
         assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
 
     def get_shapes(self):
-
         self.df = self.df.head(1)
 
         coordinates = self.df.geometry.apply(get_coords)
@@ -48,8 +46,6 @@ class Shapefile(Feature):
 
     def coverage_type(self):
         return "shapefile"
-    
+
     def name(self):
         return "Shapefile"
-    
-
