@@ -15,6 +15,14 @@ Current features include:
 * Shape File
 * Frame
 
+## Installation
+
+```bash
+pip install -e .
+```
+
+Currently no pypi package available. WIll be added in the future.
+
 ## Usage
 
 **Create time series request**: Create a request for a time series request using the time series feature, set options and config for use by polytope feature extraction. NB: Assumes data is in a local FDB.
