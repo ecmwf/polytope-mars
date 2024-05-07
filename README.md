@@ -17,7 +17,7 @@ Current features include:
 
 ## Usage
 
-** Create time series request**: Create a request for a time series request using the time series feature, set options and config for use by polytope feature extraction. NB: Assumes data is in a local FDB.
+**Create time series request**: Create a request for a time series request using the time series feature, set options and config for use by polytope feature extraction. NB: Assumes data is in a local FDB.
 
 ```python
 from polytope_mars.api import PolytopeMars
