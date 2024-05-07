@@ -1,6 +1,9 @@
 from typing import List
-from ..feature import Feature
+
 from polytope import shapes
+
+from ..feature import Feature
+
 
 class Path(Feature):
 

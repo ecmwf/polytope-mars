@@ -1,7 +1,9 @@
 
 from abc import ABC, abstractmethod
 from typing import List
+
 from polytope import shapes
+
 
 class Feature(ABC):
 

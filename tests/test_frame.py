@@ -1,15 +1,13 @@
 
-import pytest
+import datetime
 import json
 import os
-
-from polytope_mars.api import PolytopeMars
-from polytope_mars.api import features
-
-
-from datetime import date, datetime, timedelta
-import datetime
 import random
+from datetime import date, datetime, timedelta
+
+import pytest
+
+from polytope_mars.api import PolytopeMars, features
 
 # If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
 

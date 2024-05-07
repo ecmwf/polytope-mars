@@ -1,7 +1,10 @@
 from typing import List
-from ..feature import Feature
-from polytope import shapes
+
 import geopandas as gpd
+from polytope import shapes
+
+from ..feature import Feature
+
 
 # Function to convert POLYGON and MULTIPOLYGON to points 
 def get_coords(geom):

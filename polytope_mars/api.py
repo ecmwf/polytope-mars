@@ -1,20 +1,20 @@
 import json
 import logging
-from eccovjson.api import Eccovjson
-
 from typing import List
 
-from .features.timeseries import TimeSeries
-from .features.verticalprofile import VerticalProfile
+from eccovjson.api import Eccovjson
+from polytope import polytope, shapes
+from polytope.datacube.backends.fdb import FDBDatacube
+from polytope.engine.hullslicer import HullSlicer
+from polytope.polytope import Polytope, Request
+
 from .features.boundingbox import BoundingBox
 from .features.frame import Frame
 from .features.path import Path
 from .features.shpfile import Shapefile
+from .features.timeseries import TimeSeries
+from .features.verticalprofile import VerticalProfile
 from .features.wkt import Wkt
-from polytope import polytope, shapes
-from polytope.polytope import Polytope, Request
-from polytope.datacube.backends.fdb import FDBDatacube
-from polytope.engine.hullslicer import HullSlicer
 
 features = {
     "timeseries": TimeSeries,
