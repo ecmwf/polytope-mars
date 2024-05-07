@@ -28,7 +28,6 @@ Currently no pypi package available. WIll be added in the future.
 **Create time series request**: Create a request for a time series request using the time series feature, set options and config for use by polytope feature extraction. NB: Assumes data is in a local FDB.
 
 ```python
-from polytope_mars.api import PolytopeMars
 
 request = {
     "class": "od",
@@ -49,15 +48,4 @@ request = {
     },
 }
 
-options = {
-    "values": {
-            "mapper": {"type": "octahedral", "resolution": 1280, "axes": ["latitude", "longitude"]}
-    },
-    "date": {"merge": {"with": "time", "linkers": ["T", "00"]}},
-    "step": {"type_change": "int"},
-    "number": {"type_change": "int"},
-}
-config = {"class": "od", "expver": "0001", "levtype": "sfc", "type": "pf"}
-
-result = PolytopeMars(config, options).extract(request)
 ```
