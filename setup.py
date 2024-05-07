@@ -1,0 +1,23 @@
+import io
+import re
+
+from setuptools import find_packages, setup
+
+__version__ = re.search(
+    r'__version__\s*=\s*[\'"]([^\'"]*)[\'"]',
+    io.open("polytope_mars/version.py", encoding="utf_8_sig").read(),
+).group(1)
+
+
+setup(
+    name="polytope-mars",
+    version=__version__,
+    description="High level meteorological feature extraction interface to Polytope",
+    long_description="",
+    url="https://github.com/ecmwf/polytope-mars",
+    author="ECMWF",
+    author_email="James.Hawkes@ecmwf.int, Adam.Warde@ecmwf.int, Mathilde.Leuridan@ecmwf.int",
+    packages=find_packages(),
+    zip_safe=False,
+    include_package_data=True,
+)
