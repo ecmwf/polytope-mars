@@ -1,5 +1,3 @@
-from typing import List
-
 from polytope import shapes
 
 from ..feature import Feature
@@ -15,7 +13,7 @@ class Frame(Feature):
         assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
 
     def get_shapes(self):
-        # frame is a four seperate boxes requested based on the inner and outer boxes
+        # frame is a four seperate boxes requested based on the inner and outer boxes  # noqa: E501
         return [
             shapes.Union(
                 ["latitude", "longitude"],

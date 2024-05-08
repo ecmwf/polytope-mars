@@ -1,5 +1,3 @@
-from typing import List
-
 import geopandas as gpd
 from polytope import shapes
 
@@ -38,7 +36,9 @@ class Shapefile(Feature):
         polygons = []
         for coords in coordinates:
             for coord in coords:
-                polygons.append(shapes.Polygon(["latitude", "longitude"], coord))
+                polygons.append(
+                    shapes.Polygon(["latitude", "longitude"], coord)
+                )  # noqa: E501
         return [shapes.Union(["latitude", "longitude"], *polygons)]
 
     def incompatible_keys(self):
