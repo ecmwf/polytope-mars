@@ -1,2 +1,5 @@
 polytope
 eccovjson
+xarray
+shapely
+json
