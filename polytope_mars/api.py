@@ -1,7 +1,7 @@
 import json
 from typing import List
 
-from eccovjson.api import Eccovjson
+from covjsonkit.api import Covjsonkit
 from polytope import shapes
 from polytope.datacube.backends.fdb import FDBDatacube
 from polytope.engine.hullslicer import HullSlicer
@@ -74,7 +74,7 @@ class PolytopeMars:
         result = self.api.retrieve(preq)
         # result.pprint()
 
-        encoder = Eccovjson().encode("CoverageCollection", feature_type)
+        encoder = Covjsonkit().encode("CoverageCollection", feature_type)
 
         self.coverage = encoder.from_polytope(result)
 
