@@ -29,11 +29,14 @@ features = {
 class PolytopeMars:
     def __init__(self, datacube_config, datacube_options):
         # Initialise polytope
-        fdbdatacube = FDBDatacube(
-            datacube_config, axis_options=datacube_options
-        )  # noqa: E501
-        slicer = HullSlicer()
-        self.api = Polytope(datacube=fdbdatacube, engine=slicer)
+        #fdbdatacube = FDBDatacube(
+        #    datacube_config, axis_options=datacube_options
+        #)  # noqa: E501
+        #slicer = HullSlicer()
+        #self.api = Polytope(datacube=fdbdatacube, engine=slicer)
+
+        self.datacube_config = datacube_config
+        self.datacube_options = datacube_options
 
         self.coverage = {}
 
@@ -71,6 +74,9 @@ class PolytopeMars:
 
         # TODO: make polytope request to get data
 
+        fdbdatacube = FDBDatacube(preq, self.datacube_config, axis_options=self.datacube_options)
+        slicer = HullSlicer()
+        self.api = Polytope(datacube=fdbdatacube, engine=slicer, axis_options=self.datacube_options)
         result = self.api.retrieve(preq)
         # result.pprint()
 
