@@ -46,6 +46,7 @@ class TestFeatureFactory:
             "type": "pf",
         }  # noqa: E501
 
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_shapefile_invalid(self):
         with pytest.raises(TypeError):
             PolytopeMars(self.options, self.config).extract("invalid")
@@ -67,12 +68,14 @@ class TestFeatureFactory:
         with pytest.raises(TypeError):
             PolytopeMars(self.options, self.config).extract(self.request)
 
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_shapefile_valid(self):
         coverage = PolytopeMars(self.config, self.options).extract(
             self.request
         )  # noqa: E501
         print(coverage)
 
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_geojson_valid(self):
         self.request["feature"][
             "file"
