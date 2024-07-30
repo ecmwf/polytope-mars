@@ -3,4 +3,3 @@ covjsonkit
 xarray
 shapely
 geopandas
-pygribjump
