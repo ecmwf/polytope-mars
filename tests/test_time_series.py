@@ -1,12 +1,8 @@
-import datetime
 import json
-import os
-import random
-from datetime import date, datetime, timedelta
 
 import pytest
 
-from polytope_mars.api import PolytopeMars, features
+from polytope_mars.api import PolytopeMars
 
 # If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
 
@@ -44,8 +40,14 @@ class TestFeatureFactory:
             "step": {"type_change": "int"},
         }
 
-        self.config = {"class": "od", "expver": "0001", "levtype": "sfc", "type": "pf"}
+        self.config = {
+            "class": "od",
+            "expver": "0001",
+            "levtype": "sfc",
+            "type": "pf",
+        }  # noqa: E501
 
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_timeseries_invalid(self):
         with pytest.raises(TypeError):
             PolytopeMars(self.options, self.config).extract("invalid")
@@ -67,6 +69,9 @@ class TestFeatureFactory:
         with pytest.raises(TypeError):
             PolytopeMars(self.options, self.config).extract(self.request)
 
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_timeseries_valid(self):
-        coverage = PolytopeMars(self.config, self.options).extract(self.request)
+        coverage = PolytopeMars(self.config, self.options).extract(
+            self.request
+        )  # noqa: E501
         print(coverage)

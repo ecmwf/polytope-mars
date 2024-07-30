@@ -1,10 +1,9 @@
 import json
-import logging
 from typing import List
 
-from eccovjson.api import Eccovjson
-from polytope import polytope, shapes
-from polytope.datacube.backends.fdb import FDBDatacube
+import pygribjump as gj
+from covjsonkit.api import Covjsonkit
+from polytope import shapes
 from polytope.engine.hullslicer import HullSlicer
 from polytope.polytope import Polytope, Request
 
@@ -28,11 +27,16 @@ features = {
 
 
 class PolytopeMars:
-    def __init__(self, datacube_config, datacube_options):
+    def __init__(self, datacube_type, datacube_options):
         # Initialise polytope
-        fdbdatacube = FDBDatacube(datacube_config, axis_options=datacube_options)
-        slicer = HullSlicer()
-        self.api = Polytope(datacube=fdbdatacube, engine=slicer)
+        # fdbdatacube = FDBDatacube(
+        #    datacube_config, axis_options=datacube_options
+        # )  # noqa: E501
+        # slicer = HullSlicer()
+        # self.api = Polytope(datacube=fdbdatacube, engine=slicer)
+
+        self.datacube_type = datacube_type
+        self.datacube_options = datacube_options
 
         self.coverage = {}
 
@@ -42,7 +46,9 @@ class PolytopeMars:
             try:
                 request = json.loads(request)
             except ValueError:
-                raise ValueError("Request not in JSON format or python dictionary")
+                raise ValueError(
+                    "Request not in JSON format or python dictionary"
+                )  # noqa: E501
 
         # expect a "feature" key in the request
         try:
@@ -68,11 +74,25 @@ class PolytopeMars:
 
         # TODO: make polytope request to get data
 
+        if self.datacube_type == "grib":
+            fdbdatacube = gj.GribJump()
+        else:
+            raise NotImplementedError(
+                f"Datacube type '{self.datacube_type}' not found"
+            )  # noqa: E501
+        slicer = HullSlicer()
+        self.api = Polytope(
+            # request=preq,
+            datacube=fdbdatacube,
+            engine=slicer,
+            options=self.datacube_options,
+        )
+        # result = API.retrieve(request)
+
         result = self.api.retrieve(preq)
         # result.pprint()
 
-        # TODO: convert output to coveragejson (defer to feature specialisation to handle particular outputs?)
-        encoder = Eccovjson().encode("CoverageCollection", feature_type)
+        encoder = Covjsonkit().encode("CoverageCollection", feature_type)
 
         self.coverage = encoder.from_polytope(result)
 
@@ -106,21 +126,18 @@ class PolytopeMars:
 
             # Range a/to/b, "by" not supported -> Span
             elif len(split) == 3 and split[1] == "to":
-                base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))
+                base_shapes.append(
+                    shapes.Span(k, lower=split[0], upper=split[2])
+                )  # noqa: E501
 
             elif "by" in split:
                 raise ValueError(
-                    f"Ranges with step-size specified with 'by' keyword is not supported"
+                    "Ranges with step-size specified with 'by' keyword is not supported"  # noqa: E501
                 )
 
             # List of individual values -> Union of Selects
             else:
                 base_shapes.append(shapes.Select(k, split))
-            # else:
-            #    if k == 'number':
-            #        base_shapes.append(shapes.Span(k, lower=split[0], upper=split[-1]))
-            #    else:
-            #        base_shapes.append(shapes.Select(k, split))
 
         return base_shapes
 

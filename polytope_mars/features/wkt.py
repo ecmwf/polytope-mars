@@ -1,6 +1,3 @@
-from typing import List
-
-import geopandas as gpd
 from polytope import shapes
 from shapely import wkt
 

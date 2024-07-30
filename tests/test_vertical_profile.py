@@ -1,12 +1,8 @@
-import datetime
 import json
-import os
-import random
-from datetime import date, datetime, timedelta
 
 import pytest
 
-from polytope_mars.api import PolytopeMars, features
+from polytope_mars.api import PolytopeMars
 
 # If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
 
@@ -42,12 +38,20 @@ class TestFeatureFactory:
                 }
             },
             "date": {
-                "transformation": {"merge": {"with": "time", "linkers": ["T", "00"]}}
+                "transformation": {
+                    "merge": {"with": "time", "linkers": ["T", "00"]}
+                }  # noqa: E501
             },
             "step": {"transformation": {"type_change": "int"}},
         }
-        self.config = {"class": "od", "expver": "0001", "levtype": "sfc", "type": "pf"}
+        self.config = {
+            "class": "od",
+            "expver": "0001",
+            "levtype": "sfc",
+            "type": "pf",
+        }  # noqa: E501
 
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_verticalprofile_invalid(self):
         pass
 
@@ -67,6 +71,6 @@ class TestFeatureFactory:
         # with pytest.raises(KeyError):
         #    PolytopeMars(self.options,self.config).extract(self.request)
 
-    def test_timeseries_valid(self):
+    def test_vertical_profile_valid(self):
         pass
         # PolytopeMars(self.config, self.options).extract(self.request)

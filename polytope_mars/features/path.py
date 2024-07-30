@@ -1,5 +1,3 @@
-from typing import List
-
 from polytope import shapes
 
 from ..feature import Feature
@@ -14,7 +12,7 @@ class Path(Feature):
         assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
 
     def get_shapes(self):
-        # Time-series is a squashed box from start_step to start_end for each point
+        # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
         return [
             shapes.Union(
                 ["latitude", "longitude"],

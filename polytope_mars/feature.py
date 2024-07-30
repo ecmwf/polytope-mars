@@ -26,5 +26,5 @@ class Feature(ABC):
         for key in incompatible_keys:
             if key in request:
                 raise KeyError(
-                    f"Request contains a '{key}' keyword which is not compatible with feature {self.name()}"
+                    f"Request contains a '{key}' keyword which is not compatible with feature {self.name()}"  # noqa: E501
                 )

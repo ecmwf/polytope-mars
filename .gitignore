@@ -20,3 +20,6 @@ top_level.txt
 *.xml
 *.csv
 *.zip
+*.req
+*.shp
+*.pdf
