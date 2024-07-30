@@ -1,4 +1,5 @@
 polytope
-eccovjson
+covjsonkit
 xarray
 shapely
+geopandas
