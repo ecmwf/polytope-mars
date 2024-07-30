@@ -51,6 +51,7 @@ class TestFeatureFactory:
             "type": "pf",
         }  # noqa: E501
 
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_verticalprofile_invalid(self):
         pass
 
@@ -70,6 +71,6 @@ class TestFeatureFactory:
         # with pytest.raises(KeyError):
         #    PolytopeMars(self.options,self.config).extract(self.request)
 
-    def test_timeseries_valid(self):
+    def test_vertical_profile_valid(self):
         pass
         # PolytopeMars(self.config, self.options).extract(self.request)

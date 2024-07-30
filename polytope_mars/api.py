@@ -1,9 +1,9 @@
 import json
 from typing import List
 
+import pygribjump as gj
 from covjsonkit.api import Covjsonkit
 from polytope import shapes
-from polytope.datacube.backends.fdb import FDBDatacube
 from polytope.engine.hullslicer import HullSlicer
 from polytope.polytope import Polytope, Request
 
@@ -27,15 +27,15 @@ features = {
 
 
 class PolytopeMars:
-    def __init__(self, datacube_config, datacube_options):
+    def __init__(self, datacube_type, datacube_options):
         # Initialise polytope
-        #fdbdatacube = FDBDatacube(
+        # fdbdatacube = FDBDatacube(
         #    datacube_config, axis_options=datacube_options
-        #)  # noqa: E501
-        #slicer = HullSlicer()
-        #self.api = Polytope(datacube=fdbdatacube, engine=slicer)
+        # )  # noqa: E501
+        # slicer = HullSlicer()
+        # self.api = Polytope(datacube=fdbdatacube, engine=slicer)
 
-        self.datacube_config = datacube_config
+        self.datacube_type = datacube_type
         self.datacube_options = datacube_options
 
         self.coverage = {}
@@ -74,9 +74,21 @@ class PolytopeMars:
 
         # TODO: make polytope request to get data
 
-        fdbdatacube = FDBDatacube(preq, self.datacube_config, axis_options=self.datacube_options)
+        if self.datacube_type == "grib":
+            fdbdatacube = gj.GribJump()
+        else:
+            raise NotImplementedError(
+                f"Datacube type '{self.datacube_type}' not found"
+            )  # noqa: E501
         slicer = HullSlicer()
-        self.api = Polytope(datacube=fdbdatacube, engine=slicer, axis_options=self.datacube_options)
+        self.api = Polytope(
+            # request=preq,
+            datacube=fdbdatacube,
+            engine=slicer,
+            options=self.datacube_options,
+        )
+        # result = API.retrieve(request)
+
         result = self.api.retrieve(preq)
         # result.pprint()
 

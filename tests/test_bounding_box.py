@@ -46,6 +46,7 @@ class TestFeatureFactory:
             "type": "pf",
         }  # noqa: E501
 
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_boundingbox_invalid(self):
         with pytest.raises(TypeError):
             PolytopeMars(self.options, self.config).extract("invalid")
@@ -69,6 +70,7 @@ class TestFeatureFactory:
         with pytest.raises(TypeError):
             PolytopeMars(self.options, self.config).extract(self.request)
 
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_boundingbox_valid(self):
         coverage = PolytopeMars(self.config, self.options).extract(
             self.request
