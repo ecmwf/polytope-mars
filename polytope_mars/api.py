@@ -1,5 +1,4 @@
 import json
-#import pandas as pd
 from typing import List
 
 import pygribjump as gj
@@ -108,21 +107,19 @@ class PolytopeMars:
         #   * enforcing strings are actually strings (e.g. type=fc)
 
         time = request.pop("time").replace(":", "")
-        #request["date"] = request["date"] + "T" + time
-        #request["date"] = pd.Timestamp(request["date"])
 
         # TODO: not restricting certain keywords:
         #   * AREA, GRID
         # do we need to filter this... it will fail later anyway
 
         for k, v in request.items():
-            split = str(v).split("/")     
+            split = str(v).split("/")
 
             if k == "date":
                 spl = str(v).split("/")
                 for s in spl:
                     s = s + "T" + time
-                    request["date"] = ''.join(s)     
+                    request["date"] = "".join(s)
 
             # ALL -> All
             if len(split) == 1 and split[0] == "ALL":
