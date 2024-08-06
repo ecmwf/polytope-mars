@@ -6,8 +6,9 @@ from ..feature import Feature
 class TimeSeries(Feature):
     def __init__(self, config):
         assert config.pop("type") == "timeseries"
-        self.start_step = config.pop("start", None)
-        self.end_step = config.pop("end", None)
+        #self.start_step = config.pop("start", None)
+        #self.end_step = config.pop("end", None)
+        self.axes = config.pop("axes", [])
 
         self.points = config.pop("points", [])
 
@@ -27,11 +28,11 @@ class TimeSeries(Feature):
                     for p in self.points
                 ],
             ),
-            shapes.Span("step", self.start_step, self.end_step),
+            #shapes.Span("step", self.start_step, self.end_step),
         ]
 
     def incompatible_keys(self):
-        return ["step", "levellist"]
+        return ["levellist"]
 
     def coverage_type(self):
         return "PointSeries"

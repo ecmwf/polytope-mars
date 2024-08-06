@@ -1,4 +1,5 @@
 import json
+import pandas as pd
 from typing import List
 
 import pygribjump as gj
@@ -88,7 +89,7 @@ class PolytopeMars:
             options=self.datacube_options,
         )
         # result = API.retrieve(request)
-
+        print(preq)
         result = self.api.retrieve(preq)
         # result.pprint()
 
@@ -115,12 +116,6 @@ class PolytopeMars:
         for k, v in request.items():
             split = str(v).split("/")
 
-            if k == "date":
-                spl = str(v).split("/")
-                for s in spl:
-                    s = s + "T" + time
-                    request["date"] = "".join(s)
-
             # ALL -> All
             if len(split) == 1 and split[0] == "ALL":
                 base_shapes.append(shapes.All(k))
@@ -142,6 +137,11 @@ class PolytopeMars:
 
             # List of individual values -> Union of Selects
             else:
+                if k == "date":
+                    dates = []
+                    for s in split:
+                        dates.append(pd.Timestamp(s + "T" + time))
+                    split = dates
                 base_shapes.append(shapes.Select(k, split))
 
         return base_shapes
