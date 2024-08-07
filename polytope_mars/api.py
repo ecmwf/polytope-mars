@@ -62,6 +62,11 @@ class PolytopeMars:
             feature_type = feature_config["type"]
         except KeyError:
             raise KeyError("The 'feature' does not contain a 'type' keyword")
+        
+        if feature_type == 'timeseries':
+            timeseries_type = feature_config["axis"]
+        else:
+            timeseries_type = None
 
         feature = self._feature_factory(feature_type, feature_config)
 
@@ -95,7 +100,11 @@ class PolytopeMars:
 
         encoder = Covjsonkit().encode("CoverageCollection", feature_type)
 
-        self.coverage = encoder.from_polytope(result)
+        if timeseries_type == "datetime":
+            self.coverage = encoder.from_polytope_step(result)
+        else:
+            self.coverage = encoder.from_polytope(result)
+
 
         return self.coverage
 
