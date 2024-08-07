@@ -62,8 +62,8 @@ class PolytopeMars:
             feature_type = feature_config["type"]
         except KeyError:
             raise KeyError("The 'feature' does not contain a 'type' keyword")
-        
-        if feature_type == 'timeseries':
+
+        if feature_type == "timeseries":
             timeseries_type = feature_config["axis"]
         else:
             timeseries_type = None
@@ -104,7 +104,6 @@ class PolytopeMars:
             self.coverage = encoder.from_polytope_step(result)
         else:
             self.coverage = encoder.from_polytope(result)
-
 
         return self.coverage
 
