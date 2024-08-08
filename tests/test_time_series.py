@@ -24,7 +24,7 @@ class TestFeatureFactory:
             "feature": {
                 "type": "timeseries",
                 "points": [[0.035149384216, 0.0]],
-                "axis" : "step",
+                "axis": "step",
             },
         }
 
