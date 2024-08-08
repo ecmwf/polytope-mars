@@ -54,9 +54,10 @@ pip install -e .
 
 ## Example
 
-**Create time series request**: Create a request for a time series request using the time series feature, set options and config for use by polytope feature extraction. NB: Assumes data is in a local FDB.
+**Create time series request**: Create a request for a time series request using the time series feature, set options for use by polytope feature extraction. "grib" indicates the type of data in this case. NB: Assumes data is in a local FDB.
 
 ```python
+from polytope_mars.api import PolytopeMars
 
 request = {
     "class": "od",
@@ -77,4 +78,8 @@ request = {
     },
 }
 
+result = PolytopeMars("grib", options).extract(request)
+
 ```
+
+Result will be a coverageJSON file with the requested data if it is available, further manipulation of the coverage can be made using [covjsonkit](https://github.com/ecmwf/covjsonkit).
