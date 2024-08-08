@@ -20,11 +20,11 @@ class TestFeatureFactory:
             "domain": "g",
             "param": "167",
             "number": "1/2/3/4/5",
+            "step": "0/3/6/9",
             "feature": {
                 "type": "timeseries",
                 "points": [[0.035149384216, 0.0]],
-                "start": 0,
-                "end": 9,
+                "axis" : "step",
             },
         }
 

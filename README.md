@@ -69,11 +69,11 @@ request = {
     "domain" : "g",
     "param" : "228/49/164/165/166/167",
     "number" : "1/to/5",
+    "step" : "0/1"
     "feature" : {
         "type" : "timeseries",
-        "points": [[51.5073219, 2.1]],
-        "start": 0,
-        "end" : 9
+        "points" : [[51.5073219, 2.1]],
+        "axis" : "step",
     },
 }
 
