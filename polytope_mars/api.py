@@ -1,6 +1,7 @@
 import json
 from typing import List
 
+import pandas as pd
 import pygribjump as gj
 from covjsonkit.api import Covjsonkit
 from polytope import shapes
@@ -62,6 +63,11 @@ class PolytopeMars:
         except KeyError:
             raise KeyError("The 'feature' does not contain a 'type' keyword")
 
+        if feature_type == "timeseries":
+            timeseries_type = feature_config["axis"]
+        else:
+            timeseries_type = None
+
         feature = self._feature_factory(feature_type, feature_config)
 
         feature.validate(request)
@@ -88,13 +94,16 @@ class PolytopeMars:
             options=self.datacube_options,
         )
         # result = API.retrieve(request)
-
+        print(preq)
         result = self.api.retrieve(preq)
         # result.pprint()
 
         encoder = Covjsonkit().encode("CoverageCollection", feature_type)
 
-        self.coverage = encoder.from_polytope(result)
+        if timeseries_type == "datetime":
+            self.coverage = encoder.from_polytope_step(result)
+        else:
+            self.coverage = encoder.from_polytope(result)
 
         return self.coverage
 
@@ -114,12 +123,6 @@ class PolytopeMars:
 
         for k, v in request.items():
             split = str(v).split("/")
-
-            if k == "date":
-                spl = str(v).split("/")
-                for s in spl:
-                    s = s + "T" + time
-                    request["date"] = "".join(s)
 
             # ALL -> All
             if len(split) == 1 and split[0] == "ALL":
@@ -142,6 +145,11 @@ class PolytopeMars:
 
             # List of individual values -> Union of Selects
             else:
+                if k == "date":
+                    dates = []
+                    for s in split:
+                        dates.append(pd.Timestamp(s + "T" + time))
+                    split = dates
                 base_shapes.append(shapes.Select(k, split))
 
         return base_shapes
