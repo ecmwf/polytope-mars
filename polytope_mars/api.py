@@ -94,11 +94,7 @@ class PolytopeMars:
             options=self.conf.options.model_dump(),
         )
         result = self.api.retrieve(preq)
-        encoder = Covjsonkit(
-            param_dir=self.conf.coverageconfig.param_db
-        ).encode(  # noqa: E501
-            "CoverageCollection", feature_type
-        )
+        encoder = Covjsonkit().encode("CoverageCollection", feature_type)  # noqa: E501
 
         if timeseries_type == "datetime":
             self.coverage = encoder.from_polytope_step(result)
