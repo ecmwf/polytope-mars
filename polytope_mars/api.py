@@ -3,11 +3,13 @@ from typing import List
 
 import pandas as pd
 import pygribjump as gj
+from conflator import Conflator
 from covjsonkit.api import Covjsonkit
 from polytope import shapes
 from polytope.engine.hullslicer import HullSlicer
 from polytope.polytope import Polytope, Request
 
+from .config import PolytopeMarsConfig
 from .features.boundingbox import BoundingBox
 from .features.frame import Frame
 from .features.path import Path
@@ -28,16 +30,17 @@ features = {
 
 
 class PolytopeMars:
-    def __init__(self, datacube_type, datacube_options):
-        # Initialise polytope
-        # fdbdatacube = FDBDatacube(
-        #    datacube_config, axis_options=datacube_options
-        # )  # noqa: E501
-        # slicer = HullSlicer()
-        # self.api = Polytope(datacube=fdbdatacube, engine=slicer)
+    def __init__(self, config=None):
+        # Initialise polytope-mars configuration
 
-        self.datacube_type = datacube_type
-        self.datacube_options = datacube_options
+        # If no config check default locations
+        if config is None:
+            self.conf = Conflator(
+                app_name="polytope_mars", model=PolytopeMarsConfig
+            ).load()
+        # else initialise with provided config
+        else:
+            self.conf = PolytopeMarsConfig.model_validate(config)
 
         self.coverage = {}
 
@@ -78,27 +81,24 @@ class PolytopeMars:
 
         preq = Request(*shapes)
 
-        # TODO: make polytope request to get data
-
-        if self.datacube_type == "grib":
+        if self.conf.datacube.type == "gribjump":
             fdbdatacube = gj.GribJump()
         else:
             raise NotImplementedError(
-                f"Datacube type '{self.datacube_type}' not found"
+                f"Datacube type '{self.conf.datacube.type}' not found"
             )  # noqa: E501
         slicer = HullSlicer()
         self.api = Polytope(
-            # request=preq,
             datacube=fdbdatacube,
             engine=slicer,
-            options=self.datacube_options,
+            options=self.conf.options.model_dump(),
         )
-        # result = API.retrieve(request)
-        print(preq)
         result = self.api.retrieve(preq)
-        # result.pprint()
-
-        encoder = Covjsonkit().encode("CoverageCollection", feature_type)
+        encoder = Covjsonkit(
+            param_dir=self.conf.coverageconfig.param_db
+        ).encode(  # noqa: E501
+            "CoverageCollection", feature_type
+        )
 
         if timeseries_type == "datetime":
             self.coverage = encoder.from_polytope_step(result)
