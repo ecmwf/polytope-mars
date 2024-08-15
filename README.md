@@ -78,8 +78,23 @@ request = {
     },
 }
 
-result = PolytopeMars("grib", options).extract(request)
+result = PolytopeMars().extract(request)
 
 ```
 
+If the user provides no arguments to PolytopeMars then a config is loaded from the default locations:
+
+1. System-wide configuration in /etc/polytope_mars/config.json (and yaml)
+2. User configuration in ~/.polytope_mars.json (and yaml)
+
+The user can also pass in a config as a python dictionary to PolytopeMars for a custom config at runtime. 
+
 Result will be a coverageJSON file with the requested data if it is available, further manipulation of the coverage can be made using [covjsonkit](https://github.com/ecmwf/covjsonkit).
+
+### Config
+
+An example config can be found here [example_config.json](example_config.json). This can be edited to change any of the fields. The config is made up of three main components. 
+
+1. **datacube:** This option is used to set up what type of datacube is being used at the moment, currently only gribjump is supported.
+2. **options** These are the options used by polytope for interpreting the data available.
+3. **coverageconfig** These options are used by convjsonkit to parse the output of polytope into coverageJSON.
