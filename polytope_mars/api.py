@@ -1,12 +1,15 @@
 import json
 from typing import List
 
+import pandas as pd
 import pygribjump as gj
+from conflator import Conflator
 from covjsonkit.api import Covjsonkit
 from polytope import shapes
 from polytope.engine.hullslicer import HullSlicer
 from polytope.polytope import Polytope, Request
 
+from .config import PolytopeMarsConfig
 from .features.boundingbox import BoundingBox
 from .features.frame import Frame
 from .features.path import Path
@@ -27,16 +30,17 @@ features = {
 
 
 class PolytopeMars:
-    def __init__(self, datacube_type, datacube_options):
-        # Initialise polytope
-        # fdbdatacube = FDBDatacube(
-        #    datacube_config, axis_options=datacube_options
-        # )  # noqa: E501
-        # slicer = HullSlicer()
-        # self.api = Polytope(datacube=fdbdatacube, engine=slicer)
+    def __init__(self, config=None):
+        # Initialise polytope-mars configuration
 
-        self.datacube_type = datacube_type
-        self.datacube_options = datacube_options
+        # If no config check default locations
+        if config is None:
+            self.conf = Conflator(
+                app_name="polytope_mars", model=PolytopeMarsConfig
+            ).load()
+        # else initialise with provided config
+        else:
+            self.conf = PolytopeMarsConfig.model_validate(config)
 
         self.coverage = {}
 
@@ -62,6 +66,11 @@ class PolytopeMars:
         except KeyError:
             raise KeyError("The 'feature' does not contain a 'type' keyword")
 
+        if feature_type == "timeseries":
+            timeseries_type = feature_config["axis"]
+        else:
+            timeseries_type = None
+
         feature = self._feature_factory(feature_type, feature_config)
 
         feature.validate(request)
@@ -72,29 +81,27 @@ class PolytopeMars:
 
         preq = Request(*shapes)
 
-        # TODO: make polytope request to get data
-
-        if self.datacube_type == "grib":
+        if self.conf.datacube.type == "gribjump":
             fdbdatacube = gj.GribJump()
         else:
             raise NotImplementedError(
-                f"Datacube type '{self.datacube_type}' not found"
+                f"Datacube type '{self.conf.datacube.type}' not found"
             )  # noqa: E501
         slicer = HullSlicer()
         self.api = Polytope(
-            # request=preq,
             datacube=fdbdatacube,
             engine=slicer,
-            options=self.datacube_options,
+            options=self.conf.options.model_dump(),
         )
-        # result = API.retrieve(request)
-
         result = self.api.retrieve(preq)
-        # result.pprint()
+        encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
+            "CoverageCollection", feature_type
+        )  # noqa: E501
 
-        encoder = Covjsonkit().encode("CoverageCollection", feature_type)
-
-        self.coverage = encoder.from_polytope(result)
+        if timeseries_type == "datetime":
+            self.coverage = encoder.from_polytope_step(result)
+        else:
+            self.coverage = encoder.from_polytope(result)
 
         return self.coverage
 
@@ -107,7 +114,6 @@ class PolytopeMars:
         #   * enforcing strings are actually strings (e.g. type=fc)
 
         time = request.pop("time").replace(":", "")
-        request["date"] = request["date"] + "T" + time
 
         # TODO: not restricting certain keywords:
         #   * AREA, GRID
@@ -137,6 +143,11 @@ class PolytopeMars:
 
             # List of individual values -> Union of Selects
             else:
+                if k == "date":
+                    dates = []
+                    for s in split:
+                        dates.append(pd.Timestamp(s + "T" + time))
+                    split = dates
                 base_shapes.append(shapes.Select(k, split))
 
         return base_shapes
