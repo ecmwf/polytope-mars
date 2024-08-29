@@ -1,5 +1,6 @@
 import json
 from typing import List
+import logging
 
 import pandas as pd
 import pygribjump as gj
@@ -78,6 +79,7 @@ class PolytopeMars:
         shapes = self._create_base_shapes(request)
 
         shapes.extend(feature.get_shapes())
+        print(shapes)
 
         preq = Request(*shapes)
 
@@ -93,6 +95,7 @@ class PolytopeMars:
             engine=slicer,
             options=self.conf.options.model_dump(),
         )
+        logging.debug("The request we give polytope from polytope-mars are: %s", preq)
         result = self.api.retrieve(preq)
         encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
             "CoverageCollection", feature_type
@@ -114,6 +117,10 @@ class PolytopeMars:
         #   * enforcing strings are actually strings (e.g. type=fc)
 
         time = request.pop("time").replace(":", "")
+        #if str(time).split("/") != 1:
+        #    time = str(time).split("/")
+        #else:
+        #    time = [time]
 
         # TODO: not restricting certain keywords:
         #   * AREA, GRID
@@ -128,10 +135,15 @@ class PolytopeMars:
 
             # Single value -> Select
             elif len(split) == 1:
+                if k == "date":
+                    split[0] = pd.Timestamp(split[0] + "T" + time)
                 base_shapes.append(shapes.Select(k, [split[0]]))
 
             # Range a/to/b, "by" not supported -> Span
             elif len(split) == 3 and split[1] == "to":
+                if k == "date":
+                    split[0] = pd.Timestamp(split[0] + "T" + time)
+                    split[2] = pd.Timestamp(split[2] + "T" + time)
                 base_shapes.append(
                     shapes.Span(k, lower=split[0], upper=split[2])
                 )  # noqa: E501
