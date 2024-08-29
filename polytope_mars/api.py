@@ -79,7 +79,6 @@ class PolytopeMars:
         shapes = self._create_base_shapes(request)
 
         shapes.extend(feature.get_shapes())
-        print(shapes)
 
         preq = Request(*shapes)
 
