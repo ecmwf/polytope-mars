@@ -1,6 +1,6 @@
 import json
-from typing import List
 import logging
+from typing import List
 
 import pandas as pd
 import pygribjump as gj
@@ -95,7 +95,9 @@ class PolytopeMars:
             engine=slicer,
             options=self.conf.options.model_dump(),
         )
-        logging.debug("The request we give polytope from polytope-mars are: %s", preq)
+        logging.debug(
+            "The request we give polytope from polytope-mars are: %s", preq
+        )  # noqa: E501
         result = self.api.retrieve(preq)
         encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
             "CoverageCollection", feature_type
@@ -117,10 +119,10 @@ class PolytopeMars:
         #   * enforcing strings are actually strings (e.g. type=fc)
 
         time = request.pop("time").replace(":", "")
-        #if str(time).split("/") != 1:
-        #    time = str(time).split("/")
-        #else:
-        #    time = [time]
+        # if str(time).split("/") != 1:
+        #   time = str(time).split("/")
+        # else:
+        #   time = [time]
 
         # TODO: not restricting certain keywords:
         #   * AREA, GRID
