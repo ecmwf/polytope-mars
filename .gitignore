@@ -12,7 +12,6 @@ SOURCES.txt
 top_level.txt
 *.covjson
 *.grib
-*.ipynb
 *.prj
 *.shx
 *.dbf
