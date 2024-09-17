@@ -34,20 +34,25 @@ features = {
 class PolytopeMars:
     def __init__(self, config=None, log_context=None):
         # Initialise polytope-mars configuration
+        self.log_context = log_context
+        self.id = log_context["id"] if log_context else "-1"
 
         # If no config check default locations
         if config is None:
             self.conf = Conflator(
                 app_name="polytope_mars", model=PolytopeMarsConfig
             ).load()
-            logging.debug("Config loaded from file: %s", self.conf)  # noqa: E501
+            logging.debug(
+                f"{self.id}: Config loaded from file: {self.conf}"
+            )  # noqa: E501
         # else initialise with provided config
         else:
             self.conf = PolytopeMarsConfig.model_validate(config)
-            logging.debug("Config loaded from dictionary: %s", self.conf)  # noqa: E501
+            logging.debug(
+                f"{self.id}: Config loaded from dictionary: {self.conf}"
+            )  # noqa: E501
 
         self.coverage = {}
-        self.log_context = log_context
 
     def extract(self, request):
         # request expected in JSON or dict
@@ -100,10 +105,10 @@ class PolytopeMars:
         )
 
         logging.debug(
-            "The request we give polytope from polytope-mars are: %s", preq
-        )  # noqa: E501
+            f"{self.id}: The request we give polytope from polytope-mars is: {preq}"  # noqa: E501
+        )
         start = time.time()
-        logging.debug("Polytope time start: %s", start)  # noqa: E501
+        logging.debug(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
         if self.log_context:
             result = self.api.retrieve(preq, self.log_context)
@@ -112,10 +117,10 @@ class PolytopeMars:
 
         end = time.time()
         delta = end - start
-        logging.debug("Polytope time end: %s", end)  # noqa: E501
-        logging.debug("Polytope time taken: %s", delta)  # noqa: E501
+        logging.debug(f"{self.id}: Polytope time end: {end}")  # noqa: E501
+        logging.debug(f"{self.id}: Polytope time taken: {delta}")  # noqa: E501
         start = time.time()
-        logging.debug("Polytope time start: %s", start)  # noqa: E501
+        logging.debug(f"{self.id}: Polytope time start: {start}")  # noqa: E501
         encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
             "CoverageCollection", feature_type
         )  # noqa: E501
@@ -127,8 +132,8 @@ class PolytopeMars:
 
         end = time.time()
         delta = end - start
-        logging.debug("Covjsonkit time end: %s", end)  # noqa: E501
-        logging.debug("Covjsonkit time taken: %s", delta)  # noqa: E501
+        logging.debug(f"{self.id}: Covjsonkit time end: {end}")  # noqa: E501
+        logging.debug(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
 
         return self.coverage
 
