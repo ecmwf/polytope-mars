@@ -141,8 +141,10 @@ class PolytopeMars:
         #   * enforcing strings are actually strings (e.g. type=fc)
 
         time = request.pop("time").replace(":", "")
-        if len(time.split('/')) != 1:
-            raise NotImplementedError(f"Currently only one time is supported")  # noqa: E501
+        if len(time.split("/")) != 1:
+            raise NotImplementedError(
+                "Currently only one time is supported"
+            )  # noqa: E501
         # if str(time).split("/") != 1:
         #   time = str(time).split("/")
         # else:
@@ -167,7 +169,8 @@ class PolytopeMars:
 
             # Range a/to/b, "by" not supported -> Span
             elif len(split) == 3 and split[1] == "to":
-                # if date then only get time of dates in span not all in times within date
+                # if date then only get time of dates in span not
+                # all in times within date
                 if k == "date":
                     start = pd.Timestamp(split[0] + "T" + time)
                     end = pd.Timestamp(split[2] + "T" + time)
