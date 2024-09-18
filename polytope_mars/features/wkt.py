@@ -1,5 +1,6 @@
 from polytope import shapes
-from shapely import wkt
+
+#  from shapely import wkt
 
 from ..feature import Feature
 
@@ -19,14 +20,14 @@ class Wkt(Feature):
     def __init__(self, config):
         assert config.pop("type") == "wkt"
         self.shape = config.pop("shape")
-        #self.df = wkt.loads(self.shape)
+        # self.df = wkt.loads(self.shape)
 
         assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
 
     def get_shapes(self):
-        #coordinates = get_coords(self.df)
+        # coordinates = get_coords(self.df)
         polygons = []
-        #for coord in self.shape:
+        # for coord in self.shape:
         points = []
         for point in self.shape:
             points.append([point[0], point[1]])
