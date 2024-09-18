@@ -1,8 +1,8 @@
 from polytope import shapes
 
-#  from shapely import wkt
-
 from ..feature import Feature
+
+#  from shapely import wkt
 
 
 # Function to convert POLYGON and MULTIPOLYGON to points
@@ -18,7 +18,7 @@ def get_coords(geom):
 
 class Wkt(Feature):
     def __init__(self, config):
-        assert config.pop("type") == "wkt"
+        assert config.pop("type") == "polygon"
         self.shape = config.pop("shape")
         # self.df = wkt.loads(self.shape)
 

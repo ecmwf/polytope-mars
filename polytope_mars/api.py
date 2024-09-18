@@ -27,7 +27,7 @@ features = {
     "frame": Frame,
     "path": Path,
     "shapefile": Shapefile,
-    "wkt": Wkt,
+    "polygon": Wkt,
 }
 
 
