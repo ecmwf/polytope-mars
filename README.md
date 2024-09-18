@@ -54,7 +54,7 @@ pip install -e .
 
 ## Example
 
-**Create time series request**: Create a request for a time series request using the time series feature, set options for use by polytope feature extraction. "grib" indicates the type of data in this case. NB: Assumes data is in a local FDB.
+**Create time series request**: Create a request for a time series request using the time series feature, set options for use by polytope feature extraction. "gribjump" indicates the type of data in this case. NB: Assumes data is in a local FDB or or environment variables have been set up to point to a gribjump server.
 
 ```python
 from polytope_mars.api import PolytopeMars
@@ -88,6 +88,40 @@ If the user provides no arguments to PolytopeMars then a config is loaded from t
 2. User configuration in ~/.polytope_mars.json (and yaml)
 
 The user can also pass in a config as a python dictionary to PolytopeMars for a custom config at runtime. 
+
+```python
+from polytope_mars.api import PolytopeMars
+from conflator import Conflator
+from polytope_mars.config import PolytopeMarsConfig
+
+conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()
+cf = conf.model_dump()
+cf["options"] = options
+
+request = {
+    "class": "od",
+    "stream" : "enfo",
+    "type" : "pf",
+    "date" : "20231205",
+    "time" : "00:00:00",
+    "levtype" : "sfc",
+    "expver" : "0001", 
+    "domain" : "g",
+    "param" : "228/49/164/165/166/167",
+    "number" : "1/to/5",
+    "step" : "0/1"
+    "feature" : {
+        "type" : "timeseries",
+        "points" : [[51.5073219, 2.1]],
+        "axis" : "step",
+    },
+}
+
+result = PolytopeMars(cf).extract(request)
+
+```
+
+A context dictionary can also be passed to PolytopeMars for logging.
 
 Result will be a coverageJSON file with the requested data if it is available, further manipulation of the coverage can be made using [covjsonkit](https://github.com/ecmwf/covjsonkit).
 
