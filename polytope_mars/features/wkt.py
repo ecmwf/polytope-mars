@@ -19,18 +19,18 @@ class Wkt(Feature):
     def __init__(self, config):
         assert config.pop("type") == "wkt"
         self.shape = config.pop("shape")
-        self.df = wkt.loads(self.shape)
+        #self.df = wkt.loads(self.shape)
 
         assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
 
     def get_shapes(self):
-        coordinates = get_coords(self.df)
+        #coordinates = get_coords(self.df)
         polygons = []
-        for coord in coordinates:
-            points = []
-            for point in coord:
-                points.append([point[0], point[1]])
-            polygons.append(shapes.Polygon(["latitude", "longitude"], points))
+        #for coord in self.shape:
+        points = []
+        for point in self.shape:
+            points.append([point[0], point[1]])
+        polygons.append(shapes.Polygon(["latitude", "longitude"], points))
         return [shapes.Union(["latitude", "longitude"], *polygons)]
 
     def incompatible_keys(self):
