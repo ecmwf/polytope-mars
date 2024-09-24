@@ -111,7 +111,8 @@ class PolytopeMars:
         logging.debug(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
         if self.log_context:
-            result = self.api.retrieve(preq, self.log_context)
+            logging.debug(f"Send log_context to polytope: {self.log_context}")
+            result = self.api.retrieve(preq, context=self.log_context)
         else:
             result = self.api.retrieve(preq)
 
