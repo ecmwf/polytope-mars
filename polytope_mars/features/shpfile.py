@@ -22,12 +22,14 @@ def get_coords(geom):
 
 
 class Shapefile(Feature):
-    def __init__(self, config):
-        assert config.pop("type") == "shapefile"
-        self.file = config.pop("file")
+    def __init__(self, feature_config, client_config):
+        assert feature_config.pop("type") == "shapefile"
+        self.file = feature_config.pop("file")
         self.df = gpd.read_file(self.file)
 
-        assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
+        assert (
+            len(feature_config) == 0
+        ), f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
         self.df = self.df.head(1)

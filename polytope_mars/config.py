@@ -13,8 +13,14 @@ class CovjsonKitConfig(ConfigModel):
     param_db: str = "ecmwf"
 
 
+class PolygonRulesConfig(ConfigModel):
+    max_points: int = 1000
+    max_area: float = 1000.0
+
+
 class PolytopeMarsConfig(ConfigModel):
 
     datacube: DatacubeConfig = DatacubeConfig()
     options: Config = Config()
     coverageconfig: CovjsonKitConfig = CovjsonKitConfig()
+    polygonrules: PolygonRulesConfig = PolygonRulesConfig()

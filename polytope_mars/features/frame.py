@@ -4,13 +4,15 @@ from ..feature import Feature
 
 
 class Frame(Feature):
-    def __init__(self, config):
-        assert config.pop("type") == "frame"
-        self.points = config.pop("points", [])
-        self.outer_box = config.pop("outer_box", [])
-        self.inner_box = config.pop("inner_box", [])
+    def __init__(self, feature_config, client_config):
+        assert feature_config.pop("type") == "frame"
+        self.points = feature_config.pop("points", [])
+        self.outer_box = feature_config.pop("outer_box", [])
+        self.inner_box = feature_config.pop("inner_box", [])
 
-        assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
+        assert (
+            len(feature_config) == 0
+        ), f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
         # frame is a four seperate boxes requested based on the inner and outer boxes  # noqa: E501

@@ -4,12 +4,14 @@ from ..feature import Feature
 
 
 class Path(Feature):
-    def __init__(self, config):
-        assert config.pop("type") == "path"
-        self.points = config.pop("points", [])
-        self.padding = config.pop("padding")
+    def __init__(self, feature_config, client_config):
+        assert feature_config.pop("type") == "path"
+        self.points = feature_config.pop("points", [])
+        self.padding = feature_config.pop("padding")
 
-        assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
+        assert (
+            len(feature_config) == 0
+        ), f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501

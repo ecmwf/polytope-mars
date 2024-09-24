@@ -4,11 +4,13 @@ from ..feature import Feature
 
 
 class BoundingBox(Feature):
-    def __init__(self, config):
-        assert config.pop("type") == "boundingbox"
-        self.points = config.pop("points", [])
+    def __init__(self, feature_config, client_config):
+        assert feature_config.pop("type") == "boundingbox"
+        self.points = feature_config.pop("points", [])
 
-        assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
+        assert (
+            len(feature_config) == 0
+        ), f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501

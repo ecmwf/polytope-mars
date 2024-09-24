@@ -15,10 +15,10 @@ from .config import PolytopeMarsConfig
 from .features.boundingbox import BoundingBox
 from .features.frame import Frame
 from .features.path import Path
+from .features.polygon import Polygons
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
-from .features.wkt import Wkt
 
 features = {
     "timeseries": TimeSeries,
@@ -27,7 +27,7 @@ features = {
     "frame": Frame,
     "path": Path,
     "shapefile": Shapefile,
-    "polygon": Wkt,
+    "polygon": Polygons,
 }
 
 
@@ -81,7 +81,9 @@ class PolytopeMars:
         else:
             timeseries_type = None
 
-        feature = self._feature_factory(feature_type, feature_config)
+        feature = self._feature_factory(
+            feature_type, feature_config, self.conf
+        )  # noqa: E501
 
         feature.validate(request)
 
@@ -205,9 +207,9 @@ class PolytopeMars:
 
         return base_shapes
 
-    def _feature_factory(self, feature_name, feature_config):
+    def _feature_factory(self, feature_name, feature_config, config=None):
         feature_class = features.get(feature_name)
         if feature_class:
-            return feature_class(feature_config)
+            return feature_class(feature_config, config)
         else:
             raise NotImplementedError(f"Feature '{feature_name}' not found")
