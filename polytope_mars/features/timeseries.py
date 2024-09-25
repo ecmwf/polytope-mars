@@ -4,15 +4,17 @@ from ..feature import Feature
 
 
 class TimeSeries(Feature):
-    def __init__(self, config):
-        assert config.pop("type") == "timeseries"
+    def __init__(self, feature_config, client_config):
+        assert feature_config.pop("type") == "timeseries"
         # self.start_step = config.pop("start", None)
         # self.end_step = config.pop("end", None)
-        self.axis = config.pop("axis", [])
+        self.axis = feature_config.pop("axis", [])
 
-        self.points = config.pop("points", [])
+        self.points = feature_config.pop("points", [])
 
-        assert len(config) == 0, f"Unexpected keys in config: {config.keys()}"
+        assert (
+            len(feature_config) == 0
+        ), f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
