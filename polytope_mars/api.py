@@ -160,10 +160,6 @@ class PolytopeMars:
             raise NotImplementedError(
                 "Currently only one time is supported"
             )  # noqa: E501
-        # if str(time).split("/") != 1:
-        #   time = str(time).split("/")
-        # else:
-        #   time = [time]
 
         # TODO: not restricting certain keywords:
         #   * AREA, GRID

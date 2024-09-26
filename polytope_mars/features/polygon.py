@@ -58,10 +58,10 @@ class Polygons(Feature):
         return [shapes.Union(["latitude", "longitude"], *polygons)]
 
     def incompatible_keys(self):
-        return ["levellist"]
+        return []
 
     def coverage_type(self):
-        return "polygon"
+        return "MultiPoint"
 
     def name(self):
         return "Polygon"
