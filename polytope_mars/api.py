@@ -56,6 +56,8 @@ class PolytopeMars:
 
     def extract(self, request):
         # request expected in JSON or dict
+        start = time.time()
+        logging.debug(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
         if not isinstance(request, dict):
             try:
                 request = json.loads(request)
@@ -106,6 +108,11 @@ class PolytopeMars:
             options=self.conf.options.model_dump(),
         )
 
+        end = time.time()
+        delta = end - start
+        logging.debug(f"{self.id}: Gribjump/setup time start: {end}")  # noqa: E501
+        logging.debug(f"{self.id}: Gribjump/setup time start: {delta}")  # noqa: E501
+
         logging.debug(
             f"{self.id}: The request we give polytope from polytope-mars is: {preq}"  # noqa: E501
         )
@@ -123,7 +130,7 @@ class PolytopeMars:
         logging.debug(f"{self.id}: Polytope time end: {end}")  # noqa: E501
         logging.debug(f"{self.id}: Polytope time taken: {delta}")  # noqa: E501
         start = time.time()
-        logging.debug(f"{self.id}: Polytope time start: {start}")  # noqa: E501
+        logging.debug(f"{self.id}: Covjson time start: {start}")  # noqa: E501
         encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
             "CoverageCollection", feature_type
         )  # noqa: E501
@@ -153,10 +160,6 @@ class PolytopeMars:
             raise NotImplementedError(
                 "Currently only one time is supported"
             )  # noqa: E501
-        # if str(time).split("/") != 1:
-        #   time = str(time).split("/")
-        # else:
-        #   time = [time]
 
         # TODO: not restricting certain keywords:
         #   * AREA, GRID
