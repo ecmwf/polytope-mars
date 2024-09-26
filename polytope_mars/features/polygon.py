@@ -61,7 +61,7 @@ class Polygons(Feature):
         return ["levellist"]
 
     def coverage_type(self):
-        return "wkt"
+        return "polygon"
 
     def name(self):
-        return "Wkt"
+        return "Polygon"
