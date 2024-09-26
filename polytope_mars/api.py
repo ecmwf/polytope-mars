@@ -15,10 +15,10 @@ from .config import PolytopeMarsConfig
 from .features.boundingbox import BoundingBox
 from .features.frame import Frame
 from .features.path import Path
+from .features.polygon import Polygons
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
-from .features.wkt import Wkt
 
 features = {
     "timeseries": TimeSeries,
@@ -27,7 +27,7 @@ features = {
     "frame": Frame,
     "path": Path,
     "shapefile": Shapefile,
-    "polygon": Wkt,
+    "polygon": Polygons,
 }
 
 
@@ -56,6 +56,8 @@ class PolytopeMars:
 
     def extract(self, request):
         # request expected in JSON or dict
+        start = time.time()
+        logging.debug(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
         if not isinstance(request, dict):
             try:
                 request = json.loads(request)
@@ -81,7 +83,9 @@ class PolytopeMars:
         else:
             timeseries_type = None
 
-        feature = self._feature_factory(feature_type, feature_config)
+        feature = self._feature_factory(
+            feature_type, feature_config, self.conf
+        )  # noqa: E501
 
         feature.validate(request)
 
@@ -104,6 +108,11 @@ class PolytopeMars:
             options=self.conf.options.model_dump(),
         )
 
+        end = time.time()
+        delta = end - start
+        logging.debug(f"{self.id}: Gribjump/setup time start: {end}")  # noqa: E501
+        logging.debug(f"{self.id}: Gribjump/setup time start: {delta}")  # noqa: E501
+
         logging.debug(
             f"{self.id}: The request we give polytope from polytope-mars is: {preq}"  # noqa: E501
         )
@@ -111,7 +120,8 @@ class PolytopeMars:
         logging.debug(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
         if self.log_context:
-            result = self.api.retrieve(preq, self.log_context)
+            logging.debug(f"Send log_context to polytope: {self.log_context}")
+            result = self.api.retrieve(preq, context=self.log_context)
         else:
             result = self.api.retrieve(preq)
 
@@ -120,7 +130,7 @@ class PolytopeMars:
         logging.debug(f"{self.id}: Polytope time end: {end}")  # noqa: E501
         logging.debug(f"{self.id}: Polytope time taken: {delta}")  # noqa: E501
         start = time.time()
-        logging.debug(f"{self.id}: Polytope time start: {start}")  # noqa: E501
+        logging.debug(f"{self.id}: Covjson time start: {start}")  # noqa: E501
         encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
             "CoverageCollection", feature_type
         )  # noqa: E501
@@ -150,10 +160,6 @@ class PolytopeMars:
             raise NotImplementedError(
                 "Currently only one time is supported"
             )  # noqa: E501
-        # if str(time).split("/") != 1:
-        #   time = str(time).split("/")
-        # else:
-        #   time = [time]
 
         # TODO: not restricting certain keywords:
         #   * AREA, GRID
@@ -204,9 +210,9 @@ class PolytopeMars:
 
         return base_shapes
 
-    def _feature_factory(self, feature_name, feature_config):
+    def _feature_factory(self, feature_name, feature_config, config=None):
         feature_class = features.get(feature_name)
         if feature_class:
-            return feature_class(feature_config)
+            return feature_class(feature_config, config)
         else:
             raise NotImplementedError(f"Feature '{feature_name}' not found")
