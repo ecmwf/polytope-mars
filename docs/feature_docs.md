@@ -318,7 +318,7 @@ CoverageJSON output type: VerticalProfile
 
 #### Trajectory
 
-A trajectory request has a `feature` with `type` : `trajectory` and a geomtry in the form of `points` containing atleast a two points with latitude and longitude, a level value, and a time value if no `axes` is provided. This is because the default `axes` are as follows:
+A trajectory request has a `feature` with `type` : `trajectory` and a geomtry in the form of `points` containing atleast two points with latitude and longitude, a level value, and a time value if no `axes` is provided. This is because the default `axes` are as follows:
 
 ```python
 "axes" : ["lat", "long", "level", "step"]
@@ -418,6 +418,30 @@ If `step` however was not specified outside of the `feature` the above would giv
 For any other ranged fields provided in the main request this will replicate the above returned data but per value. For example if ensemble `number` : `1/2` the same data as above would be provided for each `number`.
 
 CoverageJSON output type: Trajectory
+
+#### Polygon
+
+A polygon request has a `feature` with `type` : `poylgon` and a geomtry in the form of `shape` containing atleast one list containing three points with latitude and longitude with the first and final point being the same to complete the polygon. The user can provide multiple lists of points forming polygons in the same request. An example of the `polygon` feature is seen below:
+
+```python
+request = {
+    "class" : "od",
+    "stream" : "enfo",
+    "type" : "pf",
+    "date" : "20240930",
+    "time" : "0000",
+    "levtype" : "sfc",
+    "expver" : "0079", 
+    "domain" : "g",
+    "param" : "164/167/169",
+    "number" : "1",
+    "step": "0",
+    "feature" : {
+        "type" : "polygon",
+        "shape" : [[-1, 1], [-1, 0], [0, 1], [-1, 1]],
+	},
+}
+```
 
 ### Covjson
 
