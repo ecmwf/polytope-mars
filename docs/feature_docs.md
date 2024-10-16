@@ -443,6 +443,42 @@ request = {
 }
 ```
 
+If a user requests a a range for any of `step`, `number`, or `date` a polygon cutout for each field will be returned with a cutout of the data within the polygon. For example:
+
+```python
+request = {
+    "class" : "od",
+    "stream" : "enfo",
+    "type" : "pf",
+    "date" : "20240930",
+    "time" : "0000",
+    "levtype" : "sfc",
+    "expver" : "0079", 
+    "domain" : "g",
+    "param" : "164/167/169",
+    "number" : "1/2",
+    "step": "0/1",
+    "feature" : {
+        "type" : "polygon",
+        "shape" : [[-1, 1], [-1, 0], [0, 1], [-1, 1]],
+	},
+}
+```
+
+This request will return a polygon for each number and each step within that given number. 
+Returned coverages as polygons:
+
+* `number: 1, step: 0, Points within shape`
+* `number: 1, step: 1, Points within shape`
+* `number: 2, step: 0, Points within shape`
+* `number: 2, step: 1, Points within shape`
+
+Each of these will be an individual coverage with the 3 requested parameters.
+
+The `polygon` feature currently has limits on the size of a returned polygon and the maximum number of points allowed for a requsted polygon.
+
+CoverageJSON output type: MultiPoint
+
 ### Covjson
 
 
