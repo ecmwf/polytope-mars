@@ -1,5 +1,5 @@
 from conflator import ConfigModel
-from polytope.options import Config
+from polytope_feature.options import Config
 
 
 class DatacubeConfig(ConfigModel):

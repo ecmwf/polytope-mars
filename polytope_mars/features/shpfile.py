@@ -1,5 +1,5 @@
 import geopandas as gpd
-from polytope import shapes
+from polytope_feature import shapes
 
 from ..feature import Feature
 

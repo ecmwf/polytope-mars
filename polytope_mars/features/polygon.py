@@ -1,4 +1,4 @@
-from polytope import shapes
+from polytope_feature import shapes
 from shapely.geometry import Polygon
 
 from ..feature import Feature

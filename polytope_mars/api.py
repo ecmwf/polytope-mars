@@ -7,9 +7,9 @@ import pandas as pd
 import pygribjump as gj
 from conflator import Conflator
 from covjsonkit.api import Covjsonkit
-from polytope import shapes
-from polytope.engine.hullslicer import HullSlicer
-from polytope.polytope import Polytope, Request
+from polytope_feature import shapes
+from polytope_feature.engine.hullslicer import HullSlicer
+from polytope_feature.polytope import Polytope, Request
 
 from .config import PolytopeMarsConfig
 from .features.boundingbox import BoundingBox
