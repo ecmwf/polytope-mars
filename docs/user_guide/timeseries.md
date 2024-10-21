@@ -23,7 +23,7 @@ request = {
     "feature" : {
         "type" : "timeseries",
         "points": [[-9.10, 38.78]],
-        "axis": "step",
+        "axes": "step",
         "range" : {
             "start" : 0,
             "end" : 360,
@@ -62,7 +62,7 @@ request = {
     "feature" : {
         "type" : "timeseries",
         "points": [[-9.10, 38.78]],
-        "axis": "step",
+        "axes": "step",
         "range" : {
             "start" : 0,
             "end" : 360,
@@ -87,21 +87,21 @@ For a timeseries within the `feature` dictionary three fields are required
 
 * `type`
 * `points`
-* `axis`
+* `axes`
 
 For a timeseries `type` must be `timeseries`.
 
 `points` has to be a nested list with two points corresponding to a latitude and a longitude.
 
-`axis` refers to the axis on which to generate the timeseries. In this case the timeseries is generated accross `step` based on the inputted `range`. However if the data requested was a climate dataset the `axis` may be `datetime` denoting that the timeseries is generated accross that axis.
+`axes` refers to the axes on which to generate the timeseries. In this case the timeseries is generated accross `step` based on the inputted `range`. However if the data requested was a climate dataset the `axes` may be `datetime` denoting that the timeseries is generated accross that axes.
 
 
 ## Optional Fields
 
-`range` is an optional field within `feature`. It refers to the extent of the `axis` on which the timeseries will be generated. In the above case where:
+`range` is an optional field within `feature`. It refers to the extent of the `axes` on which the timeseries will be generated. In the above case where:
 
 ```python
-    "axis": "step",
+    "axes": "step",
     "range" : {
         "start" : 0,
         "end" : 360,
@@ -111,7 +111,7 @@ For a timeseries `type` must be `timeseries`.
 A timerseries accross `step` will start at step `0` and end at step `360` with all steps found in between being included. `range` can also contain `interval`.
 
 ```python
-    "axis": "step",
+    "axes": "step",
     "range" : {
         "start" : 0,
         "end" : 360,
@@ -120,7 +120,7 @@ A timerseries accross `step` will start at step `0` and end at step `360` with a
 ```
 In this case every second step will be returned if it exists.
 
-As `range` is an optional field it can be left out, however there is not a default value. Instead the user has to include the timeseries `axis` in the main body of the request like below:
+As `range` is an optional field it can be left out, however there is not a default value. Instead the user has to include the timeseries `axes` in the main body of the request like below:
 
 ```python
 request = {
@@ -138,7 +138,7 @@ request = {
     "feature" : {
         "type" : "timeseries",
         "points": [[-9.10, 38.78]],
-        "axis": "step",
+        "axes": "step",
     },
     "format": "covjson",
 }
