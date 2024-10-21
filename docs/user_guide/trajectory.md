@@ -79,12 +79,12 @@ Notes:
 
 ## Required Fields
 
-For a trajectory within the `feature` dictionary three fields are required
+For a trajectory within the `feature` dictionary two fields are required
 
 * `type`
 * `points`
 
-For a vertical profile `type` must be `trajectory`.
+For a trajectory `type` must be `trajectory`.
 
 The values in `points` can change depending on the `axes`. The default for `axes` is:
 
