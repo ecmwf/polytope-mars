@@ -28,13 +28,12 @@ Repository for high level API of polytope feature extraction such as vertical pr
 
 Current features include:
 
-* Time Series
-* Vertical Profile
-* Bounding Box
-* Path
-* WKT POLYGON shape
-* Shape File
-* Frame
+* [Time Series](docs/user_guide/timeseries.md)
+* [Vertical Profile](docs/user_guide/vertical_profile.md)
+* [Bounding Box](docs/user_guide/boundingbox.md)
+* [Trajectory](docs/user_guide/trajectory.md)
+* [Polygon](docs/user_guide/polygon.md)
+* [Frame](docs/user_guide/frame.md)
 
 ## Installation
 
