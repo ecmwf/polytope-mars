@@ -112,7 +112,7 @@ For a vertical profile `type` must be `verticalprofile`.
 A vertical profile accross `levelist` will start at level `0` and end at level `1000` with all levels found in between being included. `range` can also contain `interval`.
 
 ```python
-    "axes": "step",
+    "axes": "levelist",
     "range" : {
         "start" : 0,
         "end" : 1000,

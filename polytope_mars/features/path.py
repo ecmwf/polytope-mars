@@ -40,3 +40,6 @@ class Path(Feature):
 
     def name(self):
         return "Path"
+
+    def parse(self, request, feature_config):
+        return request

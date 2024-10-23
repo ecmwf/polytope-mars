@@ -35,3 +35,6 @@ class BoundingBox(Feature):
 
     def name(self):
         return "Bounding Box"
+    
+    def parse(self, request, feature_config):
+        return request

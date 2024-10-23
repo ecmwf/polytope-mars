@@ -65,3 +65,6 @@ class Polygons(Feature):
 
     def name(self):
         return "Polygon"
+    
+    def parse(self, request, feature_config):
+        return request
