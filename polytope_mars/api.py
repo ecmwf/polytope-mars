@@ -57,8 +57,6 @@ class PolytopeMars:
 
     def extract(self, request):
         # request expected in JSON or dict
-        start = time.time()
-        logging.info(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
         if not isinstance(request, dict):
             try:
                 request = json.loads(request)
@@ -70,6 +68,7 @@ class PolytopeMars:
         # expect a "feature" key in the request
         try:
             feature_config = request.pop("feature")
+            feature_config_copy = feature_config.copy()
         except KeyError:
             raise KeyError("Request does not contain a 'feature' keyword")
 
@@ -90,11 +89,16 @@ class PolytopeMars:
 
         feature.validate(request)
 
+        request = feature.parse(request, feature_config_copy)
+
         shapes = self._create_base_shapes(request)
 
         shapes.extend(feature.get_shapes())
 
         preq = Request(*shapes)
+
+        start = time.time()
+        logging.info(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
 
         if self.conf.datacube.type == "gribjump":
             fdbdatacube = gj.GribJump()

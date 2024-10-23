@@ -21,6 +21,10 @@ class Feature(ABC):
     def coverage_type(self):
         pass
 
+    @abstractmethod
+    def parse(self, request, feature_config):
+        pass
+
     def validate(self, request):
         incompatible_keys = self.incompatible_keys()
         for key in incompatible_keys:
