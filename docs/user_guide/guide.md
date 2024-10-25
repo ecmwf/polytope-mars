@@ -4,7 +4,7 @@
 
 ## Examples
 
-- [Time Series](#timeseries)
-- [Vertical Profile](#vertical_profile)
-- [Polygon](#polygon)
-- [Bounding Box](#boundingbox)
+- [Time Series](timeseries.md)
+- [Vertical Profile](vertical_profile.md)
+- [Polygon](polygon.md)
+- [Bounding Box](boundingbox.md)
