@@ -2,7 +2,7 @@
 
 ## Basic Example
 
-### Polytope-mars
+<!-- ### Polytope-mars
 
 A basic example of requesting a trajectory using polytope-mars:
 
@@ -38,9 +38,9 @@ Notes:
 * The data has to exist in the data source pointed to in the config.
 * No config is provided via the PolytopeMars interface so a config will be loaded from the default locations. The config can also be passed directly via the interface.
 
-### Earthkit-data
+### Earthkit-data -->
 
-An example of the same request above except requested via Earthkit-data:
+An example bounding box requested via Earthkit-data:
 
 ```python
 import earthkit.data
@@ -119,6 +119,6 @@ request = {
 }
 ```
 
-For this request a bouding box with top left corner at lat -1, long -1 and pressure level 1000, and bottom right corner at lat 1, long 1, and pressure level 500.
+For this request a bounding box with top left corner at lat -1, long -1 and pressure level 1000, and bottom right corner at lat 1, long 1, and pressure level 500.
 
 Without level in the `axes` this will be taken from the main body of the request. In the case of `levtype` = `sfc`, no levelist is required.
