@@ -1,7 +1,7 @@
 # Vertical Profile
 
 ## Basic Example
-
+<!-- 
 ### Polytope-mars
 
 A basic example of requesting a vertical profile using polytope-mars:
@@ -42,9 +42,9 @@ Notes:
 * The data has to exist in the data source pointed to in the config.
 * No config is provided via the PolytopeMars interface so a config will be loaded from the default locations. The config can also be passed directly via the interface.
 
-### Earthkit-data
+### Earthkit-data -->
 
-An example of the same request above except requested via Earthkit-data:
+An example vertical profile requested via Earthkit-data:
 
 ```python
 import earthkit.data
