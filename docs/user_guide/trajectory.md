@@ -70,7 +70,15 @@ request = {
 ds = earthkit.data.from_source("polytope", "ecmwf-mars", request, stream=False, address='polytope.ecmwf.int')
 ```
 
-The data returned will be the same as the request above. `"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
+This request will return a trajectory with forecast date of `20240930T000000` for the three requested parameters for the points:
+
+* `lat: -1, long: -1, pressure level: 1000, step: 0`
+* `lat: 0, long: 0, pressure level: 1000, step: 12`
+* `lat: 1, long: 1, pressure level: 250, step: 24`
+
+The `trajectory` `feature` also contains another field called `padding` with a default of 1. This is the radius of the circle swept around the trajectory where points within this radius are returned to the user.
+
+`"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
 
 Notes: 
 * The data has to exist in the fdb on the polytope server.

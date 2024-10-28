@@ -12,3 +12,4 @@ Follow the links below to see how to request different types of features.
 - [Vertical Profile](vertical_profile.md)
 - [Polygon](polygon.md)
 - [Bounding Box](boundingbox.md)
+- [Trajectory](trajectory.md)

@@ -66,7 +66,9 @@ request = {
 result = PolytopeMars().extract(request)
 ```
 
-The data returned will be the same as the request above. `"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
+This request will return all points contained in `shape` for with forecast date of `20240930T000000` for `step` `0`, ensemble `number` `1` and the three prvoided parameters.
+
+`"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
 
 Notes: 
 * The data has to exist in the fdb on the polytope server.
