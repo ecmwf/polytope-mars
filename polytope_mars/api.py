@@ -26,7 +26,7 @@ features = {
     "verticalprofile": VerticalProfile,
     "boundingbox": BoundingBox,
     "frame": Frame,
-    "path": Path,
+    "trajectory": Path,
     "shapefile": Shapefile,
     "polygon": Polygons,
 }
@@ -71,6 +71,13 @@ class PolytopeMars:
             feature_config_copy = feature_config.copy()
         except KeyError:
             raise KeyError("Request does not contain a 'feature' keyword")
+        
+        try:
+            format = request.pop("format")
+            if format != "covjson":
+                raise ValueError("Only covjson format is currently supported")
+        except KeyError:
+            pass
 
         # get feature type
         try:

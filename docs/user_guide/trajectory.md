@@ -91,6 +91,7 @@ For a trajectory within the `feature` dictionary two fields are required
 
 * `type`
 * `points`
+* `padding`
 
 For a trajectory `type` must be `trajectory`.
 
@@ -101,6 +102,8 @@ The values in `points` can change depending on the `axes`. The default for `axes
 ```
 
 In this default case a nested list of at least two points with values for `lat`, `long`, `level`, and `step` must be provided. 
+
+Another required field that is within the `feature` dictionary is `padding`. This refers to the radius of the circle swept around the trajectory along which points will be included.
 
 
 ## Optional Fields
@@ -151,5 +154,3 @@ The user does not have to give `step` as the time axis. In the case of a climate
 Combinations such as `"axis" : ['lat', 'step']` will return an error. 
 
 If `step` is included as an `axis` and also in the main body of teh request. An error that the request is overspecified will also be thrown.
-
-Another optional field that can be within the `feature` dictionary is `padding`. This refers to the radius of the circle swept around the trajectory along which points will be included. The default value is `1`.
