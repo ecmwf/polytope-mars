@@ -1,7 +1,7 @@
+import datetime
 import json
 import logging
 import time
-import datetime
 from typing import List
 
 import pandas as pd
@@ -71,7 +71,7 @@ class PolytopeMars:
             feature_config_copy = feature_config.copy()
         except KeyError:
             raise KeyError("Request does not contain a 'feature' keyword")
-        
+
         try:
             format = request.pop("format")
             if format != "covjson":
@@ -188,7 +188,12 @@ class PolytopeMars:
             elif len(split) == 1:
                 if k == "date":
                     if int(split[0]) < 0:
-                        split[0] = str((datetime.datetime.now() + + datetime.timedelta(days=int(split[0]))).strftime('%Y%m%d'))
+                        split[0] = str(
+                            (
+                                datetime.datetime.now()
+                                + +datetime.timedelta(days=int(split[0]))
+                            ).strftime("%Y%m%d")
+                        )
                     split[0] = pd.Timestamp(split[0] + "T" + time)
                 base_shapes.append(shapes.Select(k, [split[0]]))
 

@@ -20,53 +20,54 @@ class Path(Feature):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
         if len(self.points[0]) == 2:
             return [
-                        shapes.Path(
-                            ["latitude", "longitude"],
-                            shapes.Box(
-                                ["latitude", "longitude"],
-                                [0, 0],
-                                [self.padding, self.padding],
-                            ),
-                            *self.points,
-                        )
+                shapes.Path(
+                    ["latitude", "longitude"],
+                    shapes.Box(
+                        ["latitude", "longitude"],
+                        [0, 0],
+                        [self.padding, self.padding],
+                    ),
+                    *self.points,
+                )
             ]
         elif len(self.points[0]) == 3:
             if self.axis[2] == "step":
                 return [
-                            shapes.Path(
-                                ["latitude", "longitude", "step"],
-                                shapes.Box(
-                                    ["latitude", "longitude", "step"],
-                                    [0, 0, 0],
-                                    [self.padding, self.padding, 0],
-                                ),
-                                *self.points,
-                            )
+                    shapes.Path(
+                        ["latitude", "longitude", "step"],
+                        shapes.Box(
+                            ["latitude", "longitude", "step"],
+                            [0, 0, 0],
+                            [self.padding, self.padding, 0],
+                        ),
+                        *self.points,
+                    )
                 ]
             else:
                 return [
-                            shapes.Path(
-                                ["latitude", "longitude", "levelist"],
-                                shapes.Box(
-                                    ["latitude", "longitude", "levelist"],
-                                    [0, 0, 0],
-                                    [self.padding, self.padding, 0],
-                                ),
-                                *self.points,
-                            )
+                    shapes.Path(
+                        ["latitude", "longitude", "levelist"],
+                        shapes.Box(
+                            ["latitude", "longitude", "levelist"],
+                            [0, 0, 0],
+                            [self.padding, self.padding, 0],
+                        ),
+                        *self.points,
+                    )
                 ]
         elif len(self.points[0]) == 4:
             return [
-                        shapes.Path(
-                            ["latitude", "longitude", "levelist", "step"],
-                            shapes.Box(
-                                ["latitude", "longitude", "levelist", "step"],
-                                [0, 0, 0, 0],
-                                [self.padding, self.padding, 0, 0],
-                            ),
-                            *self.points,
-                        )
+                shapes.Path(
+                    ["latitude", "longitude", "levelist", "step"],
+                    shapes.Box(
+                        ["latitude", "longitude", "levelist", "step"],
+                        [0, 0, 0, 0],
+                        [self.padding, self.padding, 0, 0],
+                    ),
+                    *self.points,
+                )
             ]
+
     def incompatible_keys(self):
         return []
 
@@ -79,24 +80,40 @@ class Path(Feature):
     def parse(self, request, feature_config):
         print("feature_config: ", feature_config)
         print("request: ", request)
-        if feature_config['type'] != 'trajectory':
+        if feature_config["type"] != "trajectory":
             raise ValueError("Feature type must be trajectory")
         if "padding" not in feature_config:
             raise ValueError("Padding must be specified in request")
         if "axis" not in feature_config:
-            for point in feature_config['points']:
+            for point in feature_config["points"]:
                 if len(point) != 4:
-                    raise ValueError("For Trajectory each point must have only two values unless axis is specified, point must have form ['latitude', 'longitude', 'levelist', 'step']")
+                    raise ValueError(
+                        "For Trajectory each point must have only two values unless axis is specified, point must have form ['latitude', 'longitude', 'levelist', 'step']"  # noqa: E501
+                    )
         else:
-            for point in feature_config['points']:
-                if len(point) != len(feature_config['axis']):
-                    raise ValueError("Trajectory points must have the same number of values as axis")
-            if ("levelist" in feature_config['axis']) and ("levelist" in request):
-                raise ValueError("Trajectory level axis is overspecified in request")
-            if feature_config["axis"] == ["latitude", "longitude", "levelist"]:
-                raise ValueError("['latitude', 'longitude', 'levelist'] not yet implemented")
-        if len(feature_config['points']) < 2:
-            raise ValueError("Trajectory must have atleast two values in points")      
+            for point in feature_config["points"]:
+                if len(point) != len(feature_config["axis"]):
+                    raise ValueError(
+                        "Trajectory points must have the same number of values as axis"  # noqa: E501
+                    )
+            if ("levelist" in feature_config["axis"]) and (
+                "levelist" in request
+            ):  # noqa: E501
+                raise ValueError(
+                    "Trajectory level axis is overspecified in request"
+                )  # noqa: E501
+            if feature_config["axis"] == [
+                "latitude",
+                "longitude",
+                "levelist",
+            ]:  # noqa: E501
+                raise ValueError(
+                    "['latitude', 'longitude', 'levelist'] not yet implemented"
+                )
+        if len(feature_config["points"]) < 2:
+            raise ValueError(
+                "Trajectory must have atleast two values in points"
+            )  # noqa: E501
 
         print(request)
         return request

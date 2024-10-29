@@ -45,26 +45,39 @@ class VerticalProfile(Feature):
 
     def name(self):
         return "Vertical Profile"
-    
+
     def parse(self, request, feature_config):
         print("feature_config: ", feature_config)
         print("request: ", request)
-        if feature_config['type'] != 'verticalprofile':
+        if feature_config["type"] != "verticalprofile":
             raise ValueError("Feature type must be vertical proifle")
-        if "axis" in feature_config and feature_config['axis'] != 'levelist':
+        if "axis" in feature_config and feature_config["axis"] != "levelist":
             raise ValueError("Vertical profile axis must be levelist")
-        if len(feature_config['points'][0]) != 2:
-            raise ValueError("Vertical Profile must have only two values in points")
+        if len(feature_config["points"][0]) != 2:
+            raise ValueError(
+                "Vertical Profile must have only two values in points"
+            )  # noqa: E501
         if "axis" in feature_config:
-            if feature_config['axis'] in request and "range" in feature_config:
-                raise ValueError("Vertical profile axis is overspecified in request")
-            if feature_config['axis'] not in request and "range" not in feature_config:
-                raise ValueError("Vertical profile axis is underspecified in request")
+            if feature_config["axis"] in request and "range" in feature_config:
+                raise ValueError(
+                    "Vertical profile axis is overspecified in request"
+                )  # noqa: E501
+            if (
+                feature_config["axis"] not in request
+                and "range" not in feature_config  # noqa: E501
+            ):  # noqa: E501
+                raise ValueError(
+                    "Vertical profile axis is underspecified in request"
+                )  # noqa: E501
         if "range" in feature_config:
-            if isinstance(feature_config['range'], dict):
-                request[feature_config['axis']] = f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"
-                if "interval" in feature_config['range']:
-                    request[feature_config['axis']] += f"/by/{feature_config['range']['interval']}"
+            if isinstance(feature_config["range"], dict):
+                request[feature_config["axis"]] = (
+                    f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"  # noqa: E501
+                )
+                if "interval" in feature_config["range"]:
+                    request[
+                        feature_config["axis"]
+                    ] += f"/by/{feature_config['range']['interval']}"
 
         print(request)
         return request
