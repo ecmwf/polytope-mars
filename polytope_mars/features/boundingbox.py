@@ -66,8 +66,6 @@ class BoundingBox(Feature):
         return "Bounding Box"
 
     def parse(self, request, feature_config):
-        print("feature_config: ", feature_config)
-        print("request: ", request)
         if feature_config["type"] != "boundingbox":
             raise ValueError("Feature type must be boudningbox")
         if len(feature_config["points"]) != 2:

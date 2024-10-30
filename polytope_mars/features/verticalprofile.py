@@ -47,8 +47,6 @@ class VerticalProfile(Feature):
         return "Vertical Profile"
 
     def parse(self, request, feature_config):
-        print("feature_config: ", feature_config)
-        print("request: ", request)
         if feature_config["type"] != "verticalprofile":
             raise ValueError("Feature type must be vertical proifle")
         if "axis" in feature_config and feature_config["axis"] != "levelist":
@@ -79,5 +77,4 @@ class VerticalProfile(Feature):
                         feature_config["axis"]
                     ] += f"/by/{feature_config['range']['interval']}"
 
-        print(request)
         return request

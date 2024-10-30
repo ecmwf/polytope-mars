@@ -46,8 +46,6 @@ class TimeSeries(Feature):
         return "Time Series"
 
     def parse(self, request, feature_config):
-        print("feature_config: ", feature_config)
-        print("request: ", request)
         if feature_config["type"] != "timeseries":
             raise ValueError("Feature type must be timeseries")
         if (
@@ -74,5 +72,4 @@ class TimeSeries(Feature):
                         feature_config["axis"]
                     ] += f"/by/{feature_config['range']['interval']}"
 
-        print(request)
         return request

@@ -78,8 +78,6 @@ class Path(Feature):
         return "Path"
 
     def parse(self, request, feature_config):
-        print("feature_config: ", feature_config)
-        print("request: ", request)
         if feature_config["type"] != "trajectory":
             raise ValueError("Feature type must be trajectory")
         if "padding" not in feature_config:
@@ -115,5 +113,4 @@ class Path(Feature):
                 "Trajectory must have atleast two values in points"
             )  # noqa: E501
 
-        print(request)
         return request
