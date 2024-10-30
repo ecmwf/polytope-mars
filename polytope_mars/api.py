@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 import time
@@ -25,7 +26,7 @@ features = {
     "verticalprofile": VerticalProfile,
     "boundingbox": BoundingBox,
     "frame": Frame,
-    "path": Path,
+    "trajectory": Path,
     "shapefile": Shapefile,
     "polygon": Polygons,
 }
@@ -56,8 +57,6 @@ class PolytopeMars:
 
     def extract(self, request):
         # request expected in JSON or dict
-        start = time.time()
-        logging.debug(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
         if not isinstance(request, dict):
             try:
                 request = json.loads(request)
@@ -69,8 +68,16 @@ class PolytopeMars:
         # expect a "feature" key in the request
         try:
             feature_config = request.pop("feature")
+            feature_config_copy = feature_config.copy()
         except KeyError:
             raise KeyError("Request does not contain a 'feature' keyword")
+
+        try:
+            format = request.pop("format")
+            if format != "covjson":
+                raise ValueError("Only covjson format is currently supported")
+        except KeyError:
+            pass
 
         # get feature type
         try:
@@ -89,11 +96,16 @@ class PolytopeMars:
 
         feature.validate(request)
 
+        request = feature.parse(request, feature_config_copy)
+
         shapes = self._create_base_shapes(request)
 
         shapes.extend(feature.get_shapes())
 
         preq = Request(*shapes)
+
+        start = time.time()
+        logging.info(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
 
         if self.conf.datacube.type == "gribjump":
             fdbdatacube = gj.GribJump()
@@ -110,14 +122,14 @@ class PolytopeMars:
 
         end = time.time()
         delta = end - start
-        logging.debug(f"{self.id}: Gribjump/setup time start: {end}")  # noqa: E501
-        logging.debug(f"{self.id}: Gribjump/setup time start: {delta}")  # noqa: E501
+        logging.debug(f"{self.id}: Gribjump/setup time end: {end}")  # noqa: E501
+        logging.info(f"{self.id}: Gribjump/setup time taken: {delta}")  # noqa: E501
 
         logging.debug(
             f"{self.id}: The request we give polytope from polytope-mars is: {preq}"  # noqa: E501
         )
         start = time.time()
-        logging.debug(f"{self.id}: Polytope time start: {start}")  # noqa: E501
+        logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
         if self.log_context:
             logging.debug(f"Send log_context to polytope: {self.log_context}")
@@ -128,9 +140,9 @@ class PolytopeMars:
         end = time.time()
         delta = end - start
         logging.debug(f"{self.id}: Polytope time end: {end}")  # noqa: E501
-        logging.debug(f"{self.id}: Polytope time taken: {delta}")  # noqa: E501
+        logging.info(f"{self.id}: Polytope time taken: {delta}")  # noqa: E501
         start = time.time()
-        logging.debug(f"{self.id}: Covjson time start: {start}")  # noqa: E501
+        logging.info(f"{self.id}: Covjson time start: {start}")  # noqa: E501
         encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
             "CoverageCollection", feature_type
         )  # noqa: E501
@@ -143,7 +155,7 @@ class PolytopeMars:
         end = time.time()
         delta = end - start
         logging.debug(f"{self.id}: Covjsonkit time end: {end}")  # noqa: E501
-        logging.debug(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
+        logging.info(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
 
         return self.coverage
 
@@ -175,6 +187,13 @@ class PolytopeMars:
             # Single value -> Select
             elif len(split) == 1:
                 if k == "date":
+                    if int(split[0]) < 0:
+                        split[0] = str(
+                            (
+                                datetime.datetime.now()
+                                + +datetime.timedelta(days=int(split[0]))
+                            ).strftime("%Y%m%d")
+                        )
                     split[0] = pd.Timestamp(split[0] + "T" + time)
                 base_shapes.append(shapes.Select(k, [split[0]]))
 
