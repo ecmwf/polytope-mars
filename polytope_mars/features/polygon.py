@@ -65,3 +65,8 @@ class Polygons(Feature):
 
     def name(self):
         return "Polygon"
+
+    def parse(self, request, feature_config):
+        if feature_config["type"] != "polygon":
+            raise ValueError("Feature type must be polygon")
+        return request

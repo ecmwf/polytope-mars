@@ -2,7 +2,7 @@
 
 ## Basic Example
 
-### Polytope-mars
+<!-- ### Polytope-mars
 
 A basic example of requesting a trajectory using polytope-mars:
 
@@ -38,9 +38,9 @@ Notes:
 * The data has to exist in the data source pointed to in the config.
 * No config is provided via the PolytopeMars interface so a config will be loaded from the default locations. The config can also be passed directly via the interface.
 
-### Earthkit-data
+### Earthkit-data -->
 
-An example of the same request above except requested via Earthkit-data:
+An example bounding box requested via Earthkit-data:
 
 ```python
 import earthkit.data
@@ -66,7 +66,9 @@ request = {
 ds = earthkit.data.from_source("polytope", "ecmwf-mars", request, stream=False, address='polytope.ecmwf.int')
 ```
 
-The data returned will be the same as the request above. `"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
+This request will return a bounding box with forecast date of `20240930T000000` for the three requested parameters for the points within a bounding box with top left coordinate at latitude -1 and longitude -1, and bottom right point at latitude 1 and longitude 1.
+
+`"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
 
 Notes: 
 * The data has to exist in the fdb on the polytope server.
@@ -119,6 +121,6 @@ request = {
 }
 ```
 
-For this request a bouding box with top left corner at lat -1, long -1 and pressure level 1000, and bottom right corner at lat 1, long 1, and pressure level 500.
+For this request a bounding box with top left corner at lat -1, long -1 and pressure level 1000, and bottom right corner at lat 1, long 1, and pressure level 500.
 
 Without level in the `axes` this will be taken from the main body of the request. In the case of `levtype` = `sfc`, no levelist is required.

@@ -12,6 +12,9 @@ class TimeSeries(Feature):
 
         self.points = feature_config.pop("points", [])
 
+        if "range" in feature_config:
+            feature_config.pop("range")
+
         assert (
             len(feature_config) == 0
         ), f"Unexpected keys in config: {feature_config.keys()}"
@@ -41,3 +44,32 @@ class TimeSeries(Feature):
 
     def name(self):
         return "Time Series"
+
+    def parse(self, request, feature_config):
+        if feature_config["type"] != "timeseries":
+            raise ValueError("Feature type must be timeseries")
+        if (
+            feature_config["axis"] != "step"
+            and feature_config["axis"] != "date"  # noqa: E501
+        ):  # noqa: E501
+            raise ValueError("Timeseries axes must be step or date")
+        if len(feature_config["points"][0]) != 2:
+            raise ValueError("Timeseries must have only two values in points")
+        if feature_config["axis"] in request and "range" in feature_config:
+            raise ValueError("Timeseries axes is overspecified in request")
+        if (
+            feature_config["axis"] not in request
+            and "range" not in feature_config  # noqa: E501
+        ):  # noqa: E501
+            raise ValueError("Timeseries axes is underspecified in request")
+        if "range" in feature_config:
+            if isinstance(feature_config["range"], dict):
+                request[feature_config["axis"]] = (
+                    f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"  # noqa: E501
+                )
+                if "interval" in feature_config["range"]:
+                    request[
+                        feature_config["axis"]
+                    ] += f"/by/{feature_config['range']['interval']}"
+
+        return request

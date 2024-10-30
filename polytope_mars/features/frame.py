@@ -50,3 +50,6 @@ class Frame(Feature):
 
     def name(self):
         return "Frame"
+
+    def parse(self, request, feature_config):
+        return request

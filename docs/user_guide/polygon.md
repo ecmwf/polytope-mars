@@ -2,7 +2,7 @@
 
 ## Basic Example
 
-### Polytope-mars
+<!-- ### Polytope-mars
 
 A basic example of requesting a polygon using polytope-mars:
 
@@ -37,9 +37,9 @@ Notes:
 * The data has to exist in the data source pointed to in the config.
 * No config is provided via the PolytopeMars interface so a config will be loaded from the default locations. The config can also be passed directly via the interface.
 
-### Earthkit-data
+### Earthkit-data -->
 
-An example of the same request above except requested via Earthkit-data:
+An example polygon requested via Earthkit-data:
 
 ```python
 from polytope_mars.api import PolytopeMars
@@ -66,7 +66,9 @@ request = {
 result = PolytopeMars().extract(request)
 ```
 
-The data returned will be the same as the request above. `"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
+This request will return all points contained in `shape` for with forecast date of `20240930T000000` for `step` `0`, ensemble `number` `1` and the three prvoided parameters.
+
+`"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
 
 Notes: 
 * The data has to exist in the fdb on the polytope server.

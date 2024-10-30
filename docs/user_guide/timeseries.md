@@ -2,7 +2,7 @@
 
 ## Basic Example
 
-### Polytope-mars
+<!-- ### Polytope-mars
 
 A basic example of requesting a timeseries using polytope-mars:
 
@@ -41,9 +41,9 @@ Notes:
 * The data has to exist in the data source pointed to in the config.
 * No config is provided via the PolytopeMars interface so a config will be loaded from the default locations. The config can also be passed directly via the interface.
 
-### Earthkit-data
+### Earthkit-data -->
 
-An example of the same request above except requested via Earthkit-data:
+An example of a time-series requested via Earthkit-data:
 
 ```python
 import earthkit.data
@@ -73,8 +73,9 @@ request = {
 
 ds = earthkit.data.from_source("polytope", "ecmwf-mars", request, stream=False, address='polytope.ecmwf.int')
 ```
+The following will return a timeseries starting on `2024-10-06 00:00:00` with steps from `0` to `360` including all steps available in between, for the parameters `164/167/169` at the point given. This data will be returned for each ensemble number requested.
 
-The data returned will be the same as the request above. `"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
+`"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
 
 Notes: 
 * The data has to exist in the fdb on the polytope server.

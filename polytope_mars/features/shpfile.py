@@ -51,3 +51,6 @@ class Shapefile(Feature):
 
     def name(self):
         return "Shapefile"
+
+    def parse(self, request, feature_config):
+        return request
