@@ -69,9 +69,9 @@ class VerticalProfile(Feature):
                 )  # noqa: E501
         if "range" in feature_config:
             if isinstance(feature_config["range"], dict):
-                request[feature_config["axis"]] = (
-                    f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"  # noqa: E501
-                )
+                request[
+                    feature_config["axis"]
+                ] = f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"  # noqa: E501
                 if "interval" in feature_config["range"]:
                     request[
                         feature_config["axis"]

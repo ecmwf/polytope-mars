@@ -120,7 +120,7 @@ class PolytopeMars:
             datacube=fdbdatacube,
             engine=slicer,
             options=self.conf.options.model_dump(),
-            context=self.log_context
+            context=self.log_context,
         )
 
         end = time.time()
