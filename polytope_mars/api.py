@@ -114,10 +114,13 @@ class PolytopeMars:
                 f"Datacube type '{self.conf.datacube.type}' not found"
             )  # noqa: E501
         slicer = HullSlicer()
+
+        logging.debug(f"Send log_context to polytope: {self.log_context}")
         self.api = Polytope(
             datacube=fdbdatacube,
             engine=slicer,
             options=self.conf.options.model_dump(),
+            context=self.log_context
         )
 
         end = time.time()
@@ -131,11 +134,7 @@ class PolytopeMars:
         start = time.time()
         logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
-        if self.log_context:
-            logging.debug(f"Send log_context to polytope: {self.log_context}")
-            result = self.api.retrieve(preq, context=self.log_context)
-        else:
-            result = self.api.retrieve(preq)
+        result = self.api.retrieve(preq)
 
         end = time.time()
         delta = end - start
