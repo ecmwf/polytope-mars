@@ -96,7 +96,11 @@ class PolytopeMars:
 
         feature.validate(request)
 
+        logging.debug("Unparsed request: %s", request)
+
         request = feature.parse(request, feature_config_copy)
+
+        logging.debug("Parsed request: %s", request)
 
         shapes = self._create_base_shapes(request)
 
