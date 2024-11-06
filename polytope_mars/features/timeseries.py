@@ -1,5 +1,6 @@
-from polytope_feature import shapes
 import logging
+
+from polytope_feature import shapes
 
 from ..feature import Feature
 
