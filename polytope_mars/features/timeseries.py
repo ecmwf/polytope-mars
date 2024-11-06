@@ -1,4 +1,5 @@
 from polytope_feature import shapes
+import logging
 
 from ..feature import Feature
 
@@ -46,6 +47,8 @@ class TimeSeries(Feature):
         return "Time Series"
 
     def parse(self, request, feature_config):
+        logging.debug("Request: %s", request)
+        logging.debug("Feature config: %s", feature_config)
         if feature_config["type"] != "timeseries":
             raise ValueError("Feature type must be timeseries")
         if (
@@ -63,7 +66,9 @@ class TimeSeries(Feature):
         ):  # noqa: E501
             raise ValueError("Timeseries axes is underspecified in request")
         if "range" in feature_config:
+            logging.debug("Contains range: %s", request)
             if isinstance(feature_config["range"], dict):
+                logging.debug("Add range as step: %s", request)
                 request[feature_config["axis"]] = (
                     f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"  # noqa: E501
                 )
@@ -71,5 +76,6 @@ class TimeSeries(Feature):
                     request[
                         feature_config["axis"]
                     ] += f"/by/{feature_config['range']['interval']}"
+        logging.debug("After parse request: %s", request)
 
         return request

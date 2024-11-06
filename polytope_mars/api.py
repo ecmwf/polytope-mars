@@ -97,6 +97,7 @@ class PolytopeMars:
         feature.validate(request)
 
         logging.debug("Unparsed request: %s", request)
+        logging.debug("Feature dictionary: %s", feature_config_copy)
 
         request = feature.parse(request, feature_config_copy)
 
