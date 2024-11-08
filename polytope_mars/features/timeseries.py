@@ -1,3 +1,5 @@
+import logging
+
 from polytope_feature import shapes
 
 from ..feature import Feature
@@ -46,6 +48,7 @@ class TimeSeries(Feature):
         return "Time Series"
 
     def parse(self, request, feature_config):
+        logging.debug("Feature config: %s", feature_config)
         if feature_config["type"] != "timeseries":
             raise ValueError("Feature type must be timeseries")
         if (
@@ -71,5 +74,6 @@ class TimeSeries(Feature):
                     request[
                         feature_config["axis"]
                     ] += f"/by/{feature_config['range']['interval']}"
+        logging.debug("After parse request: %s", request)
 
         return request
