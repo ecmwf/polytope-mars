@@ -12,7 +12,9 @@ class Path(Feature):
         if "axes" in feature_config:
             self.axis = feature_config.pop("axes")
         if "axis" in feature_config:
-            raise ValueError("Bounding box does not have axis in feature, did you mean axes?")  # noqa: E501
+            raise ValueError(
+                "Bounding box does not have axis in feature, did you mean axes?"  # noqa: E501
+            )
 
         assert (
             len(feature_config) == 0
