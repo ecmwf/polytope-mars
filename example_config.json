@@ -101,6 +101,6 @@
     },
     "polygonrules": {
         "max_points": 1000,
-        "max_polygons": 1000.0
+        "max_area": 1000.0
     }
 }

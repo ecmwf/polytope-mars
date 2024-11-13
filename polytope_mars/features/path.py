@@ -9,8 +9,12 @@ class Path(Feature):
         self.points = feature_config.pop("points", [])
         if "padding" in feature_config:
             self.padding = feature_config.pop("padding")
+        if "axes" in feature_config:
+            self.axis = feature_config.pop("axes")
         if "axis" in feature_config:
-            self.axis = feature_config.pop("axis")
+            raise ValueError(
+                "Bounding box does not have axis in feature, did you mean axes?"  # noqa: E501
+            )
 
         assert (
             len(feature_config) == 0
@@ -82,25 +86,25 @@ class Path(Feature):
             raise ValueError("Feature type must be trajectory")
         if "padding" not in feature_config:
             raise ValueError("Padding must be specified in request")
-        if "axis" not in feature_config:
+        if "axes" not in feature_config:
             for point in feature_config["points"]:
                 if len(point) != 4:
                     raise ValueError(
-                        "For Trajectory each point must have only two values unless axis is specified, point must have form ['latitude', 'longitude', 'levelist', 'step']"  # noqa: E501
+                        "For Trajectory each point must have only two values unless axes is specified, point must have form ['latitude', 'longitude', 'levelist', 'step']"  # noqa: E501
                     )
         else:
             for point in feature_config["points"]:
-                if len(point) != len(feature_config["axis"]):
+                if len(point) != len(feature_config["axes"]):
                     raise ValueError(
-                        "Trajectory points must have the same number of values as axis"  # noqa: E501
+                        "Trajectory points must have the same number of values as axes"  # noqa: E501
                     )
-            if ("levelist" in feature_config["axis"]) and (
+            if ("levelist" in feature_config["axes"]) and (
                 "levelist" in request
             ):  # noqa: E501
                 raise ValueError(
-                    "Trajectory level axis is overspecified in request"
+                    "Trajectory level axes is overspecified in request"
                 )  # noqa: E501
-            if feature_config["axis"] == [
+            if feature_config["axes"] == [
                 "latitude",
                 "longitude",
                 "levelist",

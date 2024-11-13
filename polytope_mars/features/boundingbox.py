@@ -7,7 +7,12 @@ class BoundingBox(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "boundingbox"
         self.points = feature_config.pop("points", [])
-        self.axis = feature_config.pop("axis", [])
+        self.axis = feature_config.pop("axes", [])
+
+        if "axis" in feature_config:
+            raise ValueError(
+                "Bounding box does not have axis in feature, did you mean axes?"  # noqa: E501
+            )
 
         assert (
             len(feature_config) == 0
@@ -69,25 +74,31 @@ class BoundingBox(Feature):
         if feature_config["type"] != "boundingbox":
             raise ValueError("Feature type must be boudningbox")
         if len(feature_config["points"]) != 2:
-            raise ValueError("Boudning must have only two points in points")
-        if "axis" not in feature_config:
+            raise ValueError(
+                "Bounding box must have only two points in points"
+            )  # noqa: E501
+        if "axis" in feature_config:
+            raise ValueError(
+                "Bounding box does not have axis in feature, did you mean axes?"  # noqa: E501
+            )
+        if "axes" not in feature_config:
             for point in feature_config["points"]:
                 if len(point) != 2:
                     raise ValueError(
-                        "For Bounding Box each point must have only two values unless axis is specified"  # noqa: E501
+                        "For Bounding Box each point must have only two values unless axes is specified"  # noqa: E501
                     )
         else:
             for point in feature_config["points"]:
-                if len(point) != len(feature_config["axis"]):
+                if len(point) != len(feature_config["axes"]):
                     raise ValueError(
-                        "Bounding Box points must have the same number of values as axis"  # noqa: E501
+                        "Bounding Box points must have the same number of values as axes"  # noqa: E501
                     )
-            if "axis" in feature_config:
-                if ("levelist" in feature_config["axis"]) and (
+            if "axes" in feature_config:
+                if ("levelist" in feature_config["axes"]) and (
                     "levelist" in request
                 ):  # noqa: E501
                     raise ValueError(
-                        "Bounding Box axis is overspecified in request"
+                        "Bounding Box axes is overspecified in request"
                     )  # noqa: E501
 
         return request
