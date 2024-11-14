@@ -86,6 +86,19 @@ class Path(Feature):
             raise ValueError("Feature type must be trajectory")
         if "padding" not in feature_config:
             raise ValueError("Padding must be specified in request")
+        if "step" in request and "number" in request:
+            step = request["step"].split("/")
+            number = request["number"].split("/")
+            if len(step) > 1 and len(number) > 1:
+                raise ValueError(
+                    "Multiple steps and numbers not yet supported for trajectory feature"
+                )
+        if "step" in request:
+            step = request["step"].split("/")
+            if len(step) > 1:
+                raise ValueError(
+                    "Multiple steps not yet supported for trajectory feature"
+                )
         if "axes" not in feature_config:
             for point in feature_config["points"]:
                 if len(point) != 4:

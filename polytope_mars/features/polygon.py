@@ -69,4 +69,9 @@ class Polygons(Feature):
     def parse(self, request, feature_config):
         if feature_config["type"] != "polygon":
             raise ValueError("Feature type must be polygon")
+        if "step" in request and "number" in request:
+            step = request["step"].split("/")
+            number = request["number"].split("/")
+            if len(step) > 1 and len(number) > 1:
+                raise ValueError("Multiple steps and numbers not yet supported for polygon feature")
         return request
