@@ -73,5 +73,7 @@ class Polygons(Feature):
             step = request["step"].split("/")
             number = request["number"].split("/")
             if len(step) > 1 and len(number) > 1:
-                raise ValueError("Multiple steps and numbers not yet supported for polygon feature")
+                raise ValueError(
+                    "Multiple steps and numbers not yet supported for polygon feature"  # noqa: E501
+                )
         return request

@@ -77,7 +77,9 @@ class BoundingBox(Feature):
             step = request["step"].split("/")
             number = request["number"].split("/")
             if len(step) > 1 and len(number) > 1:
-                raise ValueError("Multiple steps and numbers not yet supported for Bounding Box feature")
+                raise ValueError(
+                    "Multiple steps and numbers not yet supported for Bounding Box feature"  # noqa: E501
+                )
         if len(feature_config["points"]) != 2:
             raise ValueError(
                 "Bounding box must have only two points in points"

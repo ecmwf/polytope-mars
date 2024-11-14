@@ -91,7 +91,7 @@ class Path(Feature):
             number = request["number"].split("/")
             if len(step) > 1 and len(number) > 1:
                 raise ValueError(
-                    "Multiple steps and numbers not yet supported for trajectory feature"
+                    "Multiple steps and numbers not yet supported for trajectory feature"  # noqa: E501
                 )
         if "step" in request:
             step = request["step"].split("/")
