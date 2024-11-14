@@ -86,7 +86,12 @@ class PolytopeMars:
             raise KeyError("The 'feature' does not contain a 'type' keyword")
 
         if feature_type == "timeseries":
-            timeseries_type = feature_config["axis"]
+            try:
+                timeseries_type = feature_config["axis"]
+            except KeyError:
+                raise KeyError(
+                    "The 'feature' does not contain an 'axis' keyword"
+                )
         else:
             timeseries_type = None
 
