@@ -11,9 +11,9 @@ class Path(Feature):
             self.radius = feature_config.pop("radius")
         if "axes" in feature_config:
             self.axes = feature_config.pop("axes")
-        if "axes" in feature_config:
+        if "axis" in feature_config:
             raise ValueError(
-                "Trajectory does not have axes in feature, did you mean axes?"  # noqa: E501
+                "Trajectory does not have axis in feature, did you mean axes?"  # noqa: E501
             )
 
         assert (
