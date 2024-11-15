@@ -8,6 +8,7 @@ import pandas as pd
 import pygribjump as gj
 from conflator import Conflator
 from covjsonkit.api import Covjsonkit
+from covjsonkit.param_db import get_param_ids
 from polytope_feature import shapes
 from polytope_feature.engine.hullslicer import HullSlicer
 from polytope_feature.polytope import Polytope, Request
@@ -188,6 +189,15 @@ class PolytopeMars:
 
         for k, v in request.items():
             split = str(v).split("/")
+
+            if k == 'param':
+                try:
+                    int(split[0])
+                except:
+                    new_split = []
+                    for s in split:
+                        new_split.append(get_param_ids(self.conf.coverageconfig)[s])
+                    split = new_split
 
             # ALL -> All
             if len(split) == 1 and split[0] == "ALL":
