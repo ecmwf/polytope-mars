@@ -7,16 +7,25 @@ class BoundingBox(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "boundingbox"
         self.points = feature_config.pop("points", [])
-        self.axis = feature_config.pop("axes", [])
+        self.axes = feature_config.pop("axes", [])
 
-        if "axis" in feature_config:
+        if "axes" in feature_config:
             raise ValueError(
-                "Bounding box does not have axis in feature, did you mean axes?"  # noqa: E501
+                "Bounding box does not have axes in feature, did you mean axes?"  # noqa: E501
             )
 
         assert (
             len(feature_config) == 0
         ), f"Unexpected keys in config: {feature_config.keys()}"
+
+        area_bb = abs(self.points[0][0] - self.points[1][0]) * abs(
+            self.points[0][1] - self.points[1][1]
+        )  # noqa: E501
+        print("area of bounding box:", area_bb)
+        if area_bb > client_config.polygonrules.max_area:
+            raise ValueError(
+                f"Area of Bounding Box {area_bb} exceeds the maximum size of {client_config.polygonrules.max_area} degrees"  # noqa: E501
+            )
 
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
@@ -78,7 +87,7 @@ class BoundingBox(Feature):
             number = request["number"].split("/")
             if len(step) > 1 and len(number) > 1:
                 raise ValueError(
-                    "Multiple steps and numbers not yet supported for Bounding Box feature"  # noqa: E501
+                    "Multiple steps and numbers not yet supported for Bounding Box feature, this will be added in the future"  # noqa: E501
                 )
         if len(feature_config["points"]) != 2:
             raise ValueError(
