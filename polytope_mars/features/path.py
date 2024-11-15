@@ -7,13 +7,13 @@ class Path(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "trajectory"
         self.points = feature_config.pop("points", [])
-        if "padding" in feature_config:
-            self.padding = feature_config.pop("padding")
+        if "radius" in feature_config:
+            self.radius = feature_config.pop("radius")
         if "axes" in feature_config:
-            self.axis = feature_config.pop("axes")
+            self.axes = feature_config.pop("axes")
         if "axis" in feature_config:
             raise ValueError(
-                "Bounding box does not have axis in feature, did you mean axes?"  # noqa: E501
+                "Trajectory does not have axis in feature, did you mean axes?"  # noqa: E501
             )
 
         assert (
@@ -29,20 +29,20 @@ class Path(Feature):
                     shapes.Box(
                         ["latitude", "longitude"],
                         [0, 0],
-                        [self.padding, self.padding],
+                        [self.radius, self.radius],
                     ),
                     *self.points,
                 )
             ]
         elif len(self.points[0]) == 3:
-            if self.axis[2] == "step":
+            if self.axes[2] == "step":
                 return [
                     shapes.Path(
                         ["latitude", "longitude", "step"],
                         shapes.Box(
                             ["latitude", "longitude", "step"],
                             [0, 0, 0],
-                            [self.padding, self.padding, 0],
+                            [self.radius, self.radius, 0],
                         ),
                         *self.points,
                     )
@@ -54,7 +54,7 @@ class Path(Feature):
                         shapes.Box(
                             ["latitude", "longitude", "levelist"],
                             [0, 0, 0],
-                            [self.padding, self.padding, 0],
+                            [self.radius, self.radius, self.radius],
                         ),
                         *self.points,
                     )
@@ -66,7 +66,7 @@ class Path(Feature):
                     shapes.Box(
                         ["latitude", "longitude", "levelist", "step"],
                         [0, 0, 0, 0],
-                        [self.padding, self.padding, 0, 0],
+                        [self.radius, self.radius, self.radius, 0],
                     ),
                     *self.points,
                 )
@@ -84,8 +84,8 @@ class Path(Feature):
     def parse(self, request, feature_config):
         if feature_config["type"] != "trajectory":
             raise ValueError("Feature type must be trajectory")
-        if "padding" not in feature_config:
-            raise ValueError("Padding must be specified in request")
+        if "radius" not in feature_config:
+            raise ValueError("Radius must be specified in request")
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")
