@@ -190,13 +190,15 @@ class PolytopeMars:
         for k, v in request.items():
             split = str(v).split("/")
 
-            if k == 'param':
+            if k == "param":
                 try:
                     int(split[0])
-                except:
+                except:  # noqa: E722
                     new_split = []
                     for s in split:
-                        new_split.append(get_param_ids(self.conf.coverageconfig)[s])
+                        new_split.append(
+                            get_param_ids(self.conf.coverageconfig)[s]
+                        )  # noqa: E501
                     split = new_split
 
             # ALL -> All
