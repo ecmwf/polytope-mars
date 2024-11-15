@@ -25,7 +25,7 @@ class Polygons(Feature):
                 )
             if get_area(self.shape) > client_config.polygonrules.max_area:
                 raise ValueError(
-                    f"Area of polygon {get_area(self.shape)} exceeds the maximum of {client_config.polygonrules.max_area}"  # noqa: E501
+                    f"Area of polygon {get_area(self.shape)} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees"  # noqa: E501
                 )
             self.shape = [self.shape]
         else:
@@ -40,7 +40,7 @@ class Polygons(Feature):
                 )
             if area_polygons > client_config.polygonrules.max_area:
                 raise ValueError(
-                    f"Area of polygon {area_polygons} exceeds the maximum of {client_config.polygonrules.max_area}"  # noqa: E501
+                    f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees"  # noqa: E501
                 )
 
         assert (
@@ -74,6 +74,6 @@ class Polygons(Feature):
             number = request["number"].split("/")
             if len(step) > 1 and len(number) > 1:
                 raise ValueError(
-                    "Multiple steps and numbers not yet supported for polygon feature"  # noqa: E501
+                    "Multiple steps and numbers not yet supported for polygon feature, this will be supported in the future"  # noqa: E501
                 )
         return request

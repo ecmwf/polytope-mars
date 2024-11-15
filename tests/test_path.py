@@ -24,7 +24,7 @@ class TestFeatureFactory:
             "feature": {
                 "type": "path",
                 "points": [[0, 0], [1, 1], [2, 2]],
-                "padding": 1,
+                "radius": 1,
             },
         }
 

@@ -10,7 +10,7 @@ class TimeSeries(Feature):
         assert feature_config.pop("type") == "timeseries"
         # self.start_step = config.pop("start", None)
         # self.end_step = config.pop("end", None)
-        self.axis = feature_config.pop("axis", [])
+        self.axes = feature_config.pop("axes", [])
 
         self.points = feature_config.pop("points", [])
 
@@ -52,27 +52,27 @@ class TimeSeries(Feature):
         if feature_config["type"] != "timeseries":
             raise ValueError("Feature type must be timeseries")
         if (
-            feature_config["axis"] != "step"
-            and feature_config["axis"] != "date"  # noqa: E501
+            feature_config["axes"] != "step"
+            and feature_config["axes"] != "date"  # noqa: E501
         ):  # noqa: E501
             raise ValueError("Timeseries axes must be step or date")
         if len(feature_config["points"][0]) != 2:
             raise ValueError("Timeseries must have only two values in points")
-        if feature_config["axis"] in request and "range" in feature_config:
+        if feature_config["axes"] in request and "range" in feature_config:
             raise ValueError("Timeseries axes is overspecified in request")
         if (
-            feature_config["axis"] not in request
+            feature_config["axes"] not in request
             and "range" not in feature_config  # noqa: E501
         ):  # noqa: E501
             raise ValueError("Timeseries axes is underspecified in request")
         if "range" in feature_config:
             if isinstance(feature_config["range"], dict):
-                request[feature_config["axis"]] = (
+                request[feature_config["axes"]] = (
                     f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"  # noqa: E501
                 )
                 if "interval" in feature_config["range"]:
                     request[
-                        feature_config["axis"]
+                        feature_config["axes"]
                     ] += f"/by/{feature_config['range']['interval']}"
         logging.debug("After parse request: %s", request)
 
