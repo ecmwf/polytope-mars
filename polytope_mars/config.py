@@ -17,7 +17,7 @@ class PolygonRulesConfig(ConfigModel):
     max_points: int = 1000
     # Max area is the max area of all polygons requested that is allowed.
     # Area is calculated in kilometers squared
-    max_area: float = 10000000.0
+    max_area: float = float('inf')
 
 
 class PolytopeMarsConfig(ConfigModel):
