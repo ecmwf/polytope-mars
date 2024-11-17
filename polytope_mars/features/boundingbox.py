@@ -1,6 +1,43 @@
+import logging
+from functools import partial
+
+import pyproj
+import shapely.ops as ops
 from polytope_feature import shapes
+from shapely.geometry.polygon import Polygon
 
 from ..feature import Feature
+
+
+def get_area(points):
+    min_lat, min_lon = points[0]
+    max_lat, max_lon = points[1]
+
+    # Define the polygon coordinates
+    polygon_coords = [
+        (min_lat, min_lon),  # Bottom-left corner
+        (min_lat, max_lon),  # Bottom-right corner
+        (max_lat, max_lon),  # Top-right corner
+        (max_lat, min_lon),  # Top-left corner
+        (
+            min_lat,
+            min_lon,
+        ),  # Closing the polygon by returning to the bottom-left corner
+    ]
+
+    # Create the polygon
+    pgon = Polygon(polygon_coords)
+    geom_area = ops.transform(
+        partial(
+            pyproj.transform,
+            pyproj.Proj(init="EPSG:4326"),
+            pyproj.Proj(
+                proj="aea", lat_1=pgon.bounds[1], lat_2=pgon.bounds[3]
+            ),  # noqa: E501
+        ),
+        pgon,
+    )
+    return geom_area.area / 1_000_000
 
 
 class BoundingBox(Feature):
@@ -18,13 +55,11 @@ class BoundingBox(Feature):
             len(feature_config) == 0
         ), f"Unexpected keys in config: {feature_config.keys()}"
 
-        area_bb = abs(self.points[0][0] - self.points[1][0]) * abs(
-            self.points[0][1] - self.points[1][1]
-        )  # noqa: E501
-        print("area of bounding box:", area_bb)
+        area_bb = get_area(self.points)
+        logging.info(f"Area of bounding box: {area_bb} km\u00b2")
         if area_bb > client_config.polygonrules.max_area:
             raise ValueError(
-                f"Area of Bounding Box {area_bb} exceeds the maximum size of {client_config.polygonrules.max_area} degrees"  # noqa: E501
+                f"Area of Bounding Box {area_bb} km\u00b2 exceeds the maximum size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
             )
 
     def get_shapes(self):

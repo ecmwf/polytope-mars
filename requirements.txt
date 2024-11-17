@@ -3,3 +3,4 @@ covjsonkit
 xarray
 shapely
 geopandas
+pyproj

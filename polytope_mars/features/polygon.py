@@ -1,3 +1,7 @@
+from functools import partial
+
+import pyproj
+import shapely.ops as ops
 from polytope_feature import shapes
 from shapely.geometry import Polygon
 
@@ -11,7 +15,17 @@ def get_area(points):
         x.append(point[0])
         y.append(point[1])
     pgon = Polygon(zip(x, y))
-    return pgon.area
+    geom_area = ops.transform(
+        partial(
+            pyproj.transform,
+            pyproj.Proj(init="EPSG:4326"),
+            pyproj.Proj(
+                proj="aea", lat_1=pgon.bounds[1], lat_2=pgon.bounds[3]
+            ),  # noqa: E501
+        ),
+        pgon,
+    )
+    return geom_area.area / 1_000_000
 
 
 class Polygons(Feature):
@@ -25,7 +39,7 @@ class Polygons(Feature):
                 )
             if get_area(self.shape) > client_config.polygonrules.max_area:
                 raise ValueError(
-                    f"Area of polygon {get_area(self.shape)} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees"  # noqa: E501
+                    f"Area of polygon {get_area(self.shape)} km\u00b2 exceeds the maximum of size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
                 )
             self.shape = [self.shape]
         else:
@@ -40,7 +54,7 @@ class Polygons(Feature):
                 )
             if area_polygons > client_config.polygonrules.max_area:
                 raise ValueError(
-                    f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees"  # noqa: E501
+                    f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees\u00b2"  # noqa: E501
                 )
 
         assert (

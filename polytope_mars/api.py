@@ -178,14 +178,15 @@ class PolytopeMars:
         #   * enforcing strings are actually strings (e.g. type=fc)
 
         time = request.pop("time").replace(":", "")
-        if len(time.split("/")) != 1:
+        time = time.split("/")
+        if "to" in time:
             raise NotImplementedError(
-                "Currently only one time is supported"
+                "Time ranges with 'to' keyword not supported yet"
             )  # noqa: E501
-
-        # TODO: not restricting certain keywords:
-        #   * AREA, GRID
-        # do we need to filter this... it will fail later anyway
+        # if len(time.split("/")) != 1:
+        #    raise NotImplementedError(
+        #        "Currently only one time is supported"
+        #    )  # noqa: E501
 
         for k, v in request.items():
             split = str(v).split("/")
@@ -215,16 +216,19 @@ class PolytopeMars:
                                 + +datetime.timedelta(days=int(split[0]))
                             ).strftime("%Y%m%d")
                         )
-                    split[0] = pd.Timestamp(split[0] + "T" + time)
-                base_shapes.append(shapes.Select(k, [split[0]]))
+                    new_split = []
+                    for t in time:
+                        new_split.append(pd.Timestamp(split[0] + "T" + t))
+                    split = new_split
+                base_shapes.append(shapes.Select(k, split))
 
             # Range a/to/b, "by" not supported -> Span
             elif len(split) == 3 and split[1] == "to":
                 # if date then only get time of dates in span not
                 # all in times within date
                 if k == "date":
-                    start = pd.Timestamp(split[0] + "T" + time)
-                    end = pd.Timestamp(split[2] + "T" + time)
+                    start = pd.Timestamp(split[0] + "T" + time[0])
+                    end = pd.Timestamp(split[2] + "T" + time[-1])
                     dates = []
                     for s in pd.date_range(start, end):
                         dates.append(s)
@@ -244,7 +248,8 @@ class PolytopeMars:
                 if k == "date":
                     dates = []
                     for s in split:
-                        dates.append(pd.Timestamp(s + "T" + time))
+                        for t in time:
+                            dates.append(pd.Timestamp(s + "T" + t))
                     split = dates
                 base_shapes.append(shapes.Select(k, split))
 
