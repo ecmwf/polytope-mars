@@ -31,7 +31,9 @@ def get_area(points):
         partial(
             pyproj.transform,
             pyproj.Proj(init="EPSG:4326"),
-            pyproj.Proj(proj="aea", lat_1=pgon.bounds[1], lat_2=pgon.bounds[3]),  # noqa: E501
+            pyproj.Proj(
+                proj="aea", lat_1=pgon.bounds[1], lat_2=pgon.bounds[3]
+            ),  # noqa: E501
         ),
         pgon,
     )
