@@ -18,7 +18,7 @@ class PolygonRulesConfig(ConfigModel):
     # Max area is the max area of all polygons requested that is allowed.
     # Area is in abstract units as a projection would otherwise be required
     # to calculate the area
-    max_area: float = 1000.0
+    max_area: float = 3600.0
 
 
 class PolytopeMarsConfig(ConfigModel):

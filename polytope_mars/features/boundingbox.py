@@ -24,7 +24,7 @@ class BoundingBox(Feature):
         print("area of bounding box:", area_bb)
         if area_bb > client_config.polygonrules.max_area:
             raise ValueError(
-                f"Area of Bounding Box {area_bb} exceeds the maximum size of {client_config.polygonrules.max_area} degrees"  # noqa: E501
+                f"Area of Bounding Box {area_bb} exceeds the maximum size of {client_config.polygonrules.max_area} degrees\u00b2"  # noqa: E501
             )
 
     def get_shapes(self):
