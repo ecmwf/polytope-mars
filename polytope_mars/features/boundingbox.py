@@ -45,6 +45,7 @@ class BoundingBox(Feature):
         assert feature_config.pop("type") == "boundingbox"
         self.points = feature_config.pop("points", [])
         self.axes = feature_config.pop("axes", [])
+        self.max_area = client_config.polygonrules.max_area
 
         if "axes" in feature_config:
             raise ValueError(
@@ -121,9 +122,19 @@ class BoundingBox(Feature):
             step = request["step"].split("/")
             number = request["number"].split("/")
             if len(step) > 1 and len(number) > 1:
-                raise ValueError(
-                    "Multiple steps and numbers not yet supported for Bounding Box feature, this will be added in the future"  # noqa: E501
-                )
+                if "to" in step:
+                    step_len = int(step[2]) - int(step[0])
+                else:
+                    step_len = len(step)
+                if "to" in number:
+                    number_len = int(number[2]) - int(number[0])
+                else:
+                    number_len = len(number)
+                shape_area = get_area(self.points)
+                if step_len * number_len * shape_area > self.max_area:
+                    raise ValueError(
+                        "The request size is too large, lower number of fields requested or size of shape requested"  # noqa: E501
+                    )
         if len(feature_config["points"]) != 2:
             raise ValueError(
                 "Bounding box must have only two points in points"
