@@ -25,7 +25,7 @@ class Polygons(Feature):
                 )
             if get_area(self.shape) > client_config.polygonrules.max_area:
                 raise ValueError(
-                    f"Area of polygon {get_area(self.shape)} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees"  # noqa: E501
+                    f"Area of polygon {get_area(self.shape)} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees\u00b2"  # noqa: E501
                 )
             self.shape = [self.shape]
         else:
@@ -40,7 +40,7 @@ class Polygons(Feature):
                 )
             if area_polygons > client_config.polygonrules.max_area:
                 raise ValueError(
-                    f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees"  # noqa: E501
+                    f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees\u00b2"  # noqa: E501
                 )
 
         assert (
