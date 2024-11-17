@@ -87,18 +87,20 @@ class Polygons(Feature):
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")
-            if len(step) > 1 and len(number) > 1:
-                if "to" in step:
-                    step_len = int(step[2]) - int(step[0])
-                else:
-                    step_len = len(step)
-                if "to" in number:
-                    number_len = int(number[2]) - int(number[0])
-                else:
-                    number_len = len(number)
-                shape_area = get_area(self.shape[0])
-                if step_len * number_len * shape_area > self.max_area:
-                    raise ValueError(
-                        "The request size is too large, lower number of fields requested or size of shape requested"  # noqa: E501
-                    )
+            
+            if "to" in step:
+                step_len = int(step[2]) - int(step[0])
+            else:
+                step_len = len(step)
+            
+            if "to" in number:
+                number_len = int(number[2]) - int(number[0])
+            else:
+                number_len = len(number)
+            
+            shape_area = get_area(self.shape[0])
+            if step_len * number_len * shape_area > self.max_area:
+                raise ValueError(
+                    "The request size is too large, lower number of fields requested or size of shape requested"  # noqa: E501
+                )
         return request
