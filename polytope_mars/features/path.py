@@ -14,7 +14,7 @@ class Path(Feature):
                 self.inflation = feature_config.pop("inflation")
                 if len(self.inflation) != len(self.axes):
                     raise ValueError(
-                        "Inflation must have the same number of values as axes or a single value"
+                        "Inflation must have the same number of values as axes or a single value"  # noqa: E501
                     )
             else:
                 self.inflation = []
@@ -36,9 +36,9 @@ class Path(Feature):
 
     def get_shapes(self):
         if len(self.points[0]) == 2:
-            if self.inflate == 'round':
+            if self.inflate == "round":
                 shape = shapes.Disk
-            elif self.inflate == 'box':
+            elif self.inflate == "box":
                 shape = shapes.Box
             else:
                 raise ValueError(
@@ -83,7 +83,11 @@ class Path(Feature):
                         shapes.Ellipsoid(
                             ["latitude", "longitude", "levelist"],
                             [0, 0, 0],
-                            [self.inflation[0], self.inflation[1], self.inflation[2]],
+                            [
+                                self.inflation[0],
+                                self.inflation[1],
+                                self.inflation[2],
+                            ],  # noqa: E501
                         ),
                         *self.points,
                     )
@@ -99,7 +103,12 @@ class Path(Feature):
                     shapes.Box(
                         ["latitude", "longitude", "levelist", "step"],
                         [0, 0, 0, 0],
-                        [self.inflation[0], self.inflation[1], self.inflation[2], 0],
+                        [
+                            self.inflation[0],
+                            self.inflation[1],
+                            self.inflation[2],
+                            0,
+                        ],  # noqa: E501
                     ),
                     *self.points,
                 )
