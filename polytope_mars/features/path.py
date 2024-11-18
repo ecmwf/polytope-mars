@@ -7,10 +7,24 @@ class Path(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "trajectory"
         self.points = feature_config.pop("points", [])
-        if "inflation" in feature_config:
-            self.inflation = feature_config.pop("inflation")
         if "axes" in feature_config:
             self.axes = feature_config.pop("axes")
+        if "inflation" in feature_config:
+            if isinstance(feature_config["inflation"], list):
+                self.inflation = feature_config.pop("inflation")
+                if len(self.inflation) != len(self.axes):
+                    raise ValueError(
+                        "Inflation must have the same number of values as axes or a single value"
+                    )
+            else:
+                self.inflation = []
+                infl = feature_config.pop("inflation")
+                for ax in self.axes:
+                    self.inflation.append(infl)
+        if "inflate" in feature_config:
+            self.inflate = feature_config.pop("inflate")
+        else:
+            self.inflate = "round"
         if "axis" in feature_config:
             raise ValueError(
                 "Trajectory does not have axis in feature, did you mean axes?"  # noqa: E501
@@ -21,20 +35,35 @@ class Path(Feature):
         ), f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
-        # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
         if len(self.points[0]) == 2:
+            if self.inflate == 'round':
+                shape = shapes.Disk
+            elif self.inflate == 'box':
+                shape = shapes.Box
+            else:
+                raise ValueError(
+                    "Inflate must be either 'round' or 'box' for 2D trajectory feature"  # noqa: E501
+                )
             return [
                 shapes.Path(
                     ["latitude", "longitude"],
-                    shapes.Disk(
+                    shape(
                         ["latitude", "longitude"],
                         [0, 0],
-                        [self.inflation, self.inflation],
+                        [self.inflation[0], self.inflation[1]],
                     ),
                     *self.points,
                 )
             ]
         elif len(self.points[0]) == 3:
+            if self.inflate == "round":
+                shape = shapes.Ellipsoid
+            elif self.inflate == "box":
+                shape = shapes.Box
+            else:
+                raise ValueError(
+                    "Inflate must be either 'round' or 'box' for 3D trajectory feature"  # noqa: E501
+                )
             if self.axes[2] == "step":
                 return [
                     shapes.Path(
@@ -42,7 +71,7 @@ class Path(Feature):
                         shapes.Ellipsoid(
                             ["latitude", "longitude", "step"],
                             [0, 0, 0],
-                            [self.inflation, self.inflation, 0],
+                            [self.inflation[0], self.inflation[1], 0],
                         ),
                         *self.points,
                     )
@@ -54,19 +83,23 @@ class Path(Feature):
                         shapes.Ellipsoid(
                             ["latitude", "longitude", "levelist"],
                             [0, 0, 0],
-                            [self.inflation, self.inflation, self.inflation],
+                            [self.inflation[0], self.inflation[1], self.inflation[2]],
                         ),
                         *self.points,
                     )
                 ]
         elif len(self.points[0]) == 4:
+            if self.inflate == "round":
+                raise ValueError(
+                    "Round inflation not yet implemented for 4D trajectory feature, use 'box' instead"  # noqa: E501
+                )
             return [
                 shapes.Path(
                     ["latitude", "longitude", "levelist", "step"],
                     shapes.Box(
                         ["latitude", "longitude", "levelist", "step"],
                         [0, 0, 0, 0],
-                        [self.inflation, self.inflation, self.inflation, 0],
+                        [self.inflation[0], self.inflation[1], self.inflation[2], 0],
                     ),
                     *self.points,
                 )
