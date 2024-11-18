@@ -1,7 +1,7 @@
+import math
 from functools import partial
 
 import pyproj
-import math
 import shapely.ops as ops
 from polytope_feature import shapes
 from shapely.geometry import Polygon
