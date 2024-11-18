@@ -1,1 +1,2 @@
 exclude tests/data/*
+include requirements.txt
