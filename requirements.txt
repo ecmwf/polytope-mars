@@ -4,3 +4,4 @@ xarray
 shapely
 geopandas
 pyproj
+geographiclib
