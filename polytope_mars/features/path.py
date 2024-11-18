@@ -7,8 +7,8 @@ class Path(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "trajectory"
         self.points = feature_config.pop("points", [])
-        if "radius" in feature_config:
-            self.radius = feature_config.pop("radius")
+        if "inflation" in feature_config:
+            self.inflation = feature_config.pop("inflation")
         if "axes" in feature_config:
             self.axes = feature_config.pop("axes")
         if "axis" in feature_config:
@@ -26,10 +26,10 @@ class Path(Feature):
             return [
                 shapes.Path(
                     ["latitude", "longitude"],
-                    shapes.Box(
+                    shapes.Disk(
                         ["latitude", "longitude"],
                         [0, 0],
-                        [self.radius, self.radius],
+                        [self.inflation, self.inflation],
                     ),
                     *self.points,
                 )
@@ -39,10 +39,10 @@ class Path(Feature):
                 return [
                     shapes.Path(
                         ["latitude", "longitude", "step"],
-                        shapes.Box(
+                        shapes.Ellipsoid(
                             ["latitude", "longitude", "step"],
                             [0, 0, 0],
-                            [self.radius, self.radius, 0],
+                            [self.inflation, self.inflation, 0],
                         ),
                         *self.points,
                     )
@@ -51,10 +51,10 @@ class Path(Feature):
                 return [
                     shapes.Path(
                         ["latitude", "longitude", "levelist"],
-                        shapes.Box(
+                        shapes.Ellipsoid(
                             ["latitude", "longitude", "levelist"],
                             [0, 0, 0],
-                            [self.radius, self.radius, self.radius],
+                            [self.inflation, self.inflation, self.inflation],
                         ),
                         *self.points,
                     )
@@ -66,7 +66,7 @@ class Path(Feature):
                     shapes.Box(
                         ["latitude", "longitude", "levelist", "step"],
                         [0, 0, 0, 0],
-                        [self.radius, self.radius, self.radius, 0],
+                        [self.inflation, self.inflation, self.inflation, 0],
                     ),
                     *self.points,
                 )
@@ -84,8 +84,8 @@ class Path(Feature):
     def parse(self, request, feature_config):
         if feature_config["type"] != "trajectory":
             raise ValueError("Feature type must be trajectory")
-        if "radius" not in feature_config:
-            raise ValueError("Radius must be specified in request")
+        if "inflation" not in feature_config:
+            raise ValueError("Inflation must be specified in request")
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")
@@ -130,26 +130,47 @@ class Path(Feature):
                 "Trajectory must have atleast two values in points"
             )  # noqa: E501
         if "axes" in feature_config:
-            if len(feature_config['axes']) == 2:
+            if len(feature_config["axes"]) == 2:
                 try:
-                    assert feature_config['axes'] == ['latitude', 'longitude']
+                    assert feature_config["axes"] == ["latitude", "longitude"]
                 except AssertionError:
-                    raise AssertionError("Axes must be ['latitude', 'longitude'], the axes will become more dynamic in the future")
-            if len(feature_config['axes']) == 3:
-                if "levelist" in feature_config['axes']:
+                    raise AssertionError(
+                        "Axes must be ['latitude', 'longitude'], the axes will become more dynamic in the future"  # noqa: E501
+                    )
+            if len(feature_config["axes"]) == 3:
+                if "levelist" in feature_config["axes"]:
                     try:
-                        assert feature_config['axes'] == ['latitude', 'longitude', 'levelist']
+                        assert feature_config["axes"] == [
+                            "latitude",
+                            "longitude",
+                            "levelist",
+                        ]
                     except AssertionError:
-                        raise AssertionError("Axes must be ['latitude', 'longitude', 'levelist'] or ['latitude', 'longitude', 'step'], the axes will become more dynamic in the future")
+                        raise AssertionError(
+                            "Axes must be ['latitude', 'longitude', 'levelist'] or ['latitude', 'longitude', 'step'], the axes will become more dynamic in the future"  # noqa: E501
+                        )
                 else:
                     try:
-                        assert feature_config['axes'] == ['latitude', 'longitude', 'step']
+                        assert feature_config["axes"] == [
+                            "latitude",
+                            "longitude",
+                            "step",
+                        ]
                     except AssertionError:
-                        raise AssertionError("Axes must be ['latitude', 'longitude', 'levelist'] or ['latitude', 'longitude', 'step'], the axes will become more dynamic in the future")
-            if len(feature_config['axes']) == 4:
+                        raise AssertionError(
+                            "Axes must be ['latitude', 'longitude', 'levelist'] or ['latitude', 'longitude', 'step'], the axes will become more dynamic in the future"  # noqa: E501
+                        )
+            if len(feature_config["axes"]) == 4:
                 try:
-                    assert feature_config['axes'] == ['latitude', 'longitude', 'levelist', 'step']
+                    assert feature_config["axes"] == [
+                        "latitude",
+                        "longitude",
+                        "levelist",
+                        "step",
+                    ]
                 except AssertionError:
-                    raise AssertionError("Axes must be ['latitude', 'longitude', 'levelist', 'step'], the axes will become more dynamic in the future")
+                    raise AssertionError(
+                        "Axes must be ['latitude', 'longitude', 'levelist', 'step'], the axes will become more dynamic in the future"  # noqa: E501
+                    )
 
         return request
