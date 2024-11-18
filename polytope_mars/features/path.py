@@ -7,10 +7,24 @@ class Path(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "trajectory"
         self.points = feature_config.pop("points", [])
-        if "radius" in feature_config:
-            self.radius = feature_config.pop("radius")
         if "axes" in feature_config:
             self.axes = feature_config.pop("axes")
+        if "inflation" in feature_config:
+            if isinstance(feature_config["inflation"], list):
+                self.inflation = feature_config.pop("inflation")
+                if len(self.inflation) != len(self.axes):
+                    raise ValueError(
+                        "Inflation must have the same number of values as axes or a single value"  # noqa: E501
+                    )
+            else:
+                self.inflation = []
+                infl = feature_config.pop("inflation")
+                for ax in self.axes:
+                    self.inflation.append(infl)
+        if "inflate" in feature_config:
+            self.inflate = feature_config.pop("inflate")
+        else:
+            self.inflate = "round"
         if "axis" in feature_config:
             raise ValueError(
                 "Trajectory does not have axis in feature, did you mean axes?"  # noqa: E501
@@ -21,28 +35,43 @@ class Path(Feature):
         ), f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
-        # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
         if len(self.points[0]) == 2:
+            if self.inflate == "round":
+                shape = shapes.Disk
+            elif self.inflate == "box":
+                shape = shapes.Box
+            else:
+                raise ValueError(
+                    "Inflate must be either 'round' or 'box' for 2D trajectory feature"  # noqa: E501
+                )
             return [
                 shapes.Path(
                     ["latitude", "longitude"],
-                    shapes.Box(
+                    shape(
                         ["latitude", "longitude"],
                         [0, 0],
-                        [self.radius, self.radius],
+                        [self.inflation[0], self.inflation[1]],
                     ),
                     *self.points,
                 )
             ]
         elif len(self.points[0]) == 3:
+            if self.inflate == "round":
+                shape = shapes.Ellipsoid
+            elif self.inflate == "box":
+                shape = shapes.Box
+            else:
+                raise ValueError(
+                    "Inflate must be either 'round' or 'box' for 3D trajectory feature"  # noqa: E501
+                )
             if self.axes[2] == "step":
                 return [
                     shapes.Path(
                         ["latitude", "longitude", "step"],
-                        shapes.Box(
+                        shapes.Ellipsoid(
                             ["latitude", "longitude", "step"],
                             [0, 0, 0],
-                            [self.radius, self.radius, 0],
+                            [self.inflation[0], self.inflation[1], 0],
                         ),
                         *self.points,
                     )
@@ -51,22 +80,35 @@ class Path(Feature):
                 return [
                     shapes.Path(
                         ["latitude", "longitude", "levelist"],
-                        shapes.Box(
+                        shapes.Ellipsoid(
                             ["latitude", "longitude", "levelist"],
                             [0, 0, 0],
-                            [self.radius, self.radius, self.radius],
+                            [
+                                self.inflation[0],
+                                self.inflation[1],
+                                self.inflation[2],
+                            ],  # noqa: E501
                         ),
                         *self.points,
                     )
                 ]
         elif len(self.points[0]) == 4:
+            if self.inflate == "round":
+                raise ValueError(
+                    "Round inflation not yet implemented for 4D trajectory feature, use 'box' instead"  # noqa: E501
+                )
             return [
                 shapes.Path(
                     ["latitude", "longitude", "levelist", "step"],
                     shapes.Box(
                         ["latitude", "longitude", "levelist", "step"],
                         [0, 0, 0, 0],
-                        [self.radius, self.radius, self.radius, 0],
+                        [
+                            self.inflation[0],
+                            self.inflation[1],
+                            self.inflation[2],
+                            0,
+                        ],  # noqa: E501
                     ),
                     *self.points,
                 )
@@ -84,8 +126,8 @@ class Path(Feature):
     def parse(self, request, feature_config):
         if feature_config["type"] != "trajectory":
             raise ValueError("Feature type must be trajectory")
-        if "radius" not in feature_config:
-            raise ValueError("Radius must be specified in request")
+        if "inflation" not in feature_config:
+            raise ValueError("Inflation must be specified in request")
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")
@@ -129,5 +171,48 @@ class Path(Feature):
             raise ValueError(
                 "Trajectory must have atleast two values in points"
             )  # noqa: E501
+        if "axes" in feature_config:
+            if len(feature_config["axes"]) == 2:
+                try:
+                    assert feature_config["axes"] == ["latitude", "longitude"]
+                except AssertionError:
+                    raise AssertionError(
+                        "Axes must be ['latitude', 'longitude'], the axes will become more dynamic in the future"  # noqa: E501
+                    )
+            if len(feature_config["axes"]) == 3:
+                if "levelist" in feature_config["axes"]:
+                    try:
+                        assert feature_config["axes"] == [
+                            "latitude",
+                            "longitude",
+                            "levelist",
+                        ]
+                    except AssertionError:
+                        raise AssertionError(
+                            "Axes must be ['latitude', 'longitude', 'levelist'] or ['latitude', 'longitude', 'step'], the axes will become more dynamic in the future"  # noqa: E501
+                        )
+                else:
+                    try:
+                        assert feature_config["axes"] == [
+                            "latitude",
+                            "longitude",
+                            "step",
+                        ]
+                    except AssertionError:
+                        raise AssertionError(
+                            "Axes must be ['latitude', 'longitude', 'levelist'] or ['latitude', 'longitude', 'step'], the axes will become more dynamic in the future"  # noqa: E501
+                        )
+            if len(feature_config["axes"]) == 4:
+                try:
+                    assert feature_config["axes"] == [
+                        "latitude",
+                        "longitude",
+                        "levelist",
+                        "step",
+                    ]
+                except AssertionError:
+                    raise AssertionError(
+                        "Axes must be ['latitude', 'longitude', 'levelist', 'step'], the axes will become more dynamic in the future"  # noqa: E501
+                    )
 
         return request
