@@ -1,6 +1,7 @@
 from functools import partial
 
 import pyproj
+import math
 import shapely.ops as ops
 from polytope_feature import shapes
 from shapely.geometry import Polygon
@@ -25,6 +26,8 @@ def get_area(points):
         ),
         pgon,
     )
+    if math.isnan(geom_area.area):
+        raise ValueError("Could not calculate area of request")
     return geom_area.area / 1_000_000
 
 
