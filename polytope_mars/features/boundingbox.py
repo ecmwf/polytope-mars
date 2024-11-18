@@ -1,4 +1,5 @@
 import logging
+import math
 from functools import partial
 
 import pyproj
@@ -10,8 +11,10 @@ from ..feature import Feature
 
 
 def get_area(points):
-    min_lat, min_lon = points[0]
-    max_lat, max_lon = points[1]
+    min_lon, min_lat = points[0]
+    max_lon, max_lat = points[1]
+    if min_lon + max_lon == 0:
+        min_lon += 0.1
 
     # Define the polygon coordinates
     polygon_coords = [
@@ -37,6 +40,8 @@ def get_area(points):
         ),
         pgon,
     )
+    if math.isnan(geom_area.area):
+        raise ValueError("Could not calculate area of request")
     return geom_area.area / 1_000_000
 
 

@@ -14,7 +14,7 @@ def get_area(points):
     for point in points:
         x.append(point[0])
         y.append(point[1])
-    pgon = Polygon(zip(x, y))
+    pgon = Polygon(zip(y, x))
     geom_area = ops.transform(
         partial(
             pyproj.transform,
