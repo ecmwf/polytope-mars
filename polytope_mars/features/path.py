@@ -129,5 +129,27 @@ class Path(Feature):
             raise ValueError(
                 "Trajectory must have atleast two values in points"
             )  # noqa: E501
+        if "axes" in feature_config:
+            if len(feature_config['axes']) == 2:
+                try:
+                    assert feature_config['axes'] == ['latitude', 'longitude']
+                except AssertionError:
+                    raise AssertionError("Axes must be ['latitude', 'longitude'], the axes will become more dynamic in the future")
+            if len(feature_config['axes']) == 3:
+                if "levelist" in feature_config['axes']:
+                    try:
+                        assert feature_config['axes'] == ['latitude', 'longitude', 'levelist']
+                    except AssertionError:
+                        raise AssertionError("Axes must be ['latitude', 'longitude', 'levelist'] or ['latitude', 'longitude', 'step'], the axes will become more dynamic in the future")
+                else:
+                    try:
+                        assert feature_config['axes'] == ['latitude', 'longitude', 'step']
+                    except AssertionError:
+                        raise AssertionError("Axes must be ['latitude', 'longitude', 'levelist'] or ['latitude', 'longitude', 'step'], the axes will become more dynamic in the future")
+            if len(feature_config['axes']) == 4:
+                try:
+                    assert feature_config['axes'] == ['latitude', 'longitude', 'levelist', 'step']
+                except AssertionError:
+                    raise AssertionError("Axes must be ['latitude', 'longitude', 'levelist', 'step'], the axes will become more dynamic in the future")
 
         return request
