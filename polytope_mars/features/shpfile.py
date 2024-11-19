@@ -27,9 +27,7 @@ class Shapefile(Feature):
         self.file = feature_config.pop("file")
         self.df = gpd.read_file(self.file)
 
-        assert (
-            len(feature_config) == 0
-        ), f"Unexpected keys in config: {feature_config.keys()}"
+        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
         self.df = self.df.head(1)
@@ -38,9 +36,7 @@ class Shapefile(Feature):
         polygons = []
         for coords in coordinates:
             for coord in coords:
-                polygons.append(
-                    shapes.Polygon(["latitude", "longitude"], coord)
-                )  # noqa: E501
+                polygons.append(shapes.Polygon(["latitude", "longitude"], coord))  # noqa: E501
         return [shapes.Union(["latitude", "longitude"], *polygons)]
 
     def incompatible_keys(self):
