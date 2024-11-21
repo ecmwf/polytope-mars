@@ -26,13 +26,9 @@ class Path(Feature):
         else:
             self.inflate = "round"
         if "axis" in feature_config:
-            raise ValueError(
-                "Trajectory does not have axis in feature, did you mean axes?"  # noqa: E501
-            )
+            raise ValueError("Trajectory does not have axis in feature, did you mean axes?")  # noqa: E501
 
-        assert (
-            len(feature_config) == 0
-        ), f"Unexpected keys in config: {feature_config.keys()}"
+        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
         if len(self.points[0]) == 2:
@@ -41,9 +37,7 @@ class Path(Feature):
             elif self.inflate == "box":
                 shape = shapes.Box
             else:
-                raise ValueError(
-                    "Inflate must be either 'round' or 'box' for 2D trajectory feature"  # noqa: E501
-                )
+                raise ValueError("Inflate must be either 'round' or 'box' for 2D trajectory feature")  # noqa: E501
             return [
                 shapes.Path(
                     ["latitude", "longitude"],
@@ -61,9 +55,7 @@ class Path(Feature):
             elif self.inflate == "box":
                 shape = shapes.Box
             else:
-                raise ValueError(
-                    "Inflate must be either 'round' or 'box' for 3D trajectory feature"  # noqa: E501
-                )
+                raise ValueError("Inflate must be either 'round' or 'box' for 3D trajectory feature")  # noqa: E501
             if self.axes[2] == "step":
                 return [
                     shapes.Path(
@@ -132,15 +124,11 @@ class Path(Feature):
             step = request["step"].split("/")
             number = request["number"].split("/")
             if len(step) > 1 and len(number) > 1:
-                raise ValueError(
-                    "Multiple steps and numbers not yet supported for trajectory feature"  # noqa: E501
-                )
+                raise ValueError("Multiple steps and numbers not yet supported for trajectory feature")  # noqa: E501
         if "step" in request:
             step = request["step"].split("/")
             if len(step) > 1:
-                raise ValueError(
-                    "Multiple steps not yet supported for trajectory feature"
-                )
+                raise ValueError("Multiple steps not yet supported for trajectory feature")
         if "axes" not in feature_config:
             for point in feature_config["points"]:
                 if len(point) != 4:
@@ -150,27 +138,17 @@ class Path(Feature):
         else:
             for point in feature_config["points"]:
                 if len(point) != len(feature_config["axes"]):
-                    raise ValueError(
-                        "Trajectory points must have the same number of values as axes"  # noqa: E501
-                    )
-            if ("levelist" in feature_config["axes"]) and (
-                "levelist" in request
-            ):  # noqa: E501
-                raise ValueError(
-                    "Trajectory level axes is overspecified in request"
-                )  # noqa: E501
+                    raise ValueError("Trajectory points must have the same number of values as axes")  # noqa: E501
+            if ("levelist" in feature_config["axes"]) and ("levelist" in request):  # noqa: E501
+                raise ValueError("Trajectory level axes is overspecified in request")  # noqa: E501
             if feature_config["axes"] == [
                 "latitude",
                 "longitude",
                 "levelist",
             ]:  # noqa: E501
-                raise ValueError(
-                    "['latitude', 'longitude', 'levelist'] not yet implemented"
-                )
+                raise ValueError("['latitude', 'longitude', 'levelist'] not yet implemented")
         if len(feature_config["points"]) < 2:
-            raise ValueError(
-                "Trajectory must have atleast two values in points"
-            )  # noqa: E501
+            raise ValueError("Trajectory must have atleast two values in points")  # noqa: E501
         if "axes" in feature_config:
             if len(feature_config["axes"]) == 2:
                 try:

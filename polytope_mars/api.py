@@ -41,18 +41,12 @@ class PolytopeMars:
 
         # If no config check default locations
         if config is None:
-            self.conf = Conflator(
-                app_name="polytope_mars", model=PolytopeMarsConfig
-            ).load()
-            logging.debug(
-                f"{self.id}: Config loaded from file: {self.conf}"
-            )  # noqa: E501
+            self.conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()  # noqa: E501
+            logging.debug(f"{self.id}: Config loaded from file: {self.conf}")  # noqa: E501
         # else initialise with provided config
         else:
             self.conf = PolytopeMarsConfig.model_validate(config)
-            logging.debug(
-                f"{self.id}: Config loaded from dictionary: {self.conf}"
-            )  # noqa: E501
+            logging.debug(f"{self.id}: Config loaded from dictionary: {self.conf}")  # noqa: E501
 
         self.coverage = {}
 
@@ -62,9 +56,7 @@ class PolytopeMars:
             try:
                 request = json.loads(request)
             except ValueError:
-                raise ValueError(
-                    "Request not in JSON format or python dictionary"
-                )  # noqa: E501
+                raise ValueError("Request not in JSON format or python dictionary")  # noqa: E501
 
         # expect a "feature" key in the request
         try:
@@ -90,15 +82,11 @@ class PolytopeMars:
             try:
                 timeseries_type = feature_config["axes"]
             except KeyError:
-                raise KeyError(
-                    "The timeseries feature requires an 'axes' keyword"
-                )  # noqa: E501
+                raise KeyError("The timeseries feature requires an 'axes' keyword")  # noqa: E501
         else:
             timeseries_type = None
 
-        feature = self._feature_factory(
-            feature_type, feature_config, self.conf
-        )  # noqa: E501
+        feature = self._feature_factory(feature_type, feature_config, self.conf)  # noqa: E501
 
         feature.validate(request)
 
@@ -121,9 +109,7 @@ class PolytopeMars:
         if self.conf.datacube.type == "gribjump":
             fdbdatacube = gj.GribJump()
         else:
-            raise NotImplementedError(
-                f"Datacube type '{self.conf.datacube.type}' not found"
-            )  # noqa: E501
+            raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
         slicer = HullSlicer()
 
         logging.debug(f"Send log_context to polytope: {self.log_context}")
@@ -139,9 +125,7 @@ class PolytopeMars:
         logging.debug(f"{self.id}: Gribjump/setup time end: {end}")  # noqa: E501
         logging.info(f"{self.id}: Gribjump/setup time taken: {delta}")  # noqa: E501
 
-        logging.debug(
-            f"{self.id}: The request we give polytope from polytope-mars is: {preq}"  # noqa: E501
-        )
+        logging.debug(f"{self.id}: The request we give polytope from polytope-mars is: {preq}")  # noqa: E501
         start = time.time()
         logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
@@ -180,9 +164,7 @@ class PolytopeMars:
         time = request.pop("time").replace(":", "")
         time = time.split("/")
         if "to" in time:
-            raise NotImplementedError(
-                "Time ranges with 'to' keyword not supported yet"
-            )  # noqa: E501
+            raise NotImplementedError("Time ranges with 'to' keyword not supported yet")  # noqa: E501
         # if len(time.split("/")) != 1:
         #    raise NotImplementedError(
         #        "Currently only one time is supported"
@@ -197,9 +179,7 @@ class PolytopeMars:
                 except:  # noqa: E722
                     new_split = []
                     for s in split:
-                        new_split.append(
-                            get_param_ids(self.conf.coverageconfig)[s]
-                        )  # noqa: E501
+                        new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
                     split = new_split
 
             # ALL -> All
@@ -211,10 +191,9 @@ class PolytopeMars:
                 if k == "date":
                     if int(split[0]) < 0:
                         split[0] = str(
-                            (
-                                datetime.datetime.now()
-                                + +datetime.timedelta(days=int(split[0]))
-                            ).strftime("%Y%m%d")
+                            (datetime.datetime.now() + +datetime.timedelta(days=int(split[0]))).strftime(
+                                "%Y%m%d"
+                            )  # noqa: E501
                         )
                     new_split = []
                     for t in time:
@@ -234,14 +213,10 @@ class PolytopeMars:
                         dates.append(s)
                     base_shapes.append(shapes.Select(k, dates))
                 else:
-                    base_shapes.append(
-                        shapes.Span(k, lower=split[0], upper=split[2])
-                    )  # noqa: E501
+                    base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
 
             elif "by" in split:
-                raise ValueError(
-                    "Ranges with step-size specified with 'by' keyword is not supported"  # noqa: E501
-                )
+                raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
 
             # List of individual values -> Union of Selects
             else:
