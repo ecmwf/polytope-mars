@@ -9,6 +9,8 @@ class Path(Feature):
         self.points = feature_config.pop("points", [])
         if "axes" in feature_config:
             self.axes = feature_config.pop("axes")
+        else:
+            self.axes = ["latitude", "longitude", "levelist", "step"]
         if "inflation" in feature_config:
             if isinstance(feature_config["inflation"], list):
                 self.inflation = feature_config.pop("inflation")
@@ -141,12 +143,6 @@ class Path(Feature):
                     raise ValueError("Trajectory points must have the same number of values as axes")  # noqa: E501
             if ("levelist" in feature_config["axes"]) and ("levelist" in request):  # noqa: E501
                 raise ValueError("Trajectory level axes is overspecified in request")  # noqa: E501
-            if feature_config["axes"] == [
-                "latitude",
-                "longitude",
-                "levelist",
-            ]:  # noqa: E501
-                raise ValueError("['latitude', 'longitude', 'levelist'] not yet implemented")
         if len(feature_config["points"]) < 2:
             raise ValueError("Trajectory must have atleast two values in points")  # noqa: E501
         if "axes" in feature_config:
