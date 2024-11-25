@@ -65,7 +65,7 @@ class Path(Feature):
                         shapes.Ellipsoid(
                             ["latitude", "longitude", "step"],
                             [0, 0, 0],
-                            [self.inflation[0], self.inflation[1], 0],
+                            [self.inflation[0], self.inflation[1], self.inflation[2]],  # noqa: E501
                         ),
                         *self.points,
                     )
@@ -101,7 +101,7 @@ class Path(Feature):
                             self.inflation[0],
                             self.inflation[1],
                             self.inflation[2],
-                            0,
+                            self.inflation[3],
                         ],  # noqa: E501
                     ),
                     *self.points,
