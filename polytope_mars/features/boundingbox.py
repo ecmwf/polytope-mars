@@ -11,7 +11,6 @@ from ..feature import Feature
 
 
 def split_polygon(polygon):
-
     minx, miny, maxx, maxy = polygon.bounds
 
     # Determine all multiples of 90 degrees within the longitude range
@@ -65,7 +64,6 @@ def get_area_piece(piece):
 
 
 def get_area(points):
-
     # Convert points to a Shapely Polygon
     min_lon, min_lat = points[0][:2]
     max_lon, max_lat = points[1][:2]
@@ -102,8 +100,7 @@ class BoundingBox(Feature):
         if "axes" in feature_config:
             raise ValueError("Bounding box does not have axes in feature, did you mean axes?")  # noqa: E501
 
-        assert len(feature_config) == 0, f"Unexpected keys in config: {
-            feature_config.keys()}"
+        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"  # noqa: E501
 
         area_bb = get_area(self.points)
         logging.info(f"Area of bounding box: {area_bb} km\u00b2")
