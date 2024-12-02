@@ -87,9 +87,7 @@ def get_area(points):
     for piece in pieces:
         area = get_area_piece(piece)
         total_area += area
-    return (
-        total_area / 1e6
-    )  # Convert area from square meters to square kilometers  # noqa: E501
+    return total_area / 1e6  # Convert area from square meters to square kilometers  # noqa: E501
 
 
 class BoundingBox(Feature):
@@ -100,13 +98,9 @@ class BoundingBox(Feature):
         self.max_area = client_config.polygonrules.max_area
 
         if "axes" in feature_config:
-            raise ValueError(
-                "Bounding box does not have axes in feature, did you mean axes?"
-            )  # noqa: E501
+            raise ValueError("Bounding box does not have axes in feature, did you mean axes?")  # noqa: E501
 
-        assert (
-            len(feature_config) == 0
-        ), f"Unexpected keys in config: {feature_config.keys()}"
+        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
         area_bb = get_area(self.points)
         logging.info(f"Area of bounding box: {area_bb} km\u00b2")
@@ -191,13 +185,9 @@ class BoundingBox(Feature):
                 )
 
         if len(feature_config["points"]) != 2:
-            raise ValueError(
-                "Bounding box must have only two points in points"
-            )  # noqa: E501
+            raise ValueError("Bounding box must have only two points in points")  # noqa: E501
         if "axis" in feature_config:
-            raise ValueError(
-                "Bounding box does not have axis in feature, did you mean axes?"
-            )  # noqa: E501
+            raise ValueError("Bounding box does not have axis in feature, did you mean axes?")  # noqa: E501
         if "axes" not in feature_config:
             for point in feature_config["points"]:
                 if len(point) != 2:
@@ -207,15 +197,9 @@ class BoundingBox(Feature):
         else:
             for point in feature_config["points"]:
                 if len(point) != len(feature_config["axes"]):
-                    raise ValueError(
-                        "Bounding Box points must have the same number of values as axes"
-                    )  # noqa: E501
+                    raise ValueError("Bounding Box points must have the same number of values as axes")  # noqa: E501
             if "axes" in feature_config:
-                if ("levelist" in feature_config["axes"]) and (
-                    "levelist" in request
-                ):  # noqa: E501
-                    raise ValueError(
-                        "Bounding Box axes is overspecified in request"
-                    )  # noqa: E501
+                if ("levelist" in feature_config["axes"]) and ("levelist" in request):  # noqa: E501
+                    raise ValueError("Bounding Box axes is overspecified in request")  # noqa: E501
 
         return request
