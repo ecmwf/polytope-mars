@@ -56,7 +56,9 @@ class TestFeatureFactory:
             PolytopeMars(self.options, self.config).extract({"hello": "world"})
 
         with pytest.raises(TypeError):
-            PolytopeMars(self.options, self.config).extract(json.dumps({"hello": "world"}))
+            PolytopeMars(self.options, self.config).extract(
+                json.dumps({"hello": "world"})
+            )
 
         # 'step' is invalid in the request
         self.request["step"] = "0"
@@ -69,5 +71,7 @@ class TestFeatureFactory:
 
     @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_timeseries_valid(self):
-        coverage = PolytopeMars(self.config, self.options).extract(self.request)  # noqa: E501
+        coverage = PolytopeMars(self.config, self.options).extract(
+            self.request
+        )  # noqa: E501
         print(coverage)
