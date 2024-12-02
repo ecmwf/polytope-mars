@@ -9,7 +9,6 @@ from ..feature import Feature
 
 
 def split_polygon(polygon):
-
     minx, miny, maxx, maxy = polygon.bounds
 
     # Determine all multiples of 90 degrees within the longitude range

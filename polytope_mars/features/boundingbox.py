@@ -11,7 +11,6 @@ from ..feature import Feature
 
 
 def split_polygon(polygon):
-
     minx, miny, maxx, maxy = polygon.bounds
 
     # Determine all multiples of 90 degrees within the longitude range
@@ -65,10 +64,9 @@ def get_area_piece(piece):
 
 
 def get_area(points):
-
     # Convert points to a Shapely Polygon
-    min_lon, min_lat = points[0]
-    max_lon, max_lat = points[1]
+    min_lon, min_lat = points[0][:2]
+    max_lon, max_lat = points[1][:2]
     if min_lon + max_lon == 0:
         min_lon += 0.1
 

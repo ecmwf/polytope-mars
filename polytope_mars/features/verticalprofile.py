@@ -54,7 +54,7 @@ class VerticalProfile(Feature):
         if "axes" in feature_config:
             if feature_config["axes"] in request and "range" in feature_config:
                 raise ValueError("Vertical profile axes is overspecified in request")  # noqa: E501
-            if feature_config["axes"] not in request and "range" not in feature_config:  # noqa: E501  # noqa: E501
+            if feature_config["axes"] not in request and "range" not in feature_config:  # noqa: E501
                 raise ValueError("Vertical profile axes is underspecified in request")  # noqa: E501
         if "range" in feature_config:
             if isinstance(feature_config["range"], dict):
