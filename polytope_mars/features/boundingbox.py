@@ -164,6 +164,10 @@ class BoundingBox(Feature):
     def parse(self, request, feature_config):
         if feature_config["type"] != "boundingbox":
             raise ValueError("Feature type must be boudningbox")
+        if "step" in feature_config["axes"]:
+            raise ValueError(
+                "Bounding box axes must be latitude and longitude, step can be requested in main body of request"
+            )
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")
