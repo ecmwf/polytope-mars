@@ -10,7 +10,9 @@ class Frame(Feature):
         self.outer_box = feature_config.pop("outer_box", [])
         self.inner_box = feature_config.pop("inner_box", [])
 
-        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
+        assert (
+            len(feature_config) == 0
+        ), f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
         # frame is a four seperate boxes requested based on the inner and outer boxes  # noqa: E501

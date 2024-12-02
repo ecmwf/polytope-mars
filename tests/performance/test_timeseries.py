@@ -36,7 +36,9 @@ class TestTimeSeries:
                 },
                 {
                     "axis_name": "latitude",
-                    "transformations": [{"name": "reverse", "is_reverse": True}],  # noqa: E501
+                    "transformations": [
+                        {"name": "reverse", "is_reverse": True}
+                    ],  # noqa: E501
                 },
                 {
                     "axis_name": "longitude",
@@ -44,11 +46,15 @@ class TestTimeSeries:
                 },
                 {
                     "axis_name": "step",
-                    "transformations": [{"name": "type_change", "type": "int"}],  # noqa: E501
+                    "transformations": [
+                        {"name": "type_change", "type": "int"}
+                    ],  # noqa: E501
                 },
                 {
                     "axis_name": "number",
-                    "transformations": [{"name": "type_change", "type": "int"}],  # noqa: E501
+                    "transformations": [
+                        {"name": "type_change", "type": "int"}
+                    ],  # noqa: E501
                 },
             ],
             "compressed_axes_config": [
@@ -91,7 +97,9 @@ class TestTimeSeries:
             },
         }
 
-        conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()  # noqa: E501
+        conf = Conflator(
+            app_name="polytope_mars", model=PolytopeMarsConfig
+        ).load()  # noqa: E501
         self.cf = conf.model_dump()
         self.cf["options"] = self.options
 

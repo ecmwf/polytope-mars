@@ -37,7 +37,11 @@ class TestFeatureFactory:
                     }
                 }
             },
-            "date": {"transformation": {"merge": {"with": "time", "linkers": ["T", "00"]}}},  # noqa: E501
+            "date": {
+                "transformation": {
+                    "merge": {"with": "time", "linkers": ["T", "00"]}
+                }
+            },  # noqa: E501
             "step": {"transformation": {"type_change": "int"}},
         }
         self.config = {
@@ -58,7 +62,9 @@ class TestFeatureFactory:
             PolytopeMars(self.options, self.config).extract({"hello": "world"})
 
         with pytest.raises(TypeError):
-            PolytopeMars(self.options, self.config).extract(json.dumps({"hello": "world"}))
+            PolytopeMars(self.options, self.config).extract(
+                json.dumps({"hello": "world"})
+            )
 
         # 'step' is invalid in the request
         # self.request["step"] = "0"
