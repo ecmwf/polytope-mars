@@ -218,8 +218,7 @@ class PolytopeMars:
                     if int(split[0]) < 0:
                         split[0] = str(
                             (
-                                datetime.datetime.now()
-                                + +datetime.timedelta(days=int(split[0]))
+                                datetime.datetime.now() + datetime.timedelta(days=int(split[0]))  # noqa: E501
                             ).strftime(
                                 "%Y%m%d"
                             )  # noqa: E501
