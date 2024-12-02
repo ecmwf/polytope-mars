@@ -9,7 +9,6 @@ from ..feature import Feature
 
 
 def split_polygon(polygon):
-
     minx, miny, maxx, maxy = polygon.bounds
 
     # Determine all multiples of 90 degrees within the longitude range
@@ -69,9 +68,7 @@ def get_area(points):
     for piece in pieces:
         area = get_area_piece(piece)
         total_area += area
-    return (
-        total_area / 1e6
-    )  # Convert area from square meters to square kilometers  # noqa: E501
+    return total_area / 1e6  # Convert area from square meters to square kilometers  # noqa: E501
 
 
 class Polygons(Feature):
@@ -104,9 +101,7 @@ class Polygons(Feature):
                     f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees\u00b2"  # noqa: E501
                 )
 
-        assert (
-            len(feature_config) == 0
-        ), f"Unexpected keys in config: {feature_config.keys()}"
+        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
         # coordinates = get_coords(self.df)
