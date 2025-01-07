@@ -3,7 +3,6 @@ import json
 
 # If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
 
-
 import pytest
 from conflator import Conflator
 
@@ -81,6 +80,29 @@ class TestFeatureFactory:
         self.cf = conf.model_dump()
         self.cf['options'] = self.options
 
+    #@pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory(self):
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
+        assert True
+
+    #@pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_trajectory_latlon_correct_inflation(self):
+        self.request['feature']["inflation"] = [0.1,0.2]
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        assert True
+
+    #@pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_trajectory_latlon_incorrect_inflates(self):
+        with pytest.raises(ValueError):
+            self.request['feature']["inflation"] = [0.1,0.2,0.3]
+            result = PolytopeMars(self.cf).extract(self.request)
+            decoder = Covjsonkit().decode(result)
+
+    #@pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_trajectory_lonlat(self):
+        self.request['feature']["axes"] = ["longitude", "latitude"]
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        assert True
