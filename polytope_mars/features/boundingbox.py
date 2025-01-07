@@ -174,7 +174,9 @@ class BoundingBox(Feature):
             if "latitude" not in feature_config["axes"] or "longitude" not in feature_config["axes"]:
                 raise ValueError("Bounding Box axes must contain both latitude and longitude")
             if len(feature_config["axes"]) > 3:
-                raise ValueError("Bounding Box axes must contain at most 3 values, latitude, longitude, and levelist")  # noqa: E501
+                raise ValueError(
+                    "Bounding Box axes must contain at most 3 values, latitude, longitude, and levelist"
+                )  # noqa: E501
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")

@@ -146,7 +146,7 @@ class Path(Feature):
         if len(feature_config["points"]) < 2:
             raise ValueError("Trajectory must have atleast two values in points")  # noqa: E501
         if "axes" in feature_config:
-            #if len(feature_config["axes"]) == 2:
+            # if len(feature_config["axes"]) == 2:
             #    try:
             #        assert feature_config["axes"] == ["latitude", "longitude"]
             #    except AssertionError:
