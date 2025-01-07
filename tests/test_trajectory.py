@@ -1,37 +1,34 @@
-import os
-import json
-
-# If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
-
 import pytest
 from conflator import Conflator
-
 from covjsonkit.api import Covjsonkit
+
 from polytope_mars.api import PolytopeMars
-from polytope_mars.config import PolytopeMarsConfig 
+from polytope_mars.config import PolytopeMarsConfig
+
+# If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
 
 
 class TestFeatureFactory:
     def setup_method(self):
         self.request = {
             "class": "od",
-            "stream" : "enfo",
-            "type" : "pf",
-            "date" : "20250106",
-            "time" : "0000",
-            "levtype" : "pl",
-            "expver" : "0001", 
-            "domain" : "g",
-            "param" : "203/133",
-            "number" : "1",
-            "step" : "0",
-            "levelist" : "500",
-            "feature" : {
-                "type" : "trajectory",
-                "points" : [[-1, -1], [0, 0], [1, 1]],
-                "axes" : ["latitude", "longitude"],
-                "inflate" : "round",
-                "inflation" : 0.1,
+            "stream": "enfo",
+            "type": "pf",
+            "date": "20250106",
+            "time": "0000",
+            "levtype": "pl",
+            "expver": "0001",
+            "domain": "g",
+            "param": "203/133",
+            "number": "1",
+            "step": "0",
+            "levelist": "500",
+            "feature": {
+                "type": "trajectory",
+                "points": [[-1, -1], [0, 0], [1, 1]],
+                "axes": ["latitude", "longitude"],
+                "inflate": "round",
+                "inflation": 0.1,
             },
         }
 
@@ -73,36 +70,49 @@ class TestFeatureFactory:
                 "type",
                 "number",
             ],
-            "pre_path": {"class": "od", "expver": "0001", "levtype": "pl", "stream": "enfo", "type": "pf", "domain": "g", "date" : "20250106", "time" : "0000"},
+            "pre_path": {
+                "class": "od",
+                "expver": "0001",
+                "levtype": "pl",
+                "stream": "enfo",
+                "type": "pf",
+                "domain": "g",
+                "date": "20250106",
+                "time": "0000",
+            },
         }
 
         conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()
         self.cf = conf.model_dump()
-        self.cf['options'] = self.options
+        self.cf["options"] = self.options
 
-    #@pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory(self):
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
         assert True
 
-    #@pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory_latlon_correct_inflation(self):
-        self.request['feature']["inflation"] = [0.1,0.2]
+        self.request["feature"]["inflation"] = [0.1, 0.2]
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
         assert True
 
-    #@pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory_latlon_incorrect_inflates(self):
         with pytest.raises(ValueError):
-            self.request['feature']["inflation"] = [0.1,0.2,0.3]
+            self.request["feature"]["inflation"] = [0.1, 0.2, 0.3]
             result = PolytopeMars(self.cf).extract(self.request)
             decoder = Covjsonkit().decode(result)
+            decoder.to_xarray()
 
-    #@pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory_lonlat(self):
-        self.request['feature']["axes"] = ["longitude", "latitude"]
+        self.request["feature"]["axes"] = ["longitude", "latitude"]
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
         assert True
