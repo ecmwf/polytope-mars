@@ -42,9 +42,9 @@ class Path(Feature):
                 raise ValueError("Inflate must be either 'round' or 'box' for 2D trajectory feature")  # noqa: E501
             return [
                 shapes.Path(
-                    ["latitude", "longitude"],
+                    [self.axes[0], self.axes[1]],
                     shape(
-                        ["latitude", "longitude"],
+                        [self.axes[0], self.axes[1]],
                         [0, 0],
                         [self.inflation[0], self.inflation[1]],
                     ),
@@ -146,13 +146,13 @@ class Path(Feature):
         if len(feature_config["points"]) < 2:
             raise ValueError("Trajectory must have atleast two values in points")  # noqa: E501
         if "axes" in feature_config:
-            if len(feature_config["axes"]) == 2:
-                try:
-                    assert feature_config["axes"] == ["latitude", "longitude"]
-                except AssertionError:
-                    raise AssertionError(
-                        "Axes must be ['latitude', 'longitude'], the axes will become more dynamic in the future"  # noqa: E501
-                    )
+            #if len(feature_config["axes"]) == 2:
+            #    try:
+            #        assert feature_config["axes"] == ["latitude", "longitude"]
+            #    except AssertionError:
+            #        raise AssertionError(
+            #            "Axes must be ['latitude', 'longitude'], the axes will become more dynamic in the future"  # noqa: E501
+            #        )
             if len(feature_config["axes"]) == 3:
                 if "levelist" in feature_config["axes"]:
                     try:
