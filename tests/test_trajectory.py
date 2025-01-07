@@ -3,8 +3,6 @@ import json
 
 # If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
 
-os.environ['DYLD_LIBRARY_PATH'] = '/home/maaw/test_polytope/gribjump-bundle/build/lib/'
-os.environ['GRIBJUMP_CONFIG_FILE']='/home/maaw/test_polytope/tests/grib-dev-config.yaml'
 
 import pytest
 from conflator import Conflator
