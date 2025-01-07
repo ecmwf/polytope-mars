@@ -94,6 +94,8 @@ class BoundingBox(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "boundingbox"
         self.points = feature_config.pop("points", [])
+        if "axes" not in feature_config:
+            feature_config["axes"] = ["latitude", "longitude"]
         self.axes = feature_config.pop("axes", [])
         self.max_area = client_config.polygonrules.max_area
 
@@ -119,12 +121,12 @@ class BoundingBox(Feature):
                         shapes.Box(
                             ["latitude", "longitude"],
                             lower_corner=[
-                                self.points[0][0],
-                                self.points[0][1],
+                                self.points[0][self.axes.index("latitude")],
+                                self.points[0][self.axes.index("longitude")],
                             ],  # noqa: E501
                             upper_corner=[
-                                self.points[1][0],
-                                self.points[1][1],
+                                self.points[1][self.axes.index("latitude")],
+                                self.points[1][self.axes.index("longitude")],
                             ],  # noqa: E501
                         )
                     ],
@@ -164,10 +166,15 @@ class BoundingBox(Feature):
     def parse(self, request, feature_config):
         if feature_config["type"] != "boundingbox":
             raise ValueError("Feature type must be boudningbox")
-        if "step" in feature_config["axes"]:
-            raise ValueError(
-                "Bounding box axes must be latitude and longitude, step can be requested in main body of request"
-            )
+        if "axes" in feature_config:
+            if "step" in feature_config["axes"]:
+                raise ValueError(
+                    "Bounding box axes must be latitude and longitude, step can be requested in main body of request"
+                )
+            if "latitude" not in feature_config["axes"] or "longitude" not in feature_config["axes"]:
+                raise ValueError("Bounding Box axes must contain both latitude and longitude")
+            if len(feature_config["axes"]) > 3:
+                raise ValueError("Bounding Box axes must contain at most 3 values, latitude, longitude, and levelist")  # noqa: E501
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")
