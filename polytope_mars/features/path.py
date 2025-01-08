@@ -94,6 +94,9 @@ class Path(Feature):
     def incompatible_keys(self):
         return []
 
+    def valid_axes(self):
+        return ["latitude", "longitude", "levelist", "step"]
+
     def coverage_type(self):
         return "Trajectory"
 
@@ -131,5 +134,8 @@ class Path(Feature):
         if "axes" in feature_config:
             if len(feature_config["axes"]) < 2 or len(feature_config["axes"]) > 4:
                 raise ValueError("Trajectory axes must have 2, 3 or 4 values")
+            for axis in feature_config["axes"]:
+                if axis not in self.valid_axes():
+                    raise ValueError(f"Invalid axis: {axis}, must be one of {self.valid_axes()}")  # noqa: E501
 
         return request

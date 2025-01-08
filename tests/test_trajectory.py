@@ -157,3 +157,22 @@ class TestFeatureFactory:
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
+
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_trajectory_4d_mix_axes(self):
+        self.request["feature"]["axes"] = ["longitude", "latitude", "step", "levelist"]
+        self.request["feature"]["points"] = [[-1, -1, 1, 1], [0, 0, 2, 2], [1, 1, 10, 3]]
+        self.request["feature"]["inflate"] = "box"
+        del self.request["levelist"]
+        del self.request["step"]
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
+        assert True
+
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_trajectory_1_axes(self):
+        self.request["feature"]["axes"] = ["latitude"]
+        self.request["feature"]["points"] = [[-1], [0], [1]]
+        with pytest.raises(ValueError):
+            PolytopeMars(self.cf).extract(self.request)
