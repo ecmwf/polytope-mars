@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import pytest
 from conflator import Conflator
 from covjsonkit.api import Covjsonkit
@@ -10,11 +12,16 @@ from polytope_mars.config import PolytopeMarsConfig
 
 class TestFeatureFactory:
     def setup_method(self):
+
+        today = datetime.today()
+        yesterday = today - timedelta(days=1)
+        self.date = yesterday.strftime("%Y%m%d")
+
         self.request = {
             "class": "od",
             "stream": "enfo",
             "type": "pf",
-            "date": "20250106",
+            "date": self.date,
             "time": "0000",
             "levtype": "pl",
             "expver": "0001",
@@ -77,7 +84,7 @@ class TestFeatureFactory:
                 "stream": "enfo",
                 "type": "pf",
                 "domain": "g",
-                "date": "20250106",
+                "date": self.date,
                 "time": "0000",
             },
         }
@@ -86,14 +93,14 @@ class TestFeatureFactory:
         self.cf = conf.model_dump()
         self.cf["options"] = self.options
 
-    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory(self):
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
 
-    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory_latlon_correct_inflation(self):
         self.request["feature"]["inflation"] = [0.1, 0.2]
         result = PolytopeMars(self.cf).extract(self.request)
@@ -101,7 +108,7 @@ class TestFeatureFactory:
         decoder.to_xarray()
         assert True
 
-    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory_latlon_incorrect_inflates(self):
         with pytest.raises(ValueError):
             self.request["feature"]["inflation"] = [0.1, 0.2, 0.3]
@@ -109,9 +116,43 @@ class TestFeatureFactory:
             decoder = Covjsonkit().decode(result)
             decoder.to_xarray()
 
-    @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory_lonlat(self):
         self.request["feature"]["axes"] = ["longitude", "latitude"]
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
+        assert True
+
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_trajectory_3d_levelist(self):
+        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
+        self.request["feature"]["points"] = [[-1, -1, 1], [0, 0, 2], [1, 1, 10]]
+        self.request["feature"]["inflate"] = "round"
+        del self.request["levelist"]
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
+        assert True
+
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_trajectory_3d_step(self):
+        self.request["feature"]["axes"] = ["latitude", "longitude", "step"]
+        self.request["feature"]["points"] = [[-1, -1, 1], [0, 0, 2], [1, 1, 10]]
+        self.request["feature"]["inflate"] = "round"
+        del self.request["step"]
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
+        assert True
+
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_trajectory_4d(self):
+        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist", "step"]
+        self.request["feature"]["points"] = [[-1, -1, 1, 1], [0, 0, 2, 2], [1, 1, 10, 3]]
+        self.request["feature"]["inflate"] = "box"
+        del self.request["levelist"]
+        del self.request["step"]
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
