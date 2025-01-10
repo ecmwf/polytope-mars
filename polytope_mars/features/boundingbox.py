@@ -116,10 +116,10 @@ class BoundingBox(Feature):
         if len(self.points[0]) == 2:
             return [
                 shapes.Union(
-                    ["latitude", "longitude"],
+                    [self.axes[0], self.axes[1]],
                     *[
                         shapes.Box(
-                            ["latitude", "longitude"],
+                            [self.axes[0], self.axes[1]],
                             lower_corner=[
                                 self.points[0][self.axes.index("latitude")],
                                 self.points[0][self.axes.index("longitude")],
@@ -135,10 +135,10 @@ class BoundingBox(Feature):
         else:
             return [
                 shapes.Union(
-                    ["latitude", "longitude", "levelist"],
+                    [self.axes[0], self.axes[1], self.axes[2]],
                     *[
                         shapes.Box(
-                            ["latitude", "longitude", "levelist"],
+                            [self.axes[0], self.axes[1], self.axes[2]],
                             lower_corner=[
                                 self.points[0][0],
                                 self.points[0][1],
@@ -165,8 +165,12 @@ class BoundingBox(Feature):
 
     def parse(self, request, feature_config):
         if feature_config["type"] != "boundingbox":
-            raise ValueError("Feature type must be boudningbox")
+            raise ValueError("Feature type must be boundingbox")
         if "axes" in feature_config:
+            if len(feature_config["axes"]) < 2 or len(feature_config["axes"]) > 3:
+                raise ValueError(
+                    "Bounding Box axes must contain 2 or 3 values, latitude, longitude, and optionally levelist"
+                )
             if "step" in feature_config["axes"]:
                 raise ValueError(
                     "Bounding box axes must be latitude and longitude, step can be requested in main body of request"
