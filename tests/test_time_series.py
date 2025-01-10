@@ -108,6 +108,13 @@ class TestFeatureFactory:
         decoder.to_xarray()
         assert True
 
+    def test_timeseries_only_step_axes(self):
+        self.request["feature"]["axes"] = ["step"]
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
+        assert True
+
     def test_timeseries_step_in_both(self):
         self.request["step"] = "0/to/3"
         with pytest.raises(ValueError):
