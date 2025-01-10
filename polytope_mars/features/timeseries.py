@@ -11,7 +11,10 @@ class TimeSeries(Feature):
         # self.start_step = config.pop("start", None)
         # self.end_step = config.pop("end", None)
         self.axes = feature_config.pop("axes", [])
+
         if not isinstance(self.axes, list):
+            self.axes = ["latitude", "longitude"]
+        if self.axes == ["step"] or self.axes == ["date"]:
             self.axes = ["latitude", "longitude"]
 
         self.points = feature_config.pop("points", [])
