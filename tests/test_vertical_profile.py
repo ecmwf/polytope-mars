@@ -7,7 +7,7 @@ from covjsonkit.api import Covjsonkit
 from polytope_mars.api import PolytopeMars
 from polytope_mars.config import PolytopeMarsConfig
 
-# If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
+# If using a local FDB need to set GRIBJUMP_CONFIG_FILE and DYLD_LIBRARY_PATH
 
 
 class TestFeatureFactory:
@@ -121,3 +121,18 @@ class TestFeatureFactory:
         del self.request["levelist"]
         with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)
+
+    def test_verticalprofile_wrong_range(self):
+        self.request["feature"]["range"] = {"start": 0, "end": 1000}
+        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
+        with pytest.raises(ValueError):
+            PolytopeMars(self.cf).extract(self.request)
+
+    def test_verticalprofile_range(self):
+        self.request["feature"]["range"] = {"start": 0, "end": 1000}
+        del self.request["levelist"]
+        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
+        assert True

@@ -7,7 +7,7 @@ from covjsonkit.api import Covjsonkit
 from polytope_mars.api import PolytopeMars
 from polytope_mars.config import PolytopeMarsConfig
 
-# If using a local FDB need to set FDB_HOME and ECCODES_DEFINITIO_PATH
+# If using a local FDB need to set GRIBJUMP_CONFIG_FILE and DYLD_LIBRARY_PATH
 
 
 class TestFeatureFactory:
