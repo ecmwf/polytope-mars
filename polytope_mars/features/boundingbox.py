@@ -116,10 +116,10 @@ class BoundingBox(Feature):
         if len(self.points[0]) == 2:
             return [
                 shapes.Union(
-                    [self.axes[0], self.axes[1]],
+                    ["latitude", "longitude"],
                     *[
                         shapes.Box(
-                            [self.axes[0], self.axes[1]],
+                            ["latitude", "longitude"],
                             lower_corner=[
                                 self.points[0][self.axes.index("latitude")],
                                 self.points[0][self.axes.index("longitude")],
