@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime, timedelta
 
 import pytest
@@ -148,15 +149,24 @@ class TestFeatureFactory:
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory_4d(self):
+        request_copy = copy.deepcopy(self.request)
         self.request["feature"]["axes"] = ["latitude", "longitude", "levelist", "step"]
         self.request["feature"]["points"] = [[-1, -1, 1, 1], [0, 0, 2, 2], [1, 1, 10, 3]]
         self.request["feature"]["inflate"] = "box"
         del self.request["levelist"]
         del self.request["step"]
-        result = PolytopeMars(self.cf).extract(self.request)
-        decoder = Covjsonkit().decode(result)
+        result1 = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result1)
         decoder.to_xarray()
-        assert True
+
+        request_copy["feature"]["axes"] = ["latitude", "longitude", "step", "levelist"]
+        request_copy["feature"]["points"] = [[-1, -1, 1, 1], [0, 0, 2, 2], [1, 1, 3, 10]]
+        request_copy["feature"]["inflate"] = "box"
+        del request_copy["levelist"]
+        del request_copy["step"]
+        result2 = PolytopeMars(self.cf).extract(request_copy)
+
+        assert result1 == result2
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_trajectory_4d_mix_axes(self):
