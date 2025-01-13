@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime, timedelta
 
 import pytest
@@ -109,6 +110,15 @@ class TestFeatureFactory:
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
+
+    def test_verticalprofile_lonlat_axes(self):
+        request_copy = copy.deepcopy(self.request)
+        self.request["feature"]["axes"] = ["latitude", "longitude"]
+        result = PolytopeMars(self.cf).extract(self.request)
+        request_copy["feature"]["axes"] = ["longitude", "latitude"]
+        request_copy["feature"]["points"] = [[-9.1, 38.9]]
+        result1 = PolytopeMars(self.cf).extract(request_copy)
+        assert result == result1
 
     def test_verticalprofile_latlonlevel_axes(self):
         self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
