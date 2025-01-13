@@ -108,6 +108,13 @@ class TestFeatureFactory:
         decoder.to_xarray()
         assert True
 
+    def test_timeseries_mix_axes_step(self):
+        self.request["feature"]["axes"] = ["longitude", "step", "latitude"]
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
+        assert True
+
     def test_timeseries_only_step_axes(self):
         self.request["feature"]["axes"] = ["step"]
         result = PolytopeMars(self.cf).extract(self.request)
