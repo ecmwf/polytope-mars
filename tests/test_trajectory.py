@@ -176,7 +176,6 @@ class TestFeatureFactory:
         del self.request["step"]
         result1 = PolytopeMars(self.cf).extract(self.request)
 
-
         request_copy["feature"]["axes"] = ["longitude", "step", "latitude", "levelist"]
         request_copy["feature"]["points"] = [[-1, 1, -1, 1], [0, 2, 0, 2], [1, 3, 1, 10]]
         request_copy["feature"]["inflate"] = "box"

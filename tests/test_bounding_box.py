@@ -1,6 +1,6 @@
+import copy
 from datetime import datetime, timedelta
 
-import copy
 import pytest
 from conflator import Conflator
 from covjsonkit.api import Covjsonkit
@@ -115,7 +115,7 @@ class TestFeatureFactory:
         request_copy["feature"]["axes"] = ["longitude", "latitude"]
         request_copy["feature"]["points"] = [[0.2, 0.1], [0.3, 0.2]]
         result2 = PolytopeMars(self.cf).extract(request_copy)
-        
+
         assert result == result2
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")

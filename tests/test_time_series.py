@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime, timedelta
 
 import pytest
@@ -102,11 +103,12 @@ class TestFeatureFactory:
         assert True
 
     def test_timeseries_mix_axes(self):
-        self.request["feature"]["axes"] = ["longitude", "latitude", "step"]
+        request_copy = copy.deepcopy(self.request)
         result = PolytopeMars(self.cf).extract(self.request)
-        decoder = Covjsonkit().decode(result)
-        decoder.to_xarray()
-        assert True
+        request_copy["feature"]["axes"] = ["longitude", "latitude", "step"]
+        request_copy["feature"]["points"] = [[38.78, -9.10]]
+        result1 = PolytopeMars(self.cf).extract(request_copy)
+        assert result == result1
 
     def test_timeseries_mix_axes_step(self):
         self.request["feature"]["axes"] = ["longitude", "step", "latitude"]
