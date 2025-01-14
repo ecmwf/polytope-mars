@@ -93,6 +93,8 @@ def get_area(points):
 class BoundingBox(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "boundingbox"
+        if "points" not in feature_config:
+            raise KeyError("Bounding box must have points in feature")
         self.points = feature_config.pop("points", [])
         if "axes" not in feature_config:
             feature_config["axes"] = ["latitude", "longitude"]
@@ -162,6 +164,9 @@ class BoundingBox(Feature):
 
     def name(self):
         return "Bounding Box"
+
+    def required_keys(self):
+        return ["type", "points"]
 
     def parse(self, request, feature_config):
         if feature_config["type"] != "boundingbox":

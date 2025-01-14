@@ -138,3 +138,8 @@ class TestFeatureFactory:
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
+
+    def test_timeseries_no_axes(self):
+        with pytest.raises(KeyError):
+            del self.request["feature"]["axes"]
+            PolytopeMars(self.cf).extract(self.request)

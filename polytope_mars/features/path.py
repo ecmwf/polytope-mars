@@ -103,11 +103,10 @@ class Path(Feature):
     def name(self):
         return "Path"
 
+    def required_keys(self):
+        return ["type", "points", "inflation"]
+
     def parse(self, request, feature_config):
-        if feature_config["type"] != "trajectory":
-            raise ValueError("Feature type must be trajectory")
-        if "inflation" not in feature_config:
-            raise ValueError("Inflation must be specified in request")
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")

@@ -88,7 +88,7 @@ class PolytopeMars:
 
         feature = self._feature_factory(feature_type, feature_config, self.conf)  # noqa: E501
 
-        feature.validate(request)
+        feature.validate(request, feature_config_copy)
 
         logging.debug("Unparsed request: %s", request)
         logging.debug("Feature dictionary: %s", feature_config_copy)

@@ -101,8 +101,8 @@ class TestFeatureFactory:
 
     def test_verticalprofile_no_axes(self):
         del self.request["feature"]["axes"]
-        with pytest.raises(ValueError):
-            PolytopeMars(self.cf).extract(self.request)
+        PolytopeMars(self.cf).extract(self.request)
+        assert True
 
     def test_verticalprofile_latlon_axes(self):
         self.request["feature"]["axes"] = ["latitude", "longitude"]

@@ -25,10 +25,18 @@ class Feature(ABC):
     def parse(self, request, feature_config):
         pass
 
-    def validate(self, request):
+    @abstractmethod
+    def required_keys(self):
+        pass
+
+    def validate(self, request, feature_config):
         incompatible_keys = self.incompatible_keys()
         for key in incompatible_keys:
             if key in request:
                 raise KeyError(
                     f"Request contains a '{key}' keyword which is not compatible with feature {self.name()}"  # noqa: E501
                 )
+        required_keys = self.required_keys()
+        for key in required_keys:
+            if key not in request and key not in feature_config:
+                raise KeyError(f"Missing required key {key} not in request")

@@ -190,3 +190,8 @@ class TestFeatureFactory:
         self.request["feature"]["points"] = [[-1], [0], [1]]
         with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)
+
+    def test_trajectory_no_inflation(self):
+        del self.request["feature"]["inflation"]
+        with pytest.raises(KeyError):
+            PolytopeMars(self.cf).extract(self.request)
