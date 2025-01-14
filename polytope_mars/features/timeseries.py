@@ -11,10 +11,14 @@ class TimeSeries(Feature):
         # self.start_step = config.pop("start", None)
         # self.end_step = config.pop("end", None)
         self.axes = feature_config.pop("axes", [])
+        self.time_axis = feature_config.pop("time_axis", [])
 
-        if not isinstance(self.axes, list):
-            self.axes = ["latitude", "longitude"]
-        if self.axes == ["step"] or self.axes == ["date"]:
+        if self.axes != []:
+            if not isinstance(self.axes, list):
+                self.axes = ["latitude", "longitude"]
+            if self.axes == ["step"] or self.axes == ["date"]:
+                self.axes = ["latitude", "longitude"]
+        else:
             self.axes = ["latitude", "longitude"]
 
         self.points = feature_config.pop("points", [])
@@ -51,32 +55,32 @@ class TimeSeries(Feature):
         return "Time Series"
 
     def required_keys(self):
-        return ["type", "points", "axes"]
+        return ["type", "points", "time_axis"] 
 
     def parse(self, request, feature_config):
         logging.debug("Feature config: %s", feature_config)
-        if isinstance(feature_config["axes"], list):
-            if "step" not in feature_config["axes"] and "date" not in feature_config["axes"]:
-                raise ValueError("Timeseries axes must be step or date")
-        elif feature_config["axes"] != "step" and feature_config["axes"] != "date":  # noqa: E501
+        #if isinstance(feature_config["time_axis"], list):
+        #    if "step" not in feature_config["time_axis"] and "date" not in feature_config["time_axis"]:
+        #        raise ValueError("Timeseries axes must be step or date")
+        if feature_config["time_axis"] != "step" and feature_config["time_axis"] != "date":  # noqa: E501
             raise ValueError("Timeseries axes must be step or date")
 
-        if isinstance(feature_config["axes"], list):
-            if "step" in feature_config["axes"]:
+        if isinstance(feature_config["time_axis"], list):
+            if "step" in feature_config["time_axis"]:
                 time_axis = "step"
-                feature_config["axes"].remove("step")
-            if "date" in feature_config["axes"]:
+                feature_config["time_axis"].remove("step")
+            if "date" in feature_config["time_axis"]:
                 time_axis = "date"
-                feature_config["axes"].remove("date")
+                feature_config["time_axis"].remove("date")
         else:
-            time_axis = feature_config["axes"]
+            time_axis = feature_config["time_axis"]
 
         if len(feature_config["points"][0]) != 2:
             raise ValueError("Timeseries must have only two values in points")
         if time_axis in request and "range" in feature_config:
-            raise ValueError("Timeseries axes is overspecified in request")
+            raise ValueError("Timeseries time_axis is overspecified in request")
         if time_axis not in request and "range" not in feature_config:  # noqa: E501
-            raise ValueError("Timeseries axes is underspecified in request")
+            raise ValueError("Timeseries time_axis is underspecified in request")
 
         if "range" in feature_config:
             if isinstance(feature_config["range"], dict):
