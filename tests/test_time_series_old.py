@@ -1,4 +1,3 @@
-import copy
 from datetime import datetime, timedelta
 
 import pytest
@@ -32,7 +31,7 @@ class TestFeatureFactory:
             "feature": {
                 "type": "timeseries",
                 "points": [[-9.10, 38.78]],
-                "axes" : "step",
+                "axes": "step",
                 "range": {"start": 0, "end": 3},
             },
         }
