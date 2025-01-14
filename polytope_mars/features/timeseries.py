@@ -55,11 +55,11 @@ class TimeSeries(Feature):
         return "Time Series"
 
     def required_keys(self):
-        return ["type", "points", "time_axis"] 
+        return ["type", "points", "time_axis"]
 
     def parse(self, request, feature_config):
         logging.debug("Feature config: %s", feature_config)
-        #if isinstance(feature_config["time_axis"], list):
+        # if isinstance(feature_config["time_axis"], list):
         #    if "step" not in feature_config["time_axis"] and "date" not in feature_config["time_axis"]:
         #        raise ValueError("Timeseries axes must be step or date")
         if feature_config["time_axis"] != "step" and feature_config["time_axis"] != "date":  # noqa: E501

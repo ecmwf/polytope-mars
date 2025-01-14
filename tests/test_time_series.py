@@ -110,7 +110,7 @@ class TestFeatureFactory:
         assert result == result1
 
     def test_timeseries_mix_axes_step(self):
-        self.request["feature"]["axes"] = ["longitude","latitude"]
+        self.request["feature"]["axes"] = ["longitude", "latitude"]
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
