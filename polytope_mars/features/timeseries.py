@@ -50,10 +50,11 @@ class TimeSeries(Feature):
     def name(self):
         return "Time Series"
 
+    def required_keys(self):
+        return ["type", "points", "axes"]
+
     def parse(self, request, feature_config):
         logging.debug("Feature config: %s", feature_config)
-        if feature_config["type"] != "timeseries":
-            raise ValueError("Feature type must be timeseries")
         if isinstance(feature_config["axes"], list):
             if "step" not in feature_config["axes"] and "date" not in feature_config["axes"]:
                 raise ValueError("Timeseries axes must be step or date")

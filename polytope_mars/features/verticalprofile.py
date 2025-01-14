@@ -51,11 +51,12 @@ class VerticalProfile(Feature):
     def name(self):
         return "Vertical Profile"
 
+    def required_keys(self):
+        return ["type", "points"]
+
     def parse(self, request, feature_config):
-        if feature_config["type"] != "verticalprofile":
-            raise ValueError("Feature type must be vertical proifle")
         if "axes" not in feature_config:
-            raise ValueError("Vertical Profile must have axes for level")
+            feature_config["axes"] = "levelist"
 
         if isinstance(feature_config["axes"], list):
             if "levelist" in feature_config["axes"]:

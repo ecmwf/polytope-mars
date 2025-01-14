@@ -127,12 +127,13 @@ class Polygons(Feature):
     def name(self):
         return "Polygon"
 
+    def required_keys(self):
+        return ["type", "shape"]
+
     def parse(self, request, feature_config):
         if "axes" in request:
             if len(request["axes"]) != 2:
                 raise ValueError("Polygon feature must have two axes, latitude and longitude")
-        if feature_config["type"] != "polygon":
-            raise ValueError("Feature type must be polygon")
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")

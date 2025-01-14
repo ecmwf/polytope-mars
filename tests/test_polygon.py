@@ -132,3 +132,8 @@ class TestFeatureFactory:
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
+
+    def test_polygon_no_shape(self):
+        with pytest.raises(KeyError):
+            del self.request["feature"]["shape"]
+            PolytopeMars(self.cf).extract(self.request)

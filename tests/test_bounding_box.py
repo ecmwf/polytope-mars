@@ -124,3 +124,8 @@ class TestFeatureFactory:
         self.request["feature"]["points"] = [[-1], [0], [1]]
         with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)
+
+    def test_boundingbox_no_points(self):
+        with pytest.raises(KeyError):
+            del self.request["feature"]["points"]
+            PolytopeMars(self.cf).extract(self.request)
