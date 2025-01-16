@@ -12,7 +12,7 @@ from polytope_mars.config import PolytopeMarsConfig
 
 
 class TestFeatureFactory:
-    def setup_method(self, method):
+    def setup_method(self):
 
         today = datetime.today()
         yesterday = today - timedelta(days=1)
@@ -24,17 +24,15 @@ class TestFeatureFactory:
             "type": "pf",
             "date": self.date,
             "time": "0000",
-            "levtype": "pl",
+            "levtype": "sfc",
             "expver": "0001",
             "domain": "g",
-            "param": "203/133",
+            "param": "167/169",
             "number": "1",
             "step": "0",
-            "levelist": "0/to/1000",
             "feature": {
-                "type": "verticalprofile",
-                "points": [[38.9, -9.1]],
-                "axes": "levelist",
+                "type": "polygon",
+                "shape": [[40.0, -105.0], [40.0, -104.0], [41.0, -104.0], [41.0, -105.0], [40.0, -105.0]],
             },
         }
 
@@ -79,7 +77,7 @@ class TestFeatureFactory:
             "pre_path": {
                 "class": "od",
                 "expver": "0001",
-                "levtype": "pl",
+                "levtype": "sfc",
                 "stream": "enfo",
                 "type": "pf",
                 "domain": "g",
@@ -93,56 +91,49 @@ class TestFeatureFactory:
         self.cf["options"] = self.options
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
-    def test_verticalprofile(self):
+    def test_polygon(self):
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
 
-    def test_verticalprofile_no_axes(self):
-        del self.request["feature"]["axes"]
-        PolytopeMars(self.cf).extract(self.request)
-        assert True
-
-    def test_verticalprofile_latlon_axes(self):
-        self.request["feature"]["axes"] = ["latitude", "longitude"]
-        result = PolytopeMars(self.cf).extract(self.request)
-        decoder = Covjsonkit().decode(result)
-        decoder.to_xarray()
-        assert True
-
-    def test_verticalprofile_lonlat_axes(self):
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_polygon_lonlat(self):
         request_copy = copy.deepcopy(self.request)
-        self.request["feature"]["axes"] = ["latitude", "longitude"]
         result = PolytopeMars(self.cf).extract(self.request)
         request_copy["feature"]["axes"] = ["longitude", "latitude"]
-        request_copy["feature"]["points"] = [[-9.1, 38.9]]
+        request_copy["feature"]["shape"] = [
+            [-105.0, 40.0],
+            [-104.0, 40.0],
+            [-104.0, 41.0],
+            [-105.0, 41.0],
+            [-105.0, 40.0],
+        ]
         result1 = PolytopeMars(self.cf).extract(request_copy)
         assert result == result1
 
-    def test_verticalprofile_latlonlevel_axes(self):
-        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_polygon_1_axes(self):
+        self.request["feature"]["axes"] = ["latitude"]
+        self.request["feature"]["shape"] = [[-1], [0], [-1]]
+        with pytest.raises(ValueError):
+            PolytopeMars(self.cf).extract(self.request)
+
+    def test_polygon_multiple_steps(self):
+        self.request["step"] = "0/1"
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
 
-    def test_verticalprofile_latlon_no_level_axes(self):
-        del self.request["levelist"]
-        with pytest.raises(ValueError):
-            PolytopeMars(self.cf).extract(self.request)
-
-    def test_verticalprofile_wrong_range(self):
-        self.request["feature"]["range"] = {"start": 0, "end": 1000}
-        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
-        with pytest.raises(ValueError):
-            PolytopeMars(self.cf).extract(self.request)
-
-    def test_verticalprofile_range(self):
-        self.request["feature"]["range"] = {"start": 0, "end": 1000}
-        del self.request["levelist"]
-        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
+    def test_polygon_multiple_number(self):
+        self.request["number"] = "1/2"
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
+
+    def test_polygon_no_shape(self):
+        with pytest.raises(KeyError):
+            del self.request["feature"]["shape"]
+            PolytopeMars(self.cf).extract(self.request)

@@ -1,4 +1,3 @@
-import copy
 from datetime import datetime, timedelta
 
 import pytest
@@ -12,7 +11,7 @@ from polytope_mars.config import PolytopeMarsConfig
 
 
 class TestFeatureFactory:
-    def setup_method(self, method):
+    def setup_method(self):
 
         today = datetime.today()
         yesterday = today - timedelta(days=1)
@@ -24,17 +23,16 @@ class TestFeatureFactory:
             "type": "pf",
             "date": self.date,
             "time": "0000",
-            "levtype": "pl",
+            "levtype": "sfc",
             "expver": "0001",
             "domain": "g",
-            "param": "203/133",
-            "number": "1",
-            "step": "0",
-            "levelist": "0/to/1000",
+            "param": "164/166/167/169",
+            "number": "1/to/2",
             "feature": {
-                "type": "verticalprofile",
-                "points": [[38.9, -9.1]],
-                "axes": "levelist",
+                "type": "timeseries",
+                "points": [[-9.10, 38.78]],
+                "axes": "step",
+                "range": {"start": 0, "end": 3},
             },
         }
 
@@ -55,17 +53,16 @@ class TestFeatureFactory:
                         }
                     ],
                 },
+                {"axis_name": "levelist", "transformations": [{"name": "type_change", "type": "str"}]},
                 {"axis_name": "latitude", "transformations": [{"name": "reverse", "is_reverse": True}]},
                 {"axis_name": "longitude", "transformations": [{"name": "cyclic", "range": [0, 360]}]},
                 {"axis_name": "step", "transformations": [{"name": "type_change", "type": "int"}]},
                 {"axis_name": "number", "transformations": [{"name": "type_change", "type": "int"}]},
-                {"axis_name": "levelist", "transformations": [{"name": "type_change", "type": "int"}]},
             ],
             "compressed_axes_config": [
                 "longitude",
                 "latitude",
                 "levtype",
-                "levelist",
                 "step",
                 "date",
                 "domain",
@@ -79,12 +76,10 @@ class TestFeatureFactory:
             "pre_path": {
                 "class": "od",
                 "expver": "0001",
-                "levtype": "pl",
+                "levtype": "sfc",
                 "stream": "enfo",
                 "type": "pf",
                 "domain": "g",
-                "date": self.date,
-                "time": "0000",
             },
         }
 
@@ -93,56 +88,28 @@ class TestFeatureFactory:
         self.cf["options"] = self.options
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
-    def test_verticalprofile(self):
+    def test_timeseries(self):
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
 
-    def test_verticalprofile_no_axes(self):
-        del self.request["feature"]["axes"]
-        PolytopeMars(self.cf).extract(self.request)
-        assert True
-
-    def test_verticalprofile_latlon_axes(self):
-        self.request["feature"]["axes"] = ["latitude", "longitude"]
-        result = PolytopeMars(self.cf).extract(self.request)
-        decoder = Covjsonkit().decode(result)
-        decoder.to_xarray()
-        assert True
-
-    def test_verticalprofile_lonlat_axes(self):
-        request_copy = copy.deepcopy(self.request)
-        self.request["feature"]["axes"] = ["latitude", "longitude"]
-        result = PolytopeMars(self.cf).extract(self.request)
-        request_copy["feature"]["axes"] = ["longitude", "latitude"]
-        request_copy["feature"]["points"] = [[-9.1, 38.9]]
-        result1 = PolytopeMars(self.cf).extract(request_copy)
-        assert result == result1
-
-    def test_verticalprofile_latlonlevel_axes(self):
-        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
-        result = PolytopeMars(self.cf).extract(self.request)
-        decoder = Covjsonkit().decode(result)
-        decoder.to_xarray()
-        assert True
-
-    def test_verticalprofile_latlon_no_level_axes(self):
-        del self.request["levelist"]
+    def test_timeseries_step_in_both(self):
+        self.request["step"] = "0/to/3"
         with pytest.raises(ValueError):
-            PolytopeMars(self.cf).extract(self.request)
+            result = PolytopeMars(self.cf).extract(self.request)
+            decoder = Covjsonkit().decode(result)
+            decoder.to_xarray()
 
-    def test_verticalprofile_wrong_range(self):
-        self.request["feature"]["range"] = {"start": 0, "end": 1000}
-        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
-        with pytest.raises(ValueError):
-            PolytopeMars(self.cf).extract(self.request)
-
-    def test_verticalprofile_range(self):
-        self.request["feature"]["range"] = {"start": 0, "end": 1000}
-        del self.request["levelist"]
-        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
+    def test_timeseries_step_in_request(self):
+        self.request["step"] = "0/to/3"
+        del self.request["feature"]["range"]
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
+
+    def test_timeseries_no_axes(self):
+        with pytest.raises(KeyError):
+            del self.request["feature"]["axes"]
+            PolytopeMars(self.cf).extract(self.request)

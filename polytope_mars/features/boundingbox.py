@@ -11,7 +11,6 @@ from ..feature import Feature
 
 
 def split_polygon(polygon):
-
     minx, miny, maxx, maxy = polygon.bounds
 
     # Determine all multiples of 90 degrees within the longitude range
@@ -65,10 +64,9 @@ def get_area_piece(piece):
 
 
 def get_area(points):
-
     # Convert points to a Shapely Polygon
-    min_lon, min_lat = points[0]
-    max_lon, max_lat = points[1]
+    min_lon, min_lat = points[0][:2]
+    max_lon, max_lat = points[1][:2]
     if min_lon + max_lon == 0:
         min_lon += 0.1
 
@@ -95,7 +93,11 @@ def get_area(points):
 class BoundingBox(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "boundingbox"
+        if "points" not in feature_config:
+            raise KeyError("Bounding box must have points in feature")
         self.points = feature_config.pop("points", [])
+        if "axes" not in feature_config:
+            feature_config["axes"] = ["latitude", "longitude"]
         self.axes = feature_config.pop("axes", [])
         self.max_area = client_config.polygonrules.max_area
 
@@ -121,12 +123,12 @@ class BoundingBox(Feature):
                         shapes.Box(
                             ["latitude", "longitude"],
                             lower_corner=[
-                                self.points[0][0],
-                                self.points[0][1],
+                                self.points[0][self.axes.index("latitude")],
+                                self.points[0][self.axes.index("longitude")],
                             ],  # noqa: E501
                             upper_corner=[
-                                self.points[1][0],
-                                self.points[1][1],
+                                self.points[1][self.axes.index("latitude")],
+                                self.points[1][self.axes.index("longitude")],
                             ],  # noqa: E501
                         )
                     ],
@@ -135,10 +137,10 @@ class BoundingBox(Feature):
         else:
             return [
                 shapes.Union(
-                    ["latitude", "longitude", "levelist"],
+                    [self.axes[0], self.axes[1], self.axes[2]],
                     *[
                         shapes.Box(
-                            ["latitude", "longitude", "levelist"],
+                            [self.axes[0], self.axes[1], self.axes[2]],
                             lower_corner=[
                                 self.points[0][0],
                                 self.points[0][1],
@@ -163,9 +165,27 @@ class BoundingBox(Feature):
     def name(self):
         return "Bounding Box"
 
+    def required_keys(self):
+        return ["type", "points"]
+
     def parse(self, request, feature_config):
         if feature_config["type"] != "boundingbox":
-            raise ValueError("Feature type must be boudningbox")
+            raise ValueError("Feature type must be boundingbox")
+        if "axes" in feature_config:
+            if len(feature_config["axes"]) < 2 or len(feature_config["axes"]) > 3:
+                raise ValueError(
+                    "Bounding Box axes must contain 2 or 3 values, latitude, longitude, and optionally levelist"
+                )
+            if "step" in feature_config["axes"]:
+                raise ValueError(
+                    "Bounding box axes must be latitude and longitude, step can be requested in main body of request"
+                )
+            if "latitude" not in feature_config["axes"] or "longitude" not in feature_config["axes"]:
+                raise ValueError("Bounding Box axes must contain both latitude and longitude")
+            if len(feature_config["axes"]) > 3:
+                raise ValueError(
+                    "Bounding Box axes must contain at most 3 values, latitude, longitude, and levelist"
+                )  # noqa: E501
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")

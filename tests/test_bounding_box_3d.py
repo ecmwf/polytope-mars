@@ -12,7 +12,7 @@ from polytope_mars.config import PolytopeMarsConfig
 
 
 class TestFeatureFactory:
-    def setup_method(self, method):
+    def setup_method(self):
 
         today = datetime.today()
         yesterday = today - timedelta(days=1)
@@ -30,12 +30,13 @@ class TestFeatureFactory:
             "param": "203/133",
             "number": "1",
             "step": "0",
-            "levelist": "0/to/1000",
+            # "levelist" : "500",
             "feature": {
-                "type": "verticalprofile",
-                "points": [[38.9, -9.1]],
-                "axes": "levelist",
+                "type": "boundingbox",
+                "points": [[-0.1, -0.1, 500], [0.1, 0.1, 1000]],
+                "axes": ["latitude", "longitude", "levelist"],
             },
+            "format": "covjson",
         }
 
         self.options = {
@@ -93,56 +94,42 @@ class TestFeatureFactory:
         self.cf["options"] = self.options
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
-    def test_verticalprofile(self):
+    def test_boundingbox(self):
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
 
-    def test_verticalprofile_no_axes(self):
-        del self.request["feature"]["axes"]
-        PolytopeMars(self.cf).extract(self.request)
-        assert True
+    def test_boundingbox_three_points(self):
+        with pytest.raises(ValueError):
+            self.request["feature"]["points"] = [[0, 0, 0], [1, 1, 1], [2, 2, 2]]
+            PolytopeMars(self.cf).extract(self.request)
 
-    def test_verticalprofile_latlon_axes(self):
-        self.request["feature"]["axes"] = ["latitude", "longitude"]
-        result = PolytopeMars(self.cf).extract(self.request)
-        decoder = Covjsonkit().decode(result)
-        decoder.to_xarray()
-        assert True
+    def test_boundingbox_two_values_per_point(self):
+        with pytest.raises(ValueError):
+            self.request["feature"]["points"] = [[0, 0], [1, 1]]
+            PolytopeMars(self.cf).extract(self.request)
 
-    def test_verticalprofile_lonlat_axes(self):
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_boundingbox_lonlat(self):
         request_copy = copy.deepcopy(self.request)
-        self.request["feature"]["axes"] = ["latitude", "longitude"]
+        self.request["feature"]["points"] = [[-0.1, -0.2, 500], [0.1, 0.2, 1000]]
         result = PolytopeMars(self.cf).extract(self.request)
-        request_copy["feature"]["axes"] = ["longitude", "latitude"]
-        request_copy["feature"]["points"] = [[-9.1, 38.9]]
-        result1 = PolytopeMars(self.cf).extract(request_copy)
-        assert result == result1
 
-    def test_verticalprofile_latlonlevel_axes(self):
-        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
-        result = PolytopeMars(self.cf).extract(self.request)
-        decoder = Covjsonkit().decode(result)
-        decoder.to_xarray()
-        assert True
+        request_copy["feature"]["axes"] = ["longitude", "latitude", "levelist"]
+        request_copy["feature"]["points"] = [[-0.2, -0.1, 500], [0.2, 0.1, 1000]]
+        result2 = PolytopeMars(self.cf).extract(request_copy)
 
-    def test_verticalprofile_latlon_no_level_axes(self):
-        del self.request["levelist"]
+        assert result == result2
+
+    # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
+    def test_boundingbox_1_axes(self):
+        self.request["feature"]["axes"] = ["latitude"]
+        self.request["feature"]["points"] = [[-1], [0], [1]]
         with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)
 
-    def test_verticalprofile_wrong_range(self):
-        self.request["feature"]["range"] = {"start": 0, "end": 1000}
-        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
-        with pytest.raises(ValueError):
+    def test_boundingbox_no_points(self):
+        with pytest.raises(KeyError):
+            del self.request["feature"]["points"]
             PolytopeMars(self.cf).extract(self.request)
-
-    def test_verticalprofile_range(self):
-        self.request["feature"]["range"] = {"start": 0, "end": 1000}
-        del self.request["levelist"]
-        self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
-        result = PolytopeMars(self.cf).extract(self.request)
-        decoder = Covjsonkit().decode(result)
-        decoder.to_xarray()
-        assert True

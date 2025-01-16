@@ -80,15 +80,32 @@ class PolytopeMars:
 
         if feature_type == "timeseries":
             try:
-                timeseries_type = feature_config["axes"]
+                if "time_axis" in feature_config:
+                    timeseries_type = feature_config["time_axis"]
+                if "axes" in feature_config:
+                    if feature_config["axes"] == "step":
+                        timeseries_type = "step"
+                        del feature_config["axes"]
+                        del feature_config_copy["axes"]
+                        feature_config["time_axis"] = "step"
+                        feature_config_copy["time_axis"] = "step"
+                    elif "step" in feature_config["axes"]:
+                        raise ValueError(
+                            "Step axis not supported in 'axes' keyword, must be in 'time_axis'"
+                        )  # noqa: E501
+                    elif "date" in feature_config["axes"]:
+                        raise ValueError(
+                            "Date axis not supported in 'axes' keyword, must be in 'time_axis'"
+                        )  # noqa: E501
+
             except KeyError:
-                raise KeyError("The timeseries feature requires an 'axes' keyword")  # noqa: E501
+                raise KeyError("The timeseries feature requires a 'time_axis' keyword")  # noqa: E501
         else:
             timeseries_type = None
 
         feature = self._feature_factory(feature_type, feature_config, self.conf)  # noqa: E501
 
-        feature.validate(request)
+        feature.validate(request, feature_config_copy)
 
         logging.debug("Unparsed request: %s", request)
         logging.debug("Feature dictionary: %s", feature_config_copy)
@@ -141,7 +158,7 @@ class PolytopeMars:
             "CoverageCollection", feature_type
         )  # noqa: E501
 
-        if timeseries_type == "datetime":
+        if timeseries_type == "date":
             self.coverage = encoder.from_polytope_step(result)
         else:
             self.coverage = encoder.from_polytope(result)
@@ -191,7 +208,7 @@ class PolytopeMars:
                 if k == "date":
                     if int(split[0]) < 0:
                         split[0] = str(
-                            (datetime.datetime.now() + +datetime.timedelta(days=int(split[0]))).strftime(
+                            (datetime.datetime.now() + datetime.timedelta(days=int(split[0]))).strftime(  # noqa: E501
                                 "%Y%m%d"
                             )  # noqa: E501
                         )

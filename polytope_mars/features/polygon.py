@@ -9,7 +9,6 @@ from ..feature import Feature
 
 
 def split_polygon(polygon):
-
     minx, miny, maxx, maxy = polygon.bounds
 
     # Determine all multiples of 90 degrees within the longitude range
@@ -102,6 +101,11 @@ class Polygons(Feature):
                     f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees\u00b2"  # noqa: E501
                 )
 
+        if "axes" not in feature_config:
+            self.axes = ["latitude", "longitude"]
+        else:
+            self.axes = feature_config.pop("axes")
+
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
@@ -111,8 +115,8 @@ class Polygons(Feature):
             points = []
             for point in polygon:
                 points.append([point[0], point[1]])
-            polygons.append(shapes.Polygon(["latitude", "longitude"], points))
-        return [shapes.Union(["latitude", "longitude"], *polygons)]
+            polygons.append(shapes.Polygon([self.axes[0], self.axes[1]], points))
+        return [shapes.Union([self.axes[0], self.axes[1]], *polygons)]
 
     def incompatible_keys(self):
         return []
@@ -123,9 +127,13 @@ class Polygons(Feature):
     def name(self):
         return "Polygon"
 
+    def required_keys(self):
+        return ["type", "shape"]
+
     def parse(self, request, feature_config):
-        if feature_config["type"] != "polygon":
-            raise ValueError("Feature type must be polygon")
+        if "axes" in request:
+            if len(request["axes"]) != 2:
+                raise ValueError("Polygon feature must have two axes, latitude and longitude")
         if "step" in request and "number" in request:
             step = request["step"].split("/")
             number = request["number"].split("/")
