@@ -158,7 +158,7 @@ class PolytopeMars:
             "CoverageCollection", feature_type
         )  # noqa: E501
 
-        if timeseries_type == "datetime":
+        if timeseries_type == "date":
             self.coverage = encoder.from_polytope_step(result)
         else:
             self.coverage = encoder.from_polytope(result)
