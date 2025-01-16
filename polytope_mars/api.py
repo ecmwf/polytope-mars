@@ -83,20 +83,20 @@ class PolytopeMars:
                 if "time_axis" in feature_config:
                     timeseries_type = feature_config["time_axis"]
                 if "axes" in feature_config:
-                    if "step" in feature_config["axes"]:
+                    if feature_config["axes"] == "step":
+                        timeseries_type = "step"
+                        del feature_config["axes"]
+                        del feature_config_copy["axes"]
+                        feature_config["time_axis"] = "step"
+                        feature_config_copy["time_axis"] = "step"
+                    elif "step" in feature_config["axes"]:
                         raise ValueError(
                             "Step axis not supported in 'axes' keyword, must be in 'time_axis'"
                         )  # noqa: E501
-                    if "date" in feature_config["axes"]:
+                    elif "date" in feature_config["axes"]:
                         raise ValueError(
                             "Date axis not supported in 'axes' keyword, must be in 'time_axis'"
                         )  # noqa: E501
-                    # if feature_config["axes"] == "step":
-                    #    timeseries_type = "step"
-                    #    del feature_config["axes"]
-                    #    del feature_config_copy["axes"]
-                    #    feature_config["time_axis"] = "step"
-                    #    feature_config_copy["time_axis"] = "step"
 
             except KeyError:
                 raise KeyError("The timeseries feature requires a 'time_axis' keyword")  # noqa: E501
@@ -158,7 +158,7 @@ class PolytopeMars:
             "CoverageCollection", feature_type
         )  # noqa: E501
 
-        if timeseries_type == "datetime":
+        if timeseries_type == "date":
             self.coverage = encoder.from_polytope_step(result)
         else:
             self.coverage = encoder.from_polytope(result)
