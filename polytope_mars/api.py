@@ -229,7 +229,7 @@ class PolytopeMars:
                     for s in pd.date_range(start, end):
                         for t in time:
                             dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
-                        #dates.append(s)
+                        # dates.append(s)
                     base_shapes.append(shapes.Select(k, dates))
                 else:
                     base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
