@@ -145,3 +145,10 @@ class TestFeatureFactory:
         del self.request["feature"]["axes"]
         PolytopeMars(self.cf).extract(self.request)
         assert True
+
+    def test_timeseries_multiple_times(self):
+        self.request["time"] = "0000/1200"
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        da = decoder.to_xarray()
+        assert da.datetime.size == 2
