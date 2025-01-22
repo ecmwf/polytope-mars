@@ -106,6 +106,9 @@ class Path(Feature):
     def required_keys(self):
         return ["type", "points", "inflation"]
 
+    def required_axes(self):
+        return ["latitude", "longitude"]
+
     def parse(self, request, feature_config):
         if "step" in request and "number" in request:
             step = request["step"].split("/")

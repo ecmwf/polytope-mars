@@ -57,6 +57,9 @@ class TimeSeries(Feature):
     def required_keys(self):
         return ["type", "points", "time_axis"]
 
+    def required_axes(self):
+        return ["latitude", "longitude"]
+
     def parse(self, request, feature_config):
         logging.debug("Feature config: %s", feature_config)
         # if isinstance(feature_config["time_axis"], list):

@@ -160,3 +160,8 @@ class TestFeatureFactory:
         decoder = Covjsonkit().decode(result)
         da = decoder.to_xarray()
         assert da.datetime.size == 2
+
+    def test_timeseries_no_lon(self):
+        self.request["feature"]["axes"] = ["levelist", "latitude"]
+        with pytest.raises(KeyError):
+            PolytopeMars(self.cf).extract(self.request)
