@@ -154,7 +154,7 @@ class TestFeatureFactory:
         da = decoder.to_xarray()
         assert da.datetime.size == 2
 
-    def test_timeseries_multiple_times(self):
+    def test_timeseries_multiple_dates(self):
         self.request["date"] = f"{self.date}/{self.today}"
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
