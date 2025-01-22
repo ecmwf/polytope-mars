@@ -16,6 +16,7 @@ class TestFeatureFactory:
 
         today = datetime.today()
         yesterday = today - timedelta(days=1)
+        self.today = today.strftime("%Y%m%d")
         self.date = yesterday.strftime("%Y%m%d")
 
         self.request = {
@@ -148,6 +149,13 @@ class TestFeatureFactory:
 
     def test_timeseries_multiple_times(self):
         self.request["time"] = "0000/1200"
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        da = decoder.to_xarray()
+        assert da.datetime.size == 2
+
+    def test_timeseries_multiple_times(self):
+        self.request["date"] = f"{self.date}/{self.today}"
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         da = decoder.to_xarray()
