@@ -16,6 +16,7 @@ class TestFeatureFactory:
 
         today = datetime.today()
         yesterday = today - timedelta(days=1)
+        self.today = today.strftime("%Y%m%d")
         self.date = yesterday.strftime("%Y%m%d")
 
         self.request = {
@@ -145,3 +146,22 @@ class TestFeatureFactory:
         del self.request["feature"]["axes"]
         PolytopeMars(self.cf).extract(self.request)
         assert True
+
+    def test_timeseries_multiple_times(self):
+        self.request["time"] = "0000/1200"
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        da = decoder.to_xarray()
+        assert da.datetime.size == 2
+
+    def test_timeseries_multiple_dates(self):
+        self.request["date"] = f"{self.date}/{self.today}"
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        da = decoder.to_xarray()
+        assert da.datetime.size == 2
+
+    def test_timeseries_no_lon(self):
+        self.request["feature"]["axes"] = ["levelist", "latitude"]
+        with pytest.raises(KeyError):
+            PolytopeMars(self.cf).extract(self.request)

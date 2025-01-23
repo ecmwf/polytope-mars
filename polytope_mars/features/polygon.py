@@ -130,6 +130,9 @@ class Polygons(Feature):
     def required_keys(self):
         return ["type", "shape"]
 
+    def required_axes(self):
+        return ["latitude", "longitude"]
+
     def parse(self, request, feature_config):
         if "axes" in request:
             if len(request["axes"]) != 2:
