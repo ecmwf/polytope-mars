@@ -54,6 +54,9 @@ class VerticalProfile(Feature):
     def required_keys(self):
         return ["type", "points"]
 
+    def required_axes(self):
+        return []
+
     def parse(self, request, feature_config):
         if "axes" not in feature_config:
             feature_config["axes"] = "levelist"

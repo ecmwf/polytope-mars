@@ -168,6 +168,9 @@ class BoundingBox(Feature):
     def required_keys(self):
         return ["type", "points"]
 
+    def required_axes(self):
+        return ["latitude", "longitude"]
+
     def parse(self, request, feature_config):
         if feature_config["type"] != "boundingbox":
             raise ValueError("Feature type must be boundingbox")

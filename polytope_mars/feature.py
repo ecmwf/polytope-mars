@@ -29,6 +29,10 @@ class Feature(ABC):
     def required_keys(self):
         pass
 
+    @abstractmethod
+    def required_axes(self):
+        pass
+
     def validate(self, request, feature_config):
         incompatible_keys = self.incompatible_keys()
         for key in incompatible_keys:
@@ -40,3 +44,9 @@ class Feature(ABC):
         for key in required_keys:
             if key not in request and key not in feature_config:
                 raise KeyError(f"Missing required key {key} not in request")
+
+        required_axes = self.required_axes()
+        for key in required_axes:
+            if "axes" in feature_config:
+                if key not in feature_config["axes"]:
+                    raise KeyError(f"Missing required axis {key} not in request")
