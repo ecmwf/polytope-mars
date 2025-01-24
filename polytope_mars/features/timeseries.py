@@ -86,6 +86,8 @@ class TimeSeries(Feature):
             raise ValueError("Timeseries time_axis is underspecified in request")
 
         if "range" in feature_config:
+            if feature_config["range"]["start"] < 0:
+                raise ValueError("Timeseries range start must be greater than 0")
             if isinstance(feature_config["range"], dict):
                 request[time_axis] = (
                     f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"  # noqa: E501
