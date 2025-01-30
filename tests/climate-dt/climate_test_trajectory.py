@@ -1,4 +1,3 @@
-import copy
 from datetime import datetime, timedelta
 
 import pytest
@@ -47,9 +46,7 @@ class TestFeatureFactory:
             "axis_config": [
                 {
                     "axis_name": "date",
-                    "transformations": [
-                        {"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}
-                    ],
+                    "transformations": [{"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}],
                 },
                 {
                     "axis_name": "values",
@@ -71,14 +68,21 @@ class TestFeatureFactory:
                     "transformations": [{"name": "cyclic", "range": [0, 360]}],
                 },
             ],
-            "pre_path": {"class": "d1", "expver": "0001", "levtype": "sfc", "stream": "clte", "param": "167", "date": "20210101"},
+            "pre_path": {
+                "class": "d1",
+                "expver": "0001",
+                "levtype": "sfc",
+                "stream": "clte",
+                "param": "167",
+                "date": "20210101",
+            },
             "compressed_axes_config": [
                 "longitude",
                 "latitude",
                 "date",
                 "time",
                 "param",
-            ]
+            ],
         }
 
         conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()

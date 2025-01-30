@@ -35,22 +35,20 @@ class TestFeatureFactory:
             "stream": "clte",
             "type": "fc",
             "time": "0000",
-            #"time": "0000/0100/0200/0300/0400/0500/0600/0700/0800/0900/1000/1100/1200/1300/1400/1500/1600/1700/1800/1900/2000/2100/2200/2300",
+            # "time": "0000/0100/0200/0300/0400/0500/0600/0700/0800/0900/1000/1100/1200/1300/1400/1500/1600/1700/1800/1900/2000/2100/2200/2300",
             "feature": {
-                "type" : "timeseries",
-                "points":  [[38, -9.5]],
+                "type": "timeseries",
+                "points": [[38, -9.5]],
                 "time_axis": "date",
                 "axes": ["latitude", "longitude"],
-            }
+            },
         }
 
         self.options = {
             "axis_config": [
                 {
                     "axis_name": "date",
-                    "transformations": [
-                        {"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}
-                    ],
+                    "transformations": [{"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}],
                 },
                 {
                     "axis_name": "values",
@@ -79,7 +77,7 @@ class TestFeatureFactory:
                 "date",
                 "time",
                 "param",
-            ]
+            ],
         }
 
         conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()
@@ -143,7 +141,7 @@ class TestFeatureFactory:
         assert da.t.size == 20
 
     def test_timeseries_multiple_dates_select(self):
-        self.request["date"] = f"20210101/20210110"
+        self.request["date"] = "20210101/20210110"
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         da = decoder.to_xarray()

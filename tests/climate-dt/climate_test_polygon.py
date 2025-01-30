@@ -37,7 +37,7 @@ class TestFeatureFactory:
             "feature": {
                 "type": "polygon",
                 "shape": [[40.0, -105.0], [40.0, -104.0], [41.0, -104.0], [41.0, -105.0], [40.0, -105.0]],
-                "axes" : ["latitude", "longitude"],
+                "axes": ["latitude", "longitude"],
             },
         }
 
@@ -45,9 +45,7 @@ class TestFeatureFactory:
             "axis_config": [
                 {
                     "axis_name": "date",
-                    "transformations": [
-                        {"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}
-                    ],
+                    "transformations": [{"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}],
                 },
                 {
                     "axis_name": "values",
@@ -69,14 +67,21 @@ class TestFeatureFactory:
                     "transformations": [{"name": "cyclic", "range": [0, 360]}],
                 },
             ],
-            "pre_path": {"class": "d1", "expver": "0001", "levtype": "sfc", "stream": "clte", "param": "167", "date": "20210101"},
+            "pre_path": {
+                "class": "d1",
+                "expver": "0001",
+                "levtype": "sfc",
+                "stream": "clte",
+                "param": "167",
+                "date": "20210101",
+            },
             "compressed_axes_config": [
                 "longitude",
                 "latitude",
                 "date",
                 "time",
                 "param",
-            ]
+            ],
         }
 
         conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()
@@ -138,4 +143,3 @@ class TestFeatureFactory:
         decoder = Covjsonkit().decode(result)
         da = decoder.to_xarray()
         assert da.datetimes.size == 3
-
