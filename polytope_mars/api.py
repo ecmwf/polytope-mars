@@ -186,7 +186,6 @@ class PolytopeMars:
         base_shapes = []
 
         if "dataset" in request and request["dataset"] == "climate-dt":
-            # if request["dataset"] == "climate-dt":
             for k, v in request.items():
                 split = str(v).split("/")
 
