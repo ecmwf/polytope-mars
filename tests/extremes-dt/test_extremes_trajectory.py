@@ -1,4 +1,3 @@
-import copy
 from datetime import datetime, timedelta
 
 import pytest
@@ -31,12 +30,12 @@ class TestFeatureFactory:
             "expver": "0001",
             "param": "167",
             "step": "0",
-            "feature" :{ 
-                "type" : "trajectory", 
-                "points" : [[0,0], [1,1], [2,2]],
-                "inflation" : 0.1, 
-                "inflate" : "round",
-                "axes" :["latitude", "longitude"], 
+            "feature": {
+                "type": "trajectory",
+                "points": [[0, 0], [1, 1], [2, 2]],
+                "inflation": 0.1,
+                "inflate": "round",
+                "axes": ["latitude", "longitude"],
             },
         }
 

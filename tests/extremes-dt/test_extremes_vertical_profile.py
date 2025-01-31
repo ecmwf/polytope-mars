@@ -1,7 +1,6 @@
 import copy
 from datetime import datetime, timedelta
 
-import pytest
 from conflator import Conflator
 from covjsonkit.api import Covjsonkit
 
@@ -34,10 +33,10 @@ class TestFeatureFactory:
             "feature": {
                 "type": "verticalprofile",
                 "points": [[38.9, -9.1]],
-                "range" : {
+                "range": {
                     "start": "0",
                     "end": "1000",
-                }
+                },
             },
         }
 
@@ -99,7 +98,7 @@ class TestFeatureFactory:
         self.cf = conf.model_dump()
         self.cf["options"] = self.options
         self.change_hash(self.request, self.cf)
-        self.cf['options'] = self.options
+        self.cf["options"] = self.options
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_verticalprofile(self):
@@ -139,7 +138,6 @@ class TestFeatureFactory:
         decoder.to_xarray()
         assert True
 
-
     def change_config_grid_hash(self, config, hash):
         for mappings in config["options"]["axis_config"]:
             for sub_mapping in mappings["transformations"]:
@@ -156,7 +154,7 @@ class TestFeatureFactory:
                 hash = "1c409f6b78e87eeaeeb4a7294c28add7"
                 return self.change_config_grid_hash(config, hash)
 
-        if request.get("dataset", None) == None:
+        if request.get("dataset", None) is None:
             if request["levtype"] == "ml":
                 hash = "9fed647cd1c77c03f66d8c74a4e0ad34"
                 return self.change_config_grid_hash(config, hash)

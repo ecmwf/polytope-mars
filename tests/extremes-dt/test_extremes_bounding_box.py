@@ -31,9 +31,9 @@ class TestFeatureFactory:
             "expver": "0001",
             "param": "165/167",
             "step": "1",
-            "feature" : {
-                "type" : "boundingbox",
-                "points" : [[53.55, 2.76], [50.66, 7.86]],
+            "feature": {
+                "type": "boundingbox",
+                "points": [[53.55, 2.76], [50.66, 7.86]],
             },
         }
 
