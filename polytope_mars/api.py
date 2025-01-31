@@ -114,7 +114,7 @@ class PolytopeMars:
 
         logging.debug("Parsed request: %s", request)
 
-        shapes = self._create_base_shapes(request)
+        shapes = self._create_base_shapes(request, feature_type)
 
         shapes.extend(feature.get_shapes())
 
@@ -182,10 +182,10 @@ class PolytopeMars:
 
         return formatted_timestamp
 
-    def _create_base_shapes(self, request: dict) -> List[shapes.Shape]:
+    def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
         base_shapes = []
 
-        if "dataset" in request and request["dataset"] == "climate-dt":
+        if "dataset" in request and request["dataset"] == "climate-dt" and feature_type == "timeseries":  # noqa: E501
             for k, v in request.items():
                 split = str(v).split("/")
 
