@@ -114,7 +114,7 @@ class PolytopeMars:
 
         logging.debug("Parsed request: %s", request)
 
-        shapes = self._create_base_shapes(request)
+        shapes = self._create_base_shapes(request, feature_type)
 
         shapes.extend(feature.get_shapes())
 
@@ -170,82 +170,143 @@ class PolytopeMars:
 
         return self.coverage
 
-    def _create_base_shapes(self, request: dict) -> List[shapes.Shape]:
+    def convert_timestamp(self, timestamp):
+        # Ensure the input is a string
+        timestamp = str(timestamp)
+
+        # Pad the timestamp with leading zeros if necessary
+        timestamp = timestamp.zfill(4)
+
+        # Insert colons to format as HH:MM:SS
+        formatted_timestamp = f"{timestamp[:2]}:{timestamp[2:]}:00"
+
+        return formatted_timestamp
+
+    def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
         base_shapes = []
 
-        # TODO: not handling type conversion
-        #   * strings to integers for step, number, etc.
-        #   * date/times to datetime (and merging of date + time)
-        #   * enforcing strings are actually strings (e.g. type=fc)
+        if "dataset" in request and request["dataset"] == "climate-dt" and feature_type == "timeseries":  # noqa: E501
+            for k, v in request.items():
+                split = str(v).split("/")
 
-        time = request.pop("time").replace(":", "")
-        time = time.split("/")
-        if "to" in time:
-            raise NotImplementedError("Time ranges with 'to' keyword not supported yet")  # noqa: E501
-        # if len(time.split("/")) != 1:
-        #    raise NotImplementedError(
-        #        "Currently only one time is supported"
-        #    )  # noqa: E501
+                if k == "param":
+                    try:
+                        int(split[0])
+                    except:  # noqa: E722
+                        new_split = []
+                        for s in split:
+                            new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
+                        split = new_split
 
-        for k, v in request.items():
-            split = str(v).split("/")
+                # ALL -> All
+                if len(split) == 1 and split[0] == "ALL":
+                    base_shapes.append(shapes.All(k))
 
-            if k == "param":
-                try:
-                    int(split[0])
-                except:  # noqa: E722
-                    new_split = []
-                    for s in split:
-                        new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
-                    split = new_split
+                # Single value -> Select
+                elif len(split) == 1:
+                    if k == "date":
+                        split[0] = pd.Timestamp(split[0])
+                    if k == "time":
+                        split[0] = self.convert_timestamp(split[0])
+                    base_shapes.append(shapes.Select(k, split))
 
-            # ALL -> All
-            if len(split) == 1 and split[0] == "ALL":
-                base_shapes.append(shapes.All(k))
+                # Range a/to/b, "by" not supported -> Span
+                elif len(split) == 3 and split[1] == "to":
+                    # if date then only get time of dates in span not
+                    # all in times within date
+                    if k == "date":
+                        start = pd.Timestamp(split[0])
+                        end = pd.Timestamp(split[2])
+                        base_shapes.append(shapes.Span(k, lower=start, upper=end))
+                    elif k == "time":
+                        start = self.convert_timestamp(split[0])
+                        end = self.convert_timestamp(split[2])
+                        base_shapes.append(shapes.Span(k, lower=start, upper=end))
+                    else:
+                        base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
 
-            # Single value -> Select
-            elif len(split) == 1:
-                if k == "date":
-                    if int(split[0]) < 0:
-                        split[0] = str(
-                            (datetime.datetime.now() + datetime.timedelta(days=int(split[0]))).strftime(  # noqa: E501
-                                "%Y%m%d"
-                            )  # noqa: E501
-                        )
-                    new_split = []
-                    for t in time:
-                        new_split.append(pd.Timestamp(split[0] + "T" + t))
-                    split = new_split
-                base_shapes.append(shapes.Select(k, split))
+                elif "by" in split:
+                    raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
 
-            # Range a/to/b, "by" not supported -> Span
-            elif len(split) == 3 and split[1] == "to":
-                # if date then only get time of dates in span not
-                # all in times within date
-                if k == "date":
-                    start = pd.Timestamp(split[0] + "T" + time[0])
-                    end = pd.Timestamp(split[2] + "T" + time[-1])
-                    dates = []
-                    for s in pd.date_range(start, end):
-                        for t in time:
-                            dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
-                        # dates.append(s)
-                    base_shapes.append(shapes.Select(k, dates))
+                # List of individual values -> Union of Selects
                 else:
-                    base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
+                    if k == "date":
+                        dates = []
+                        for s in split:
+                            dates.append(pd.Timestamp(s))
+                        split = dates
+                    if k == "time":
+                        times = []
+                        for s in split:
+                            times.append(self.convert_timestamp(s))
+                        split = times
+                    base_shapes.append(shapes.Select(k, split))
+        else:
+            time = request.pop("time").replace(":", "")
+            time = time.split("/")
+            if "to" in time:
+                raise NotImplementedError("Time ranges with 'to' keyword not supported yet")  # noqa: E501
+            for k, v in request.items():
+                split = str(v).split("/")
 
-            elif "by" in split:
-                raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
+                if k == "param":
+                    try:
+                        int(split[0])
+                    except:  # noqa: E722
+                        new_split = []
+                        for s in split:
+                            new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
+                        split = new_split
 
-            # List of individual values -> Union of Selects
-            else:
-                if k == "date":
-                    dates = []
-                    for s in split:
+                # ALL -> All
+                if len(split) == 1 and split[0] == "ALL":
+                    base_shapes.append(shapes.All(k))
+
+                # Single value -> Select
+                elif len(split) == 1:
+                    if k == "date":
+                        if int(split[0]) < 0:
+                            split[0] = str(
+                                (
+                                    datetime.datetime.now() + datetime.timedelta(days=int(split[0]))
+                                ).strftime(  # noqa: E501
+                                    "%Y%m%d"
+                                )  # noqa: E501
+                            )
+                        new_split = []
                         for t in time:
-                            dates.append(pd.Timestamp(s + "T" + t))
-                    split = dates
-                base_shapes.append(shapes.Select(k, split))
+                            new_split.append(pd.Timestamp(split[0] + "T" + t))
+                        split = new_split
+                    base_shapes.append(shapes.Select(k, split))
+
+                # Range a/to/b, "by" not supported -> Span
+                elif len(split) == 3 and split[1] == "to":
+                    # if date then only get time of dates in span not
+                    # all in times within date
+                    if k == "date":
+                        start = pd.Timestamp(split[0] + "T" + time[0])
+                        end = pd.Timestamp(split[2] + "T" + time[-1])
+                        dates = []
+                        for s in pd.date_range(start, end):
+                            for t in time:
+                                dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
+                            # dates.append(s)
+                        base_shapes.append(shapes.Select(k, dates))
+                    else:
+                        base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
+
+                elif "by" in split:
+                    raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
+
+                # List of individual values -> Union of Selects
+                else:
+                    if k == "date":
+                        dates = []
+                        for s in split:
+                            for t in time:
+                                dates.append(pd.Timestamp(s + "T" + t))
+                        split = dates
+                    base_shapes.append(shapes.Select(k, split))
 
         return base_shapes
 

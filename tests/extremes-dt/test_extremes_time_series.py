@@ -15,32 +15,27 @@ class TestFeatureFactory:
     def setup_method(self):
 
         today = datetime.today()
-        yesterday = today - timedelta(days=1)
+        yesterday = today - timedelta(days=5)
         self.today = today.strftime("%Y%m%d")
         self.date = yesterday.strftime("%Y%m%d")
+        self.date2 = (today - timedelta(days=6)).strftime("%Y%m%d")
 
         self.request = {
-            "activity": "scenariomip",
+            "dataset": "extremes-dt",
             "class": "d1",
-            "dataset": "climate-dt",
-            "experiment": "ssp3-7.0",
-            "generation": "1",
+            "stream": "oper",
+            "type": "fc",
+            "date": self.date,
+            "time": "0000",
             "levtype": "sfc",
-            "date": "20210101/to/20210110",
-            "model": "ifs-nemo",
             "expver": "0001",
             "param": "167/165",
-            "realization": "1",
-            "resolution": "high",
-            "stream": "clte",
-            "type": "fc",
-            "time": "0000",
-            # "time": "0000/0100/0200/0300/0400/0500/0600/0700/0800/0900/1000/1100/1200/1300/1400/1500/1600/1700/1800/1900/2000/2100/2200/2300",
             "feature": {
                 "type": "timeseries",
-                "points": [[38, -9.5]],
-                "time_axis": "date",
+                "points": [[-9.5, 38.0]],
+                "time_axis": "step",
                 "axes": ["latitude", "longitude"],
+                "range": {"start": 0, "end": 3},
             },
         }
 
@@ -55,8 +50,8 @@ class TestFeatureFactory:
                     "transformations": [
                         {
                             "name": "mapper",
-                            "type": "healpix_nested",
-                            "resolution": 1024,
+                            "type": "octahedral",
+                            "resolution": 2560,
                             "axes": ["latitude", "longitude"],
                         }
                     ],
@@ -69,14 +64,32 @@ class TestFeatureFactory:
                     "axis_name": "longitude",
                     "transformations": [{"name": "cyclic", "range": [0, 360]}],
                 },
+                {
+                    "axis_name": "levelist",
+                    "transformations": [{"name": "type_change", "type": "int"}],
+                },
+                {
+                    "axis_name": "step",
+                    "transformations": [{"name": "type_change", "type": "int"}],
+                },
             ],
-            "pre_path": {"class": "d1", "expver": "0001", "levtype": "sfc", "stream": "clte", "param": "167"},
+            "pre_path": {
+                "class": "d1",
+                "expver": "0001",
+                "dataset": "extremes-dt",
+                "levtype": "sfc",
+                "stream": "oper",
+                "type": "fc",
+                "param": "165",
+            },
             "compressed_axes_config": [
-                "longitude",
-                "latitude",
                 "date",
                 "time",
+                "longitude",
+                "latitude",
                 "param",
+                "levelist",
+                "step",
             ],
         }
 
@@ -100,7 +113,7 @@ class TestFeatureFactory:
         request_copy = copy.deepcopy(self.request)
         result = PolytopeMars(self.cf).extract(self.request)
         request_copy["feature"]["axes"] = ["longitude", "latitude"]
-        request_copy["feature"]["points"] = [[-9.5, 38]]
+        request_copy["feature"]["points"] = [[38, -9.5]]
         result1 = PolytopeMars(self.cf).extract(request_copy)
         assert result == result1
 
@@ -118,7 +131,7 @@ class TestFeatureFactory:
 
     def test_timeseries_step_in_both(self):
         self.request["step"] = "0/to/3"
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError):
             result = PolytopeMars(self.cf).extract(self.request)
             decoder = Covjsonkit().decode(result)
             decoder.to_xarray()
@@ -138,14 +151,15 @@ class TestFeatureFactory:
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         da = decoder.to_xarray()
-        assert da.t.size == 20
+        assert da.t.size == 4
+        assert da.datetime.size == 2
 
     def test_timeseries_multiple_dates_select(self):
-        self.request["date"] = "20210101/20210110"
+        self.request["date"] = f"{self.date}/{self.date2}"
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         da = decoder.to_xarray()
-        assert da.t.size == 2
+        assert da.datetime.size == 2
 
     def test_timeseries_no_lon(self):
         self.request["feature"]["axes"] = ["levelist", "latitude"]
