@@ -1,7 +1,6 @@
+import copy
 from datetime import datetime, timedelta
 
-import pytest
-import copy
 from conflator import Conflator
 from covjsonkit.api import Covjsonkit
 
@@ -45,9 +44,7 @@ class TestFeatureFactory:
             "axis_config": [
                 {
                     "axis_name": "date",
-                    "transformations": [
-                        {"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}
-                    ],
+                    "transformations": [{"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}],
                 },
                 {
                     "axis_name": "values",
@@ -77,7 +74,7 @@ class TestFeatureFactory:
                     "transformations": [{"name": "type_change", "type": "int"}],
                 },
             ],
-            "pre_path": {"class": "d1", "expver": "0001", "levtype": "pl", "stream": "clte","date": "20210101"},
+            "pre_path": {"class": "d1", "expver": "0001", "levtype": "pl", "stream": "clte", "date": "20210101"},
             "compressed_axes_config": [
                 "date",
                 "time",
@@ -86,8 +83,8 @@ class TestFeatureFactory:
                 "param",
                 "levelist",
                 "step",
-                "levelist"
-            ]
+                "levelist",
+            ],
         }
 
         conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()

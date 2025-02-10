@@ -97,8 +97,8 @@ class TestFeatureFactory:
         conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()
         self.cf = conf.model_dump()
         self.cf["options"] = self.options
-        #self.change_hash(self.request, self.cf)
-        #self.cf["options"] = self.options
+        # self.change_hash(self.request, self.cf)
+        # self.cf["options"] = self.options
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_verticalprofile(self):
