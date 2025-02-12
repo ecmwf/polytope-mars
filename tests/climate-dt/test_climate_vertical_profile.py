@@ -14,29 +14,29 @@ class TestFeatureFactory:
     def setup_method(self):
 
         today = datetime.today()
-        yesterday = today - timedelta(days=5)
-        self.today = today.strftime("%Y%m%d")
+        yesterday = today - timedelta(days=1)
         self.date = yesterday.strftime("%Y%m%d")
-        self.date2 = (today - timedelta(days=6)).strftime("%Y%m%d")
 
         self.request = {
-            "dataset": "extremes-dt",
+            "activity": "scenariomip",
             "class": "d1",
-            "stream": "oper",
-            "type": "fc",
-            "date": self.date,
-            "time": "0000",
+            "dataset": "climate-dt",
+            "experiment": "ssp3-7.0",
+            "generation": "1",
             "levtype": "pl",
+            "date": "20210101",
+            "model": "ifs-nemo",
             "expver": "0001",
-            "param": "130",
-            "step": "0",
+            "param": "60",
+            "realization": "1",
+            "resolution": "high",
+            "stream": "clte",
+            "type": "fc",
+            "time": "0000",
+            "levelist": "1/to/1000",
             "feature": {
                 "type": "verticalprofile",
                 "points": [[38.9, -9.1]],
-                "range": {
-                    "start": "0",
-                    "end": "1000",
-                },
             },
         }
 
@@ -51,8 +51,8 @@ class TestFeatureFactory:
                     "transformations": [
                         {
                             "name": "mapper",
-                            "type": "octahedral",
-                            "resolution": 2560,
+                            "type": "healpix_nested",
+                            "resolution": 1024,
                             "axes": ["latitude", "longitude"],
                         }
                     ],
@@ -74,15 +74,7 @@ class TestFeatureFactory:
                     "transformations": [{"name": "type_change", "type": "int"}],
                 },
             ],
-            "pre_path": {
-                "class": "d1",
-                "expver": "0001",
-                "dataset": "extremes-dt",
-                "levtype": "pl",
-                "stream": "oper",
-                "type": "fc",
-                "param": "130",
-            },
+            "pre_path": {"class": "d1", "expver": "0001", "levtype": "pl", "stream": "clte", "date": "20210101"},
             "compressed_axes_config": [
                 "date",
                 "time",
@@ -91,14 +83,13 @@ class TestFeatureFactory:
                 "param",
                 "levelist",
                 "step",
+                "levelist",
             ],
         }
 
         conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()
         self.cf = conf.model_dump()
         self.cf["options"] = self.options
-        # self.change_hash(self.request, self.cf)
-        # self.cf["options"] = self.options
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
     def test_verticalprofile(self):
@@ -132,31 +123,9 @@ class TestFeatureFactory:
 
     def test_verticalprofile_range(self):
         self.request["feature"]["range"] = {"start": 0, "end": 1000}
+        del self.request["levelist"]
         self.request["feature"]["axes"] = ["latitude", "longitude", "levelist"]
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
-
-    def change_config_grid_hash(self, config, hash):
-        for mappings in config["options"]["axis_config"]:
-            for sub_mapping in mappings["transformations"]:
-                if sub_mapping["name"] == "mapper":
-                    sub_mapping["md5_hash"] = hash
-        return config
-
-    def change_hash(self, request, config):
-
-        # This only holds for climate dt data
-        if request.get("dataset", None) == "extremes-dt":
-            # all resolution=standard have h128
-            if request["levtype"] == "pl":
-                hash = "1c409f6b78e87eeaeeb4a7294c28add7"
-                return self.change_config_grid_hash(config, hash)
-
-        if request.get("dataset", None) is None:
-            if request["levtype"] == "ml":
-                hash = "9fed647cd1c77c03f66d8c74a4e0ad34"
-                return self.change_config_grid_hash(config, hash)
-
-        return config
