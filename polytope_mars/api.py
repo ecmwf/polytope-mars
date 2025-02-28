@@ -243,17 +243,17 @@ class PolytopeMars:
                         if k == "date":
                             start = pd.Timestamp(split[0])
                             end = pd.Timestamp(split[2])
-                            timestamps = pd.date_range(start=start, end=end, freq=f'{split[-1]}D')
+                            timestamps = pd.date_range(start=start, end=end, freq=f"{split[-1]}D")
                             base_shapes.append(shapes.Select(k, timestamps.tolist()))
                         elif k == "time":
                             start = self.convert_timestamp(split[0])
                             end = self.convert_timestamp(split[2])
-                            times = pd.date_range(start=start, end=end, freq=f'{split[-1]}H')
-                            #print(times.strftime("%H%M").tolist())
+                            times = pd.date_range(start=start, end=end, freq=f"{split[-1]}H")
+                            # print(times.strftime("%H%M").tolist())
                             base_shapes.append(shapes.Select(k, times.strftime("%H:%M:%S").tolist()))
-                            #base_shapes.append(shapes.Span(k, lower=start, upper=end))
-                            #base_shapes.append(shapes.Span(k, lower=start, upper=end))
-                        #raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
+                            # base_shapes.append(shapes.Span(k, lower=start, upper=end))
+                            # base_shapes.append(shapes.Span(k, lower=start, upper=end))
+                        # raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
 
                 # List of individual values -> Union of Selects
                 else:
@@ -275,12 +275,12 @@ class PolytopeMars:
                 start = self.convert_timestamp(split[0])
                 end = self.convert_timestamp(split[2])
                 if "by" in time:
-                    times = pd.date_range(start=start, end=end, freq=f'{split[-1]}H')
+                    times = pd.date_range(start=start, end=end, freq=f"{split[-1]}H")
                 else:
-                    times = pd.date_range(start=start, end=end, freq='1H')
+                    times = pd.date_range(start=start, end=end, freq="1H")
                 time = times.strftime("%H:%M:%S").tolist()
-                #raise NotImplementedError("Time ranges with 'to' keyword not supported yet")  # noqa: E501
-            
+                # raise NotImplementedError("Time ranges with 'to' keyword not supported yet")  # noqa: E501
+
             for k, v in request.items():
                 split = str(v).split("/")
 
@@ -348,14 +348,16 @@ class PolytopeMars:
                             start = pd.Timestamp(split[0] + "T" + time[0])
                             end = pd.Timestamp(split[2] + "T" + time[-1])
                             dates = []
-                            for s in pd.date_range(start, end, freq=f'{split[-1]}D'):
+                            for s in pd.date_range(start, end, freq=f"{split[-1]}D"):
                                 for t in time:
                                     dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
                                 # dates.append(s)
                             base_shapes.append(shapes.Select(k, dates))
                         else:
                             base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))
-                        raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
+                        raise ValueError(
+                            "Ranges with step-size specified with 'by' keyword is not supported"
+                        )  # noqa: E501
 
                 # List of individual values -> Union of Selects
                 else:
