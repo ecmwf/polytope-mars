@@ -167,7 +167,14 @@ class TestFeatureFactory:
             PolytopeMars(self.cf).extract(self.request)
 
     def test_timeseries_neg_step(self):
-        # self.request["feature"]["axes"] = ["levelist", "latitude"]
         self.request["feature"]["range"] = {"start": -1, "end": 3}
         with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)
+
+    def test_timeseries_interval(self):
+        self.request["feature"]["range"] = {"start": 1, "end": 10, "interval": 2}
+        PolytopeMars(self.cf).extract(self.request)
+
+    def test_timeseries_number_interval(self):
+        self.request["number"] = "1/to/10/by/2"
+        PolytopeMars(self.cf).extract(self.request)
