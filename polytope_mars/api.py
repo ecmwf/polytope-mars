@@ -354,10 +354,8 @@ class PolytopeMars:
                                 # dates.append(s)
                             base_shapes.append(shapes.Select(k, dates))
                         else:
-                            base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))
-                        raise ValueError(
-                            "Ranges with step-size specified with 'by' keyword is not supported"
-                        )  # noqa: E501
+                            expansion = list(range(int(split[0]), int(split[2]), int(split[-1])))
+                            base_shapes.append(shapes.Select(k, expansion))
 
                 # List of individual values -> Union of Selects
                 else:
