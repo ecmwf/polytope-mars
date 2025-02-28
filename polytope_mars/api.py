@@ -146,7 +146,6 @@ class PolytopeMars:
         start = time.time()
         logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
-        print(preq)
         result = self.api.retrieve(preq)
 
         end = time.time()
