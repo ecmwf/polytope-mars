@@ -271,10 +271,10 @@ class PolytopeMars:
             time = request.pop("time").replace(":", "")
             time = time.split("/")
             if "to" in time:
-                start = self.convert_timestamp(split[0])
-                end = self.convert_timestamp(split[2])
+                start = self.convert_timestamp(time[0])
+                end = self.convert_timestamp(time[2])
                 if "by" in time:
-                    times = pd.date_range(start=start, end=end, freq=f"{split[-1]}H")
+                    times = pd.date_range(start=start, end=end, freq=f"{time[-1]}H")
                 else:
                     times = pd.date_range(start=start, end=end, freq="1H")
                 time = times.strftime("%H:%M:%S").tolist()
