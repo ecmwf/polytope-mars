@@ -171,3 +171,9 @@ class TestFeatureFactory:
         self.request["feature"]["range"] = {"start": -1, "end": 3}
         with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)
+
+    def test_timeseries_interval(self):
+        # self.request["feature"]["axes"] = ["levelist", "latitude"]
+        self.request["feature"]["range"] = {"start": 1, "end": 10, "interval": 2}
+        with pytest.raises(ValueError):
+            PolytopeMars(self.cf).extract(self.request)

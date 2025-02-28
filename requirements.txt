@@ -1,3 +1,4 @@
+polytope-python
 covjsonkit
 xarray
 shapely
