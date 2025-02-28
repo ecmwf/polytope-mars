@@ -154,3 +154,13 @@ class TestFeatureFactory:
         self.request["feature"]["range"] = {"start": -1, "end": 3}
         with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)
+
+    def test_timeseries_by_one(self):
+        self.request["date"] = ("20210101/to/20210110/by/1",)
+        with pytest.raises(ValueError):
+            PolytopeMars(self.cf).extract(self.request)
+
+    def test_timeseries_by_week(self):
+        self.request["date"] = ("20210101/to/20210110/by/7",)
+        with pytest.raises(ValueError):
+            PolytopeMars(self.cf).extract(self.request)
