@@ -105,7 +105,7 @@ class TestFeatureFactory:
 
     def test_circle_three_values_per_point(self):
         with pytest.raises(ValueError):
-            self.request["feature"]["center"] = [[0, 0, 0,0]]
+            self.request["feature"]["center"] = [[0, 0, 0, 0]]
             PolytopeMars(self.cf).extract(self.request)
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")

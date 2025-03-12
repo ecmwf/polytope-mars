@@ -6,6 +6,7 @@ from shapely.geometry import LineString, Polygon
 from shapely.ops import split
 
 from ..feature import Feature
+from ..utils.areas import field_area
 
 
 def split_polygon(polygon):
@@ -76,14 +77,16 @@ class Polygons(Feature):
         assert feature_config.pop("type") == "polygon"
         self.shape = feature_config.pop("shape")
         self.max_area = client_config.polygonrules.max_area
+        self.area = 0
         if type(self.shape[0][0]) is not list:
+            self.area = get_area(self.shape)
             if len(self.shape) > client_config.polygonrules.max_points:
                 raise ValueError(
                     f"Number of points {len(self.shape)} exceeds the maximum of {client_config.polygonrules.max_points}"  # noqa: E501
                 )
-            if get_area(self.shape) > client_config.polygonrules.max_area:
+            if self.area > client_config.polygonrules.max_area:
                 raise ValueError(
-                    f"Area of polygon {get_area(self.shape)} km\u00b2 exceeds the maximum of size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
+                    f"Area of polygon {self.area} km\u00b2 exceeds the maximum of size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
                 )
             self.shape = [self.shape]
         else:
@@ -92,6 +95,7 @@ class Polygons(Feature):
             for polygon in self.shape:
                 len_polygons += len(polygon)
                 area_polygons += get_area(polygon)
+            self.area = area_polygons
             if len_polygons > client_config.polygonrules.max_points:
                 raise ValueError(
                     f"Number of points {len_polygons} exceeds the maximum of {client_config.polygonrules.max_points}"  # noqa: E501
@@ -137,23 +141,8 @@ class Polygons(Feature):
         if "axes" in request:
             if len(request["axes"]) != 2:
                 raise ValueError("Polygon feature must have two axes, latitude and longitude")
-        if "step" in request and "number" in request:
-            step = request["step"].split("/")
-            number = request["number"].split("/")
-
-            if "to" in step:
-                step_len = int(step[2]) - int(step[0])
-            else:
-                step_len = len(step)
-
-            if "to" in number:
-                number_len = int(number[2]) - int(number[0])
-            else:
-                number_len = len(number)
-
-            shape_area = get_area(self.shape[0])
-            if step_len * number_len * shape_area > self.max_area:
-                raise ValueError(
-                    "The request size is too large, lower number of fields requested or size of shape requested"  # noqa: E501
-                )
+        if field_area(request, self.area) > self.max_area:
+            raise ValueError(
+                "The request size is too large, lower number of fields requested or size of shape requested"  # noqa: E501
+            )
         return request

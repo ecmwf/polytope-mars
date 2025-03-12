@@ -1,10 +1,7 @@
-import numpy as np
 from polytope_feature import shapes
 
 from ..feature import Feature
-from ..utils.areas import get_circle_area_from_coords, field_area
-from ..utils.datetimes import days_between_dates, hours_between_times
-
+from ..utils.areas import field_area, get_circle_area_from_coords
 
 
 class Circle(Feature):
@@ -14,8 +11,10 @@ class Circle(Feature):
             raise ValueError("Circle center must have two values, latitude and longitude")
         self.center = feature_config.pop("center")
         self.max_area = client_config.polygonrules.max_area
-        self.radius =feature_config.pop("radius")
-        self.area = get_circle_area_from_coords(self.center[0][0], self.center[0][1], self.center[0][0] + self.radius, self.center[0][1] + self.radius)
+        self.radius = feature_config.pop("radius")
+        self.area = get_circle_area_from_coords(
+            self.center[0][0], self.center[0][1], self.center[0][0] + self.radius, self.center[0][1] + self.radius
+        )
         if self.area > client_config.polygonrules.max_area:
             raise ValueError(
                 f"Area of circle {self.area} km\u00b2 exceeds the maximum of size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
@@ -34,7 +33,7 @@ class Circle(Feature):
                 shapes.Disk(
                     [self.axes[0], self.axes[1]],
                     centre=self.center[0],
-                    radius=[self.radius,self.radius],
+                    radius=[self.radius, self.radius],
                 )
             ]
         else:
@@ -42,7 +41,7 @@ class Circle(Feature):
                 shapes.Disk(
                     [self.axes[0], self.axes[1], self.axes[2]],
                     centre=self.center[0],
-                    radius=[self.radius,self.radius, self.radius],
+                    radius=[self.radius, self.radius, self.radius],
                 )
             ]
 
@@ -72,6 +71,5 @@ class Circle(Feature):
             )
         if len(feature_config["center"]) != 1:
             raise ValueError("Circle feature must have one center point")
-        
 
         return request

@@ -29,7 +29,7 @@ class TestFeatureFactory:
             "domain": "g",
             "param": "164/166/167",
             "number": "1",
-            "step": "0",
+            "step": "0/1",
             "feature": {
                 "type": "boundingbox",
                 "points": [[0, 0], [1, 1]],
@@ -128,4 +128,9 @@ class TestFeatureFactory:
     def test_boundingbox_no_points(self):
         with pytest.raises(KeyError):
             del self.request["feature"]["points"]
+            PolytopeMars(self.cf).extract(self.request)
+
+    def test_boundingbox_too_large(self):
+        self.cf["polygonrules"]["max_area"] = 0.0000001
+        with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)

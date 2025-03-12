@@ -15,13 +15,13 @@ from polytope_feature.polytope import Polytope, Request
 
 from .config import PolytopeMarsConfig
 from .features.boundingbox import BoundingBox
+from .features.circle import Circle
 from .features.frame import Frame
 from .features.path import Path
 from .features.polygon import Polygons
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
-from .features.circle import Circle
 
 features = {
     "timeseries": TimeSeries,

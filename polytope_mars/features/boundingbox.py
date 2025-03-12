@@ -8,6 +8,7 @@ from shapely.geometry import LineString, Polygon
 from shapely.ops import split
 
 from ..feature import Feature
+from ..utils.areas import field_area
 
 
 def split_polygon(polygon):
@@ -106,11 +107,11 @@ class BoundingBox(Feature):
 
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
-        area_bb = get_area(self.points)
-        logging.info(f"Area of bounding box: {area_bb} km\u00b2")
-        if area_bb > client_config.polygonrules.max_area:
+        self.area_bb = get_area(self.points)
+        logging.info(f"Area of bounding box: {self.area_bb} km\u00b2")
+        if self.area_bb > client_config.polygonrules.max_area:
             raise ValueError(
-                f"Area of Bounding Box {area_bb} km\u00b2 exceeds the maximum size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
+                f"Area of Bounding Box {self.area_bb} km\u00b2 exceeds the maximum size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
             )
 
     def get_shapes(self):
@@ -189,25 +190,11 @@ class BoundingBox(Feature):
                 raise ValueError(
                     "Bounding Box axes must contain at most 3 values, latitude, longitude, and levelist"
                 )  # noqa: E501
-        if "step" in request and "number" in request:
-            step = request["step"].split("/")
-            number = request["number"].split("/")
 
-            if "to" in step:
-                step_len = int(step[2]) - int(step[0])
-            else:
-                step_len = len(step)
-
-            if "to" in number:
-                number_len = int(number[2]) - int(number[0])
-            else:
-                number_len = len(number)
-
-            shape_area = get_area(self.points)
-            if step_len * number_len * shape_area > self.max_area:
-                raise ValueError(
-                    "The request size is too large, lower number of fields requested or size of shape requested"  # noqa: E501
-                )
+        if field_area(request, self.area_bb) > self.max_area:
+            raise ValueError(
+                "The request size is too large, lower number of fields requested or size of shape requested"  # noqa: E501
+            )
 
         if len(feature_config["points"]) != 2:
             raise ValueError("Bounding box must have only two points in points")  # noqa: E501
