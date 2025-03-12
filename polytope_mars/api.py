@@ -21,6 +21,7 @@ from .features.polygon import Polygons
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
+from .features.circle import Circle
 
 features = {
     "timeseries": TimeSeries,
@@ -30,6 +31,7 @@ features = {
     "trajectory": Path,
     "shapefile": Shapefile,
     "polygon": Polygons,
+    "circle": Circle,
 }
 
 
