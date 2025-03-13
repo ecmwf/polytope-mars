@@ -29,10 +29,11 @@ class TestFeatureFactory:
             "domain": "g",
             "param": "164/166/167",
             "number": "1",
-            "step": "0/1",
+            "step": "0",
             "feature": {
-                "type": "boundingbox",
-                "points": [[0, 0], [1, 1]],
+                "type": "circle",
+                "center": [[0, 0]],
+                "radius": 1,
             },
         }
 
@@ -91,46 +92,51 @@ class TestFeatureFactory:
         self.cf["options"] = self.options
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
-    def test_boundingbox(self):
+    def test_circle(self):
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         decoder.to_xarray()
         assert True
 
-    def test_boundingbox_three_points(self):
+    def test_circle_three_points(self):
         with pytest.raises(ValueError):
-            self.request["feature"]["points"] = [[0, 0], [1, 1], [2, 2]]
+            self.request["feature"]["center"] = [[0, 0], [1, 1], [2, 2]]
             PolytopeMars(self.cf).extract(self.request)
 
-    def test_boundingbox_three_values_per_point(self):
+    def test_circle_three_values_per_point(self):
         with pytest.raises(ValueError):
-            self.request["feature"]["points"] = [[0, 0, 0], [1, 1, 1]]
+            self.request["feature"]["center"] = [[0, 0, 0, 0]]
             PolytopeMars(self.cf).extract(self.request)
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
-    def test_boundingbox_lonlat(self):
+    def test_circle_lonlat(self):
         request_copy = copy.deepcopy(self.request)
-        self.request["feature"]["points"] = [[0.1, 0.2], [0.2, 0.3]]
+        self.request["feature"]["center"] = [[0.1, 0.2]]
         result = PolytopeMars(self.cf).extract(self.request)
         request_copy["feature"]["axes"] = ["longitude", "latitude"]
-        request_copy["feature"]["points"] = [[0.2, 0.1], [0.3, 0.2]]
+        request_copy["feature"]["center"] = [[0.2, 0.1]]
         result2 = PolytopeMars(self.cf).extract(request_copy)
 
         assert result == result2
 
     # @pytest.mark.skip(reason="Gribjump not set up for ci actions yet")
-    def test_boundingbox_1_axes(self):
+    def test_circle_1_axes(self):
         self.request["feature"]["axes"] = ["latitude"]
-        self.request["feature"]["points"] = [[-1], [0], [1]]
+        self.request["feature"]["center"] = [[-1]]
         with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)
 
-    def test_boundingbox_no_points(self):
+    def test_circle_no_center(self):
         with pytest.raises(KeyError):
-            del self.request["feature"]["points"]
+            del self.request["feature"]["center"]
             PolytopeMars(self.cf).extract(self.request)
 
-    def test_boundingbox_too_large(self):
+    def test_circle_no_radius(self):
+        with pytest.raises(KeyError):
+            del self.request["feature"]["radius"]
+            PolytopeMars(self.cf).extract(self.request)
+
+    def test_circle_too_large(self):
         self.cf["polygonrules"]["max_area"] = 0.0000001
         with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)
