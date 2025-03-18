@@ -108,7 +108,7 @@ class BoundingBox(Feature):
 
         if field_area(request, self.area_bb) > self.max_area:
             raise ValueError(
-                "The request size is too large, lower number of fields requested or size of shape requested"  # noqa: E501
+                f"The request size is too large {field_area(request, self.area_bb)} km\u00b2, must be below {self.max_area} km\u00b2. Lower number of fields requested or size of shape requested"  # noqa: E501
             )
 
         if len(feature_config["points"]) != 2:

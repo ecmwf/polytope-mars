@@ -16,10 +16,10 @@ class Polygons(Feature):
                 raise ValueError(
                     f"Number of points {len(self.shape)} exceeds the maximum of {client_config.polygonrules.max_points}"  # noqa: E501
                 )
-            if self.area > client_config.polygonrules.max_area:
-                raise ValueError(
-                    f"Area of polygon {self.area} km\u00b2 exceeds the maximum of size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
-                )
+            # if self.area > client_config.polygonrules.max_area:
+            #    raise ValueError(
+            #        f"Area of polygon {self.area} km\u00b2 exceeds the maximum of size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
+            #    )
             self.shape = [self.shape]
         else:
             len_polygons = 0
@@ -32,10 +32,10 @@ class Polygons(Feature):
                 raise ValueError(
                     f"Number of points {len_polygons} exceeds the maximum of {client_config.polygonrules.max_points}"  # noqa: E501
                 )
-            if area_polygons > client_config.polygonrules.max_area:
-                raise ValueError(
-                    f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees\u00b2"  # noqa: E501
-                )
+            # if area_polygons > client_config.polygonrules.max_area:
+            #    raise ValueError(
+            #        f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees\u00b2"  # noqa: E501
+            #    )
 
         if "axes" not in feature_config:
             self.axes = ["latitude", "longitude"]
@@ -70,11 +70,14 @@ class Polygons(Feature):
         return ["latitude", "longitude"]
 
     def parse(self, request, feature_config):
+        print("polygon area: ", self.area)
+        print("Max area: ", self.max_area)
+        print("Field: ", field_area(request, self.area))
         if "axes" in request:
             if len(request["axes"]) != 2:
                 raise ValueError("Polygon feature must have two axes, latitude and longitude")
         if field_area(request, self.area) > self.max_area:
             raise ValueError(
-                "The request size is too large, lower number of fields requested or size of shape requested"  # noqa: E501
+                f"The request size is too large {field_area(request, self.area)} km\u00b2, must be below {self.max_area} km\u00b2. Lower number of fields requested or size of shape requested"  # noqa: E501
             )
         return request
