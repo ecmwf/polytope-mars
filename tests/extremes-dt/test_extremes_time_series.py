@@ -159,7 +159,7 @@ class TestFeatureFactory:
         result = PolytopeMars(self.cf).extract(self.request)
         decoder = Covjsonkit().decode(result)
         da = decoder.to_xarray()
-        assert da.datetime.size == 2
+        assert da[0].datetime.size == 2
 
     def test_timeseries_no_lon(self):
         self.request["feature"]["axes"] = ["levelist", "latitude"]
@@ -171,3 +171,7 @@ class TestFeatureFactory:
         self.request["feature"]["range"] = {"start": -1, "end": 3}
         with pytest.raises(ValueError):
             PolytopeMars(self.cf).extract(self.request)
+
+    def test_timeseries_by_2(self):
+        self.request["feature"]["range"] = {"start": 1, "end": 10, "interval": 2}
+        PolytopeMars(self.cf).extract(self.request)
