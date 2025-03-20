@@ -105,6 +105,8 @@ class PolytopeMars:
         else:
             timeseries_type = None
 
+        logging.debug("Time Series Type: %s", timeseries_type)
+
         feature = self._feature_factory(feature_type, feature_config, self.conf)  # noqa: E501
 
         feature.validate(request, feature_config_copy)
@@ -160,7 +162,7 @@ class PolytopeMars:
             "CoverageCollection", feature_type
         )  # noqa: E501
 
-        #if timeseries_type == "date":
+        # if timeseries_type == "date":
         if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
             self.coverage = encoder.from_polytope_step(result)
         else:
@@ -188,7 +190,11 @@ class PolytopeMars:
     def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
         base_shapes = []
 
-        if "dataset" in request and request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):  # noqa: E501
+        if (
+            "dataset" in request
+            and request["dataset"] == "climate-dt"  # noqa: W503
+            and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
+        ):  # noqa: E501
             for k, v in request.items():
                 split = str(v).split("/")
 
