@@ -67,7 +67,16 @@ class TestFeatureFactory:
                     "transformations": [{"name": "cyclic", "range": [0, 360]}],
                 },
             ],
-            "pre_path": {"class": "d1", "expver": "0001", "levtype": "sfc", "stream": "clte"},
+            "pre_path": {                
+                "class": "d1",
+                "expver": "0001",
+                "levtype": "sfc",
+                "stream": "clte",
+                "param": "167",
+                "dataset": "climate-dt", 
+                "activity": "scenariomip", 
+                "experiment": "ssp3-7.0",
+            },
             "compressed_axes_config": [
                 "longitude",
                 "latitude",
