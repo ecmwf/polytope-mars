@@ -103,9 +103,7 @@ class PolytopeMars:
             except KeyError:
                 raise KeyError("The timeseries feature requires a 'time_axis' keyword")  # noqa: E501
         else:
-            timeseries_type = None
-
-        logging.debug("Time Series Type: %s", timeseries_type)
+            timeseries_type = None  # noqa: F841
 
         feature = self._feature_factory(feature_type, feature_config, self.conf)  # noqa: E501
 
