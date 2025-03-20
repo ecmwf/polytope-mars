@@ -103,7 +103,7 @@ class PolytopeMars:
             except KeyError:
                 raise KeyError("The timeseries feature requires a 'time_axis' keyword")  # noqa: E501
         else:
-            timeseries_type = None
+            timeseries_type = None  # noqa: F841
 
         feature = self._feature_factory(feature_type, feature_config, self.conf)  # noqa: E501
 
@@ -160,8 +160,12 @@ class PolytopeMars:
             "CoverageCollection", feature_type
         )  # noqa: E501
 
-        if timeseries_type == "date":
-            self.coverage = encoder.from_polytope_step(result)
+        # if timeseries_type == "date":
+        if "dataset" in request:
+            if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
+                self.coverage = encoder.from_polytope_step(result)
+            else:
+                self.coverage = encoder.from_polytope(result)
         else:
             self.coverage = encoder.from_polytope(result)
 
@@ -187,7 +191,11 @@ class PolytopeMars:
     def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
         base_shapes = []
 
-        if "dataset" in request and request["dataset"] == "climate-dt" and feature_type == "timeseries":  # noqa: E501
+        if (
+            "dataset" in request
+            and request["dataset"] == "climate-dt"  # noqa: W503
+            and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
+        ):  # noqa: E501
             for k, v in request.items():
                 split = str(v).split("/")
 

@@ -43,10 +43,8 @@ class TestFeatureFactory:
 
         self.options = {
             "axis_config": [
-                {
-                    "axis_name": "date",
-                    "transformations": [{"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}],
-                },
+                {"axis_name": "date", "transformations": [{"name": "type_change", "type": "date"}]},
+                {"axis_name": "time", "transformations": [{"name": "type_change", "type": "time"}]},
                 {
                     "axis_name": "values",
                     "transformations": [
@@ -73,6 +71,9 @@ class TestFeatureFactory:
                 "levtype": "sfc",
                 "stream": "clte",
                 "param": "167",
+                "dataset": "climate-dt",
+                "activity": "scenariomip",
+                "experiment": "ssp3-7.0",
                 "date": "20210101",
             },
             "compressed_axes_config": [
