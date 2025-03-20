@@ -163,8 +163,9 @@ class PolytopeMars:
         )  # noqa: E501
 
         # if timeseries_type == "date":
-        if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
-            self.coverage = encoder.from_polytope_step(result)
+        if "dataset" in request:
+            if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
+                self.coverage = encoder.from_polytope_step(result)
         else:
             self.coverage = encoder.from_polytope(result)
 
