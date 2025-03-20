@@ -174,6 +174,7 @@ def field_area(request, area):
 
     date = request["date"].split("/")
     time = request["time"].split("/")
+    param = request["param"].split("/")
 
     if "to" in date:
         date_len = days_between_dates(date[0], date[2])
@@ -185,6 +186,8 @@ def field_area(request, area):
     else:
         time_len = len(time)
 
+    param_len = len(param)
+
     shape_area = area
 
-    return step_len * number_len * time_len * date_len * levelist_len * shape_area
+    return param_len * step_len * number_len * time_len * date_len * levelist_len * shape_area
