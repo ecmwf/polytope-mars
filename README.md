@@ -137,3 +137,8 @@ An example config can be found here [example_config.json](example_config.json). 
 1. **datacube:** This option is used to set up what type of datacube is being used at the moment, currently only gribjump is supported.
 2. **options** These are the options used by polytope for interpreting the data available.
 3. **coverageconfig** These options are used by convjsonkit to parse the output of polytope into coverageJSON.
+
+
+## Acknowledgements
+
+Past and current funding and support is listed in the adjoining [Acknowledgements](./ACKNOWLEDGEMENTS.rst).
