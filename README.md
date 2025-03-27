@@ -1,5 +1,5 @@
-| :warning: This project is BETA and will be experimental for the foreseeable future. Interfaces and functionality are likely to change. DO NOT use this software in any project/software that is operational. |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+<!-- | :warning: This project is BETA and will be experimental for the foreseeable future. Interfaces and functionality are likely to change. DO NOT use this software in any project/software that is operational. |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -->
 
 <h3 align="center">
 <img src="./docs/images/ECMWF_logo.svg.png" width=60%>
@@ -14,6 +14,9 @@
   <a href="https://codecov.io/gh/ecmwf/polytope-mars"><img src="https://codecov.io/gh/ecmwf/polytope-mars/branch/develop/graph/badge.svg"></a>
   <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
   <a href="https://github.com/ecmwf/polytope-mars/releases"><img src="https://img.shields.io/github/v/release/ecmwf/polytope-mars?color=blue&label=Release&style=flat-square"></a>
+  <a href="https://github.com/ecmwf/codex/raw/refs/heads/main/Project%20Maturity">
+    <img src="https://github.com/ecmwf/codex/raw/refs/heads/main/Project%20Maturity/incubating_badge.svg" alt="Project Maturity">
+  </a>
 </p>
 <p align="center">
   <a href="#concept">Concept</a> •
@@ -34,6 +37,9 @@ Current features include:
 * [Trajectory](docs/user_guide/trajectory.md)
 * [Polygon](docs/user_guide/polygon.md)
 * [Frame](docs/user_guide/frame.md)
+
+> \[!IMPORTANT\]
+> This software is **Incubating** and subject to ECMWF's guidelines on [Software Maturity](https://github.com/ecmwf/codex/raw/refs/heads/main/Project%20Maturity).
 
 ## Installation
 
@@ -131,3 +137,8 @@ An example config can be found here [example_config.json](example_config.json). 
 1. **datacube:** This option is used to set up what type of datacube is being used at the moment, currently only gribjump is supported.
 2. **options** These are the options used by polytope for interpreting the data available.
 3. **coverageconfig** These options are used by convjsonkit to parse the output of polytope into coverageJSON.
+
+
+## Acknowledgements
+
+Past and current funding and support is listed in the adjoining [Acknowledgements](./ACKNOWLEDGEMENTS.rst).
