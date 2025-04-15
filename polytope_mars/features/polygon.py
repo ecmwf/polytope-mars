@@ -70,14 +70,11 @@ class Polygons(Feature):
         return ["latitude", "longitude"]
 
     def parse(self, request, feature_config):
-        print("polygon area: ", self.area)
-        print("Max area: ", self.max_area)
-        print("Field: ", field_area(request, self.area))
         if "axes" in request:
             if len(request["axes"]) != 2:
                 raise ValueError("Polygon feature must have two axes, latitude and longitude")
         if field_area(request, self.area) > self.max_area:
             raise ValueError(
-                f"The total request size is too large, area of fields {self.area} * total number of fields = {field_area(request, self.area)} km\u00b2, must be below {self.max_area} km\u00b2 for total size request. "  # noqa: E501
+                f"The total request size is too large, area of request shape {self.area} * total number of fields = {field_area(request, self.area)} km\u00b2, must be below {self.max_area} km\u00b2 for total size request. "  # noqa: E501
             )
         return request
