@@ -78,6 +78,6 @@ class Polygons(Feature):
                 raise ValueError("Polygon feature must have two axes, latitude and longitude")
         if field_area(request, self.area) > self.max_area:
             raise ValueError(
-                f"The request size is too large {field_area(request, self.area)} km\u00b2, must be below {self.max_area} km\u00b2. Lower number of fields requested or size of shape requested"  # noqa: E501
+                f"The total request size is too large, area of fields {self.area} * total number of fields = {field_area(request, self.area)} km\u00b2, must be below {self.max_area} km\u00b2 for total size request. "  # noqa: E501
             )
         return request
