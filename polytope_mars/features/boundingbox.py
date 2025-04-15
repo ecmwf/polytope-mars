@@ -24,10 +24,10 @@ class BoundingBox(Feature):
 
         self.area_bb = get_boundingbox_area(self.points)
         logging.info(f"Area of bounding box: {self.area_bb} km\u00b2")
-        if self.area_bb > client_config.polygonrules.max_area:
-            raise ValueError(
-                f"Area of Bounding Box {self.area_bb} km\u00b2 exceeds the maximum size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
-            )
+        # if self.area_bb > client_config.polygonrules.max_area:
+        #    raise ValueError(
+        #        f"Area of Bounding Box {self.area_bb} km\u00b2 exceeds the maximum size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
+        #    )
 
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
@@ -108,7 +108,7 @@ class BoundingBox(Feature):
 
         if field_area(request, self.area_bb) > self.max_area:
             raise ValueError(
-                f"The request size is too large {field_area(request, self.area_bb)} km\u00b2, must be below {self.max_area} km\u00b2. Lower number of fields requested or size of shape requested"  # noqa: E501
+                f"The total request size is too large, area of request shape {self.area_bb} * total number of fields = {field_area(request, self.area_bb)} km\u00b2, must be below {self.max_area} km\u00b2 for total size request. "  # noqa: E501
             )
 
         if len(feature_config["points"]) != 2:

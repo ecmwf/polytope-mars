@@ -181,6 +181,9 @@ def field_area(request, area):
     else:
         date_len = len(date)
 
+    if date_len == 0:
+        date_len = 1
+
     if "to" in time:
         time_len = hours_between_times(time[0], time[2])
     else:
