@@ -105,6 +105,11 @@ class PolytopeMars:
         else:
             timeseries_type = None  # noqa: F841
 
+        # TODO: check if the request has an interpolation step
+        # TODO: when we interpolate, check if it's pl or ml to hl first
+        # TODO: then first extract geopotential height and mark necessary tree transformation for later
+        # TODO: then find out what model/pressure levels are needed from this and change request accordingly
+
         feature = self._feature_factory(feature_type, feature_config, self.conf)  # noqa: E501
 
         feature.validate(request, feature_config_copy)
@@ -160,6 +165,7 @@ class PolytopeMars:
             "CoverageCollection", feature_type
         )  # noqa: E501
 
+        # TODO: add interpolation option to decoding and change the model/pressure level if requested
         # if timeseries_type == "date":
         if "dataset" in request:
             if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
