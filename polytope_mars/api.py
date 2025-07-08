@@ -116,6 +116,8 @@ class PolytopeMars:
 
         logging.debug("Parsed request: %s", request)
 
+        self.setup_polytope()
+
         # check if the request has an interpolation step
         interpolation_options = request.get("interpolate", None)
         if interpolation_options:
@@ -125,19 +127,16 @@ class PolytopeMars:
 
             geopotential_request = request.copy()
             geopotential_request["param"] = geopotential_field_param
+            geopotential_coverage = self.extract_request(geopotential_request, feature, feature_type)
 
             # TODO: then first extract geopotential height and mark necessary tree transformation for later
             # TODO: then find out what model/pressure levels are needed from this and change request accordingly
 
-        shapes = self._create_base_shapes(request, feature_type)
+        self.coverage = self.extract_request(request, feature, feature_type)
 
-        shapes.extend(feature.get_shapes())
+        return self.coverage
 
-        preq = Request(*shapes)
-
-        start = time.time()
-        logging.info(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
-
+    def setup_polytope(self):
         if self.conf.datacube.type == "gribjump":
             fdbdatacube = gj.GribJump()
         else:
@@ -151,6 +150,16 @@ class PolytopeMars:
             options=self.conf.options.model_dump(),
             context=self.log_context,
         )
+
+    def extract_request(self, request, feature, feature_type):
+        shapes = self._create_base_shapes(request, feature_type)
+
+        shapes.extend(feature.get_shapes())
+
+        preq = Request(*shapes)
+
+        start = time.time()
+        logging.info(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
 
         end = time.time()
         delta = end - start
@@ -177,18 +186,17 @@ class PolytopeMars:
         # if timeseries_type == "date":
         if "dataset" in request:
             if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
-                self.coverage = encoder.from_polytope_step(result)
+                coverage = encoder.from_polytope_step(result)
             else:
-                self.coverage = encoder.from_polytope(result)
+                coverage = encoder.from_polytope(result)
         else:
-            self.coverage = encoder.from_polytope(result)
+            coverage = encoder.from_polytope(result)
 
         end = time.time()
         delta = end - start
         logging.debug(f"{self.id}: Covjsonkit time end: {end}")  # noqa: E501
         logging.info(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
-
-        return self.coverage
+        return coverage
 
     def convert_timestamp(self, timestamp):
         # Ensure the input is a string
