@@ -105,11 +105,6 @@ class PolytopeMars:
         else:
             timeseries_type = None  # noqa: F841
 
-        # TODO: check if the request has an interpolation step
-        # TODO: when we interpolate, check if it's pl or ml to hl first
-        # TODO: then first extract geopotential height and mark necessary tree transformation for later
-        # TODO: then find out what model/pressure levels are needed from this and change request accordingly
-
         feature = self._feature_factory(feature_type, feature_config, self.conf)  # noqa: E501
 
         feature.validate(request, feature_config_copy)
@@ -120,6 +115,19 @@ class PolytopeMars:
         request = feature.parse(request, feature_config_copy)
 
         logging.debug("Parsed request: %s", request)
+
+        # check if the request has an interpolation step
+        interpolation_options = request.get("interpolate", None)
+        if interpolation_options:
+            # make sure it makes sense to interpolate, ie levtype is ml or pl in request
+            assert request.get("levtype") in ["pl", "ml"]
+            geopotential_field_param = "156"
+
+            geopotential_request = request.copy()
+            geopotential_request["param"] = geopotential_field_param
+
+            # TODO: then first extract geopotential height and mark necessary tree transformation for later
+            # TODO: then find out what model/pressure levels are needed from this and change request accordingly
 
         shapes = self._create_base_shapes(request, feature_type)
 
