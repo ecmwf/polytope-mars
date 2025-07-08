@@ -127,9 +127,11 @@ class PolytopeMars:
 
             geopotential_request = request.copy()
             geopotential_request["param"] = geopotential_field_param
+            # then first extract geopotential height
             geopotential_coverage = self.extract_request(geopotential_request, feature, feature_type)
 
-            # TODO: then first extract geopotential height and mark necessary tree transformation for later
+            # TODO: mark necessary tree transformation/ interpolation options for later
+            # TODO: find the geopotential heights from the coverage
             # TODO: then find out what model/pressure levels are needed from this and change request accordingly
 
         self.coverage = self.extract_request(request, feature, feature_type)
