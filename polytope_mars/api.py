@@ -122,16 +122,41 @@ class PolytopeMars:
         interpolation_options = request.get("interpolate", None)
         if interpolation_options:
             # make sure it makes sense to interpolate, ie levtype is ml or pl in request
-            assert request.get("levtype") in ["pl", "ml"]
-            geopotential_field_param = "156"
+            # assert request.get("levtype") in ["pl", "ml"]
+            assert request.get("levtype") == "hl"
+            from_pl = interpolation_options.get("from_pl", False)
+            if from_pl:
+                levtype = "pl"
+            else:
+                levtype = "ml"
+            request["levtype"] = levtype
+            assert feature_type == "vertical_profile"
+            geopotential_field_param = "129"
+
+            # GEOPOTENTIAL REQUEST
+            #     "class": "od",
+            #    "date": -1,
+            #    "expver": "0001",
+            #    "levtype": "sfc",
+            #    "param": "129",
+            #    "step": "0",
+            #    "time": "0000",
+            #    "domain": "g",
+            #    "stream": "oper",
+            #    "type": "fc",
 
             geopotential_request = request.copy()
             geopotential_request["param"] = geopotential_field_param
+            geopotential_request["levtype"] = "sfc"
             # then first extract geopotential height
             geopotential_coverage = self.extract_request(geopotential_request, feature, feature_type)
+            # find the geopotential heights from the coverage
+            # NOTE: assume we only do a single point vertical profile here
+            geopotential_points = geopotential_coverage.to_xarray().z.values
 
-            # TODO: mark necessary tree transformation/ interpolation options for later
-            # TODO: find the geopotential heights from the coverage
+            # mark interpolation options for later
+            over_sea = interpolation_options.get("sea", False)
+            interpolation_method = interpolation_options.get("interpolation_method", "linear")
             # TODO: then find out what model/pressure levels are needed from this and change request accordingly
 
         self.coverage = self.extract_request(request, feature, feature_type)
