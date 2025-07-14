@@ -1,7 +1,5 @@
-import copy
 from datetime import datetime, timedelta
 
-import pytest
 from conflator import Conflator
 from covjsonkit.api import Covjsonkit
 
@@ -111,4 +109,3 @@ class TestFeatureFactory:
         decoder = Covjsonkit().decode(result)
         ds = decoder.to_xarray()
         assert len(ds) == 6
-
