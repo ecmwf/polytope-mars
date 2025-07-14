@@ -38,12 +38,12 @@ class Feature(ABC):
         Determines if the request should be split based on the feature configuration.
         This method can be overridden by subclasses to implement specific splitting logic.
         """
-        if self.field_area > self.max_area:
-            # If the area of the request exceeds the maximum allowed area, we split the request.
-            return True
-        else:
-            # Otherwise, we do not split the request.
-            return False
+        if self.name() == "Polygon":
+            if self.field_area > self.max_area:
+                # If the area of the request exceeds the maximum allowed area, we split the request.
+                return True
+        # Otherwise, we do not split the request.
+        return False
 
     def validate(self, request, feature_config):
         incompatible_keys = self.incompatible_keys()
