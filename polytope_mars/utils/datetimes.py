@@ -29,3 +29,29 @@ def hours_between_times(time1, time2):
     t2 = datetime.strptime(time2, time_format)
     delta = t2 - t1
     return abs(delta.total_seconds() / 3600)
+
+
+def from_range_to_list(date_range):
+    """
+    Convert a date range in the format YYYYMMDD/to/YYYYMMDD to a list of dates.
+
+    :param date_range: A string representing the date range in the format YYYYMMDD/to/YYYYMMDD
+    :return: A list of dates in the format YYYYMMDD/YYYYMMDD
+    """
+    if "/to/" in date_range:
+        start_date, end_date = date_range.split("/to/")
+        start_date = datetime.strptime(start_date, "%Y%m%d")
+        end_date = datetime.strptime(end_date, "%Y%m%d")
+        date_list = []
+        current_date = start_date
+        while current_date <= end_date:
+            date_list.append(current_date.strftime("%Y%m%d"))
+            current_date = current_date.replace(day=current_date.day + 1)
+        if not date_list:
+            raise ValueError("The date range does not include any valid dates.")
+        if len(date_list) == 1:
+            return date_list[0]
+        date_list = "/".join(date_list)
+    else:
+        date_list = date_range
+    return date_list
