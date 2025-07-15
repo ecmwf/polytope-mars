@@ -99,9 +99,8 @@ class TimeSeries(Feature):
             if feature_config["range"]["start"] < 0:
                 raise ValueError("Timeseries range start must be greater than 0")
             if isinstance(feature_config["range"], dict):
-                request[
-                    time_axis
-                ] = f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"  # noqa: E501
+                time_range = f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"
+                request[time_axis] = time_range  # noqa: E501
                 if "interval" in feature_config["range"]:
                     request[time_axis] += f"/by/{feature_config['range']['interval']}"
         logging.debug("After parse request: %s", request)
