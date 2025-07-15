@@ -143,6 +143,11 @@ class PolytopeMars:
                         copied_request["date"] = date
                         coverage = self.retrieve_data(copied_request, feature_type, feature)
                         self.coverage = merge_coverage_collections(self.coverage, coverage)
+                else:
+                    copied_request = request.copy()
+                    copied_request["date"] = date
+                    coverage = self.retrieve_data(copied_request, feature_type, feature)
+                    self.coverage = merge_coverage_collections(self.coverage, coverage)
 
         else:
             self.coverage = self.retrieve_data(request, feature_type, feature)  # noqa: E501
