@@ -16,7 +16,7 @@ request = {
     "date" : "20240930",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1",
@@ -33,7 +33,7 @@ result = PolytopeMars().extract(request)
 
 This request will return all points contained in `shape` for with forecast date of `20240930T000000` for `step` `0`, ensemble `number` `1` and the three prvoided parameters.
 
-Notes: 
+Notes:
 * The data has to exist in the data source pointed to in the config.
 * No config is provided via the PolytopeMars interface so a config will be loaded from the default locations. The config can also be passed directly via the interface.
 
@@ -51,7 +51,7 @@ request = {
     "date" : "20240930",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1",
@@ -70,7 +70,7 @@ This request will return all points contained in `shape` for with forecast date 
 
 `"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
 
-Notes: 
+Notes:
 * The data has to exist in the fdb on the polytope server.
 * No config is required to be passed when using this method, it is generated on the server side.
 * Further details on the `from_source` method can be found here: https://earthkit-data.readthedocs.io/en/latest/guide/sources.html
@@ -106,7 +106,7 @@ request = {
     "date" : "20240930",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/2",
@@ -130,4 +130,3 @@ The returned values will be:
 
 
 ## Optional Fields
-
