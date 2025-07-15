@@ -31,7 +31,24 @@ def hours_between_times(time1, time2):
     return abs(delta.total_seconds() / 3600)
 
 
-def from_range_to_list(date_range):
+def from_range_to_list_num(num_range):
+    """
+    Convert a range in the format integer/to/integer to a list of numbers seperated by /.
+
+    :param range: A string representing the range in the format integer/to/integer
+    :return: A list of dates in the format integer/integer/integer
+    """
+    if "/to/" in num_range:
+        start, end = num_range.split("/to/")
+        start = int(start)
+        end = int(end)
+        if start > end:
+            raise ValueError("Start of range must be less than or equal to end of range.")
+        return [str(i) for i in range(start, end + 1)]
+    else:
+        return num_range
+
+def from_range_to_list_date(date_range):
     """
     Convert a date range in the format YYYYMMDD/to/YYYYMMDD to a list of dates.
 

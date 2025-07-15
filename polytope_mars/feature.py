@@ -38,7 +38,7 @@ class Feature(ABC):
         Determines if the request should be split based on the feature configuration.
         This method can be overridden by subclasses to implement specific splitting logic.
         """
-        if self.name() == "Polygon":
+        if self.name() == "Polygon" or self.name() == "BoundingBox":
             if self.field_area > self.max_area:
                 # If the area of the request exceeds the maximum allowed area, we split the request.
                 return True

@@ -16,6 +16,7 @@ class BoundingBox(Feature):
             feature_config["axes"] = ["latitude", "longitude"]
         self.axes = feature_config.pop("axes", [])
         self.max_area = client_config.polygonrules.max_area
+        self.field_area = 0
 
         if "axes" in feature_config:
             raise ValueError("Bounding box does not have axes in feature, did you mean axes?")  # noqa: E501
@@ -106,7 +107,8 @@ class BoundingBox(Feature):
                     "Bounding Box axes must contain at most 3 values, latitude, longitude, and levelist"
                 )  # noqa: E501
 
-        if field_area(request, self.area_bb) > self.max_area:
+        self.field_area = field_area(request, self.area_bb)
+        if self.field_area > self.max_area:
             raise ValueError(
                 f"The total request size is too large, area of request shape {self.area_bb} * total number of fields = {field_area(request, self.area_bb)} km\u00b2, must be below {self.max_area} km\u00b2 for total size request. "  # noqa: E501
             )

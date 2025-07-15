@@ -46,7 +46,6 @@ class Polygons(Feature):
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
-        # coordinates = get_coords(self.df)
         polygons = []
         for polygon in self.shape:
             points = []

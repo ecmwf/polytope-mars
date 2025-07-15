@@ -23,7 +23,7 @@ from .features.polygon import Polygons
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
-from .utils.datetimes import from_range_to_list
+from .utils.datetimes import from_range_to_list_date, from_range_to_list_num
 
 features = {
     "timeseries": TimeSeries,
@@ -127,13 +127,15 @@ class PolytopeMars:
 
         if self.split_request:
             # If the request is split, we need to handle it differently
-            dates = from_range_to_list(request["date"])
-            print("Dates", dates)
+            dates = from_range_to_list_date(request["date"])
             for date in dates.split("/"):
-                copied_request = request.copy()
-                copied_request["date"] = date
-                coverage = self.retrieve_data(copied_request, feature_type, feature)  # noqa: E501
-                self.coverage = merge_coverage_collections(self.coverage, coverage)  # noqa: E501
+                if "number" in request:
+                    for number in from_range_to_list_num(request["number"]):
+                        copied_request = request.copy()
+                        copied_request["date"] = date
+                        copied_request["number"] = number
+                        coverage = self.retrieve_data(copied_request, feature_type, feature)  # noqa: E501
+                        self.coverage = merge_coverage_collections(self.coverage, coverage)  # noqa: E501
 
         else:
             self.coverage = self.retrieve_data(request, feature_type, feature)  # noqa: E501
