@@ -48,6 +48,7 @@ def from_range_to_list_num(num_range):
     else:
         return num_range
 
+
 def from_range_to_list_date(date_range):
     """
     Convert a date range in the format YYYYMMDD/to/YYYYMMDD to a list of dates.

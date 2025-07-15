@@ -130,12 +130,19 @@ class PolytopeMars:
             dates = from_range_to_list_date(request["date"])
             for date in dates.split("/"):
                 if "number" in request:
-                    for number in from_range_to_list_num(request["number"]):
+                    numbers = from_range_to_list_num(request["number"])
+                    if len(numbers) > 10:
+                        for number in from_range_to_list_num(request["number"]):
+                            copied_request = request.copy()
+                            copied_request["date"] = date
+                            copied_request["number"] = number
+                            coverage = self.retrieve_data(copied_request, feature_type, feature)  # noqa: E501
+                            self.coverage = merge_coverage_collections(self.coverage, coverage)  # noqa: E501
+                    else:
                         copied_request = request.copy()
                         copied_request["date"] = date
-                        copied_request["number"] = number
-                        coverage = self.retrieve_data(copied_request, feature_type, feature)  # noqa: E501
-                        self.coverage = merge_coverage_collections(self.coverage, coverage)  # noqa: E501
+                        coverage = self.retrieve_data(copied_request, feature_type, feature)
+                        self.coverage = merge_coverage_collections(self.coverage, coverage)
 
         else:
             self.coverage = self.retrieve_data(request, feature_type, feature)  # noqa: E501
