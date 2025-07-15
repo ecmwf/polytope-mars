@@ -109,7 +109,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade pip setuptools wheel
           python -m pip install pytest pytest-cov
-          python -m pip install -r requirements.txt 
+          python -m pip install -r requirements.txt
           python -m pip install -r ./tests/requirements_test.txt
 
       - name: Verify Source Distribution

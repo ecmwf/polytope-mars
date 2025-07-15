@@ -9,6 +9,7 @@ import pygribjump as gj
 from conflator import Conflator
 from covjsonkit.api import Covjsonkit
 from covjsonkit.param_db import get_param_ids
+from covjsonkit.utils import merge_coverage_collections
 from polytope_feature import shapes
 from polytope_feature.engine.hullslicer import HullSlicer
 from polytope_feature.polytope import Polytope, Request
@@ -22,6 +23,7 @@ from .features.polygon import Polygons
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
+from .utils.datetimes import from_range_to_list_date, from_range_to_list_num
 
 features = {
     "timeseries": TimeSeries,
@@ -51,6 +53,7 @@ class PolytopeMars:
             logging.debug(f"{self.id}: Config loaded from dictionary: {self.conf}")  # noqa: E501
 
         self.coverage = {}
+        self.split_request = False
 
     def extract(self, request):
         # request expected in JSON or dict
@@ -114,65 +117,40 @@ class PolytopeMars:
 
         request = feature.parse(request, feature_config_copy)
 
+        self.split_request = feature.split_request()
+
+        print("Self split", self.split_request)
+
         logging.debug("Parsed request: %s", request)
 
-        shapes = self._create_base_shapes(request, feature_type)
+        print("Request", request)
 
-        shapes.extend(feature.get_shapes())
+        if self.split_request:
+            # If the request is split, we need to handle it differently
+            dates = from_range_to_list_date(request["date"])
+            for date in dates.split("/"):
+                if "number" in request:
+                    numbers = from_range_to_list_num(request["number"])
+                    if len(numbers) > 10:
+                        for number in from_range_to_list_num(request["number"]):
+                            copied_request = request.copy()
+                            copied_request["date"] = date
+                            copied_request["number"] = number
+                            coverage = self.retrieve_data(copied_request, feature_type, feature)  # noqa: E501
+                            self.coverage = merge_coverage_collections(self.coverage, coverage)  # noqa: E501
+                    else:
+                        copied_request = request.copy()
+                        copied_request["date"] = date
+                        coverage = self.retrieve_data(copied_request, feature_type, feature)
+                        self.coverage = merge_coverage_collections(self.coverage, coverage)
+                else:
+                    copied_request = request.copy()
+                    copied_request["date"] = date
+                    coverage = self.retrieve_data(copied_request, feature_type, feature)
+                    self.coverage = merge_coverage_collections(self.coverage, coverage)
 
-        preq = Request(*shapes)
-
-        start = time.time()
-        logging.info(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
-
-        if self.conf.datacube.type == "gribjump":
-            fdbdatacube = gj.GribJump()
         else:
-            raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
-        slicer = HullSlicer()
-
-        logging.debug(f"Send log_context to polytope: {self.log_context}")
-        self.api = Polytope(
-            datacube=fdbdatacube,
-            engine=slicer,
-            options=self.conf.options.model_dump(),
-            context=self.log_context,
-        )
-
-        end = time.time()
-        delta = end - start
-        logging.debug(f"{self.id}: Gribjump/setup time end: {end}")  # noqa: E501
-        logging.info(f"{self.id}: Gribjump/setup time taken: {delta}")  # noqa: E501
-
-        logging.debug(f"{self.id}: The request we give polytope from polytope-mars is: {preq}")  # noqa: E501
-        start = time.time()
-        logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
-
-        result = self.api.retrieve(preq)
-
-        end = time.time()
-        delta = end - start
-        logging.debug(f"{self.id}: Polytope time end: {end}")  # noqa: E501
-        logging.info(f"{self.id}: Polytope time taken: {delta}")  # noqa: E501
-        start = time.time()
-        logging.info(f"{self.id}: Covjson time start: {start}")  # noqa: E501
-        encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
-            "CoverageCollection", feature_type
-        )  # noqa: E501
-
-        # if timeseries_type == "date":
-        if "dataset" in request:
-            if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
-                self.coverage = encoder.from_polytope_step(result)
-            else:
-                self.coverage = encoder.from_polytope(result)
-        else:
-            self.coverage = encoder.from_polytope(result)
-
-        end = time.time()
-        delta = end - start
-        logging.debug(f"{self.id}: Covjsonkit time end: {end}")  # noqa: E501
-        logging.info(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
+            self.coverage = self.retrieve_data(request, feature_type, feature)  # noqa: E501
 
         return self.coverage
 
@@ -384,3 +362,74 @@ class PolytopeMars:
             return feature_class(feature_config, config)
         else:
             raise NotImplementedError(f"Feature '{feature_name}' not found")
+
+    def retrieve_data(self, request, feature_type, feature):
+        """
+        Retrieves data from the Polytope engine based on the request and feature type.
+        This method sets up the Polytope engine, prepares the request, and encodes the
+        result into a Covjson format.
+
+        :param request: The request dictionary containing parameters for data retrieval.
+        :param feature_type: The type of feature being requested (e.g., 'timeseries', 'polygon').
+        :param feature: The feature object that contains the logic for data retrieval.
+        :return: The coverage data in Covjson format.
+        """
+        shapes = self._create_base_shapes(request, feature_type)
+
+        shapes.extend(feature.get_shapes())
+
+        preq = Request(*shapes)
+
+        start = time.time()
+        logging.info(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
+
+        if self.conf.datacube.type == "gribjump":
+            fdbdatacube = gj.GribJump()
+        else:
+            raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
+        slicer = HullSlicer()
+
+        logging.debug(f"Send log_context to polytope: {self.log_context}")
+        self.api = Polytope(
+            datacube=fdbdatacube,
+            engine=slicer,
+            options=self.conf.options.model_dump(),
+            context=self.log_context,
+        )
+
+        end = time.time()
+        delta = end - start
+        logging.debug(f"{self.id}: Gribjump/setup time end: {end}")  # noqa: E501
+        logging.info(f"{self.id}: Gribjump/setup time taken: {delta}")  # noqa: E501
+
+        logging.debug(f"{self.id}: The request we give polytope from polytope-mars is: {preq}")  # noqa: E501
+        start = time.time()
+        logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
+
+        result = self.api.retrieve(preq)
+
+        end = time.time()
+        delta = end - start
+        logging.debug(f"{self.id}: Polytope time end: {end}")  # noqa: E501
+        logging.info(f"{self.id}: Polytope time taken: {delta}")  # noqa: E501
+        start = time.time()
+        logging.info(f"{self.id}: Covjson time start: {start}")  # noqa: E501
+        encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
+            "CoverageCollection", feature_type
+        )  # noqa: E501
+
+        # if timeseries_type == "date":
+        if "dataset" in request:
+            if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
+                coverage = encoder.from_polytope_step(result)
+            else:
+                coverage = encoder.from_polytope(result)
+        else:
+            coverage = encoder.from_polytope(result)
+
+        end = time.time()
+        delta = end - start
+        logging.debug(f"{self.id}: Covjsonkit time end: {end}")  # noqa: E501
+        logging.info(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
+
+        return coverage
