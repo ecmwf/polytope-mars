@@ -173,7 +173,7 @@ class PolytopeMars:
             "dataset" in request
             and request["dataset"] == "climate-dt"  # noqa: W503
             and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
-        ):  # noqa: E501
+        ) or request["class"] == "ng":
             for k, v in request.items():
                 split = str(v).split("/")
 
@@ -421,6 +421,11 @@ class PolytopeMars:
         # if timeseries_type == "date":
         if "dataset" in request:
             if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
+                coverage = encoder.from_polytope_step(result)
+            else:
+                coverage = encoder.from_polytope(result)
+        elif request["class"] == "ng":  # noqa: E501
+            if feature_type == "timeseries" or feature_type == "polygon":
                 coverage = encoder.from_polytope_step(result)
             else:
                 coverage = encoder.from_polytope(result)
