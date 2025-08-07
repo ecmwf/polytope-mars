@@ -427,6 +427,8 @@ class PolytopeMars:
         elif request["class"] == "ng":  # noqa: E501
             if feature_type == "timeseries" or feature_type == "polygon":
                 coverage = encoder.from_polytope_step(result)
+            else:
+                coverage = encoder.from_polytope(result)
         else:
             coverage = encoder.from_polytope(result)
 
