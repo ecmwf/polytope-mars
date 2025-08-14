@@ -3,6 +3,7 @@ import json
 import logging
 import time
 from typing import List
+from copy import deepcopy
 
 import pandas as pd
 import pygribjump as gj
@@ -22,6 +23,7 @@ from .features.polygon import Polygons
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
+from .post_processing_functions import get_geopotential_height_request, geopotential_height_from_geopotential
 
 features = {
     "timeseries": TimeSeries,
@@ -118,46 +120,100 @@ class PolytopeMars:
 
         self.setup_polytope()
 
-        # check if the request has an interpolation step
-        interpolation_options = request.get("interpolate", None)
-        if interpolation_options:
-            # make sure it makes sense to interpolate, ie levtype is ml or pl in request
-            # assert request.get("levtype") in ["pl", "ml"]
-            assert request.get("levtype") == "hl"
-            from_pl = interpolation_options.get("from_pl", False)
-            if from_pl:
-                levtype = "pl"
-            else:
-                levtype = "ml"
-            request["levtype"] = levtype
-            assert feature_type == "vertical_profile"
-            geopotential_field_param = "129"
+        if feature_type == "vertical_profile":
 
-            # GEOPOTENTIAL REQUEST
-            #     "class": "od",
-            #    "date": -1,
-            #    "expver": "0001",
-            #    "levtype": "sfc",
-            #    "param": "129",
-            #    "step": "0",
-            #    "time": "0000",
-            #    "domain": "g",
-            #    "stream": "oper",
-            #    "type": "fc",
+            # Find the interpolation options
+            interpolation_options = request.get("interpolate", None)
+            if interpolation_options:
+                # Assert request is valid with interpolation
+                assert request.get("levtype") == "hl"
+                wanted_height = request.get("levelist")
 
-            geopotential_request = request.copy()
-            geopotential_request["param"] = geopotential_field_param
-            geopotential_request["levtype"] = "sfc"
-            # then first extract geopotential height
-            geopotential_coverage = self.extract_request(geopotential_request, feature, feature_type)
-            # find the geopotential heights from the coverage
-            # NOTE: assume we only do a single point vertical profile here
-            geopotential_points = geopotential_coverage.to_xarray().z.values
+                # Check we are operating on a single field
+                assert self.check_single_field()
+                points_of_interest = feature_config_copy["points"]
+                points_geopotential_heights = []
+                for point in points_of_interest:
+                    # For each point in the vertical profile, extract the geopotential height
 
-            # mark interpolation options for later
-            over_sea = interpolation_options.get("sea", False)
-            interpolation_method = interpolation_options.get("interpolation_method", "linear")
-            # TODO: then find out what model/pressure levels are needed from this and change request accordingly
+                    # Build request for geopotential height for single point for levtype=pl (only one where param=129 exists?)
+                    geopotential_request, point_feature_config = get_geopotential_height_request(request, feature_config_copy, point)
+                    point_feature = self._feature_factory(feature_type, point_feature_config, self.conf)
+                    geopotential_coverage = self.extract_request(geopotential_request, point_feature, feature_type)
+                    geopotential_xarray = geopotential_coverage.to_xarray()
+                    geopotentials = geopotential_xarray.z.values
+                    levelists = geopotential_xarray.levelist.values
+                    geopotential_heights = [geopotential_height_from_geopotential(z) for z in geopotentials]
+                    # Find which geopotential heights bound the height we are looking for
+
+                    lower_height = None
+                    lower_height_idx = None
+                    upper_height = None
+                    upper_height_idx = None
+
+                    for i, v in enumerate(geopotential_heights):
+                        if v <= wanted_height:
+                            lower_height_idx = i
+                            lower_height = v
+                        if v >= wanted_height and upper_height_idx is None:
+                            upper_height_idx = i
+                            upper_height = v
+                    # Find interpolation coefficient
+                    interp_coeff = (wanted_height - lower_height) / (upper_height - lower_height)
+                    # Find the corresponding levelists
+                    lower_levelist = levelists[lower_height_idx]
+                    upper_levelist = levelists[upper_height_idx]
+                    # Extract the initial wanted param on these levelists
+                    actual_request = deepcopy(geopotential_request)
+                    actual_request["param"] = request["param"]
+                    actual_request["levelist"] = str(lower_levelist) + "/" + str(upper_levelist)
+                    point_coverage = self.extract_request(actual_request, point_feature, feature_type)
+                    # Return coverage (ideally coverage with interpolated result to wanted height)
+
+            # ONCE we have all of the heights for all points, with the interpolation method, determine which are within the height extents requested
+            # FOR each point, create a new request with the right heights and finally extract...
+            pass
+
+        # # check if the request has an interpolation step
+        # interpolation_options = request.get("interpolate", None)
+        # if interpolation_options:
+        #     # make sure it makes sense to interpolate, ie levtype is ml or pl in request
+        #     # assert request.get("levtype") in ["pl", "ml"]
+        #     assert request.get("levtype") == "hl"
+        #     from_pl = interpolation_options.get("from_pl", False)
+        #     if from_pl:
+        #         levtype = "pl"
+        #     else:
+        #         levtype = "ml"
+        #     request["levtype"] = levtype
+        #     assert feature_type == "vertical_profile"
+        #     geopotential_field_param = "129"
+
+        #     # GEOPOTENTIAL REQUEST
+        #     #     "class": "od",
+        #     #    "date": -1,
+        #     #    "expver": "0001",
+        #     #    "levtype": "sfc",
+        #     #    "param": "129",
+        #     #    "step": "0",
+        #     #    "time": "0000",
+        #     #    "domain": "g",
+        #     #    "stream": "oper",
+        #     #    "type": "fc",
+
+        #     geopotential_request = request.copy()
+        #     geopotential_request["param"] = geopotential_field_param
+        #     geopotential_request["levtype"] = "sfc"
+        #     # then first extract geopotential height
+        #     geopotential_coverage = self.extract_request(geopotential_request, feature, feature_type)
+        #     # find the geopotential heights from the coverage
+        #     # NOTE: assume we only do a single point vertical profile here
+        #     geopotential_points = geopotential_coverage.to_xarray().z.values
+
+        #     # mark interpolation options for later
+        #     over_sea = interpolation_options.get("sea", False)
+        #     interpolation_method = interpolation_options.get("interpolation_method", "linear")
+        #     # TODO: then find out what model/pressure levels are needed from this and change request accordingly
 
         self.coverage = self.extract_request(request, feature, feature_type)
 
@@ -236,6 +292,16 @@ class PolytopeMars:
         formatted_timestamp = f"{timestamp[:2]}:{timestamp[2:]}:00"
 
         return formatted_timestamp
+
+    def check_single_field(self, request: dict, feature_type) -> bool:
+        single_field = True
+        for k, v in request.items():
+            split = str(v).split("/")
+            if len(split) != 1:
+                single_field = False
+            elif len(split) == 1 and split[0] == "ALL":
+                single_field = False
+        return single_field
 
     def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
         base_shapes = []
