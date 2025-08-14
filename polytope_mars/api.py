@@ -3,6 +3,7 @@ import json
 import logging
 import time
 from typing import List
+import re
 
 import pandas as pd
 import pygribjump as gj
@@ -188,6 +189,32 @@ class PolytopeMars:
 
         return formatted_timestamp
 
+    def convert_step(self, step_val):
+        # Go from a string to either a full hour int, a step range or a pd.Timedelta
+        step_val = str(step_val)
+
+        if re.match(r"^\d+-\d+$", step_val):
+            # step range
+            return step_val
+
+        if step_val.isdigit():
+            # full integer, can stay a str
+            return step_val
+
+        h_match = re.search(r"(\d+)\s*h", step_val)
+        m_match = re.search(r"(\d+)\s*m", step_val)
+
+        if not h_match and not m_match:
+            raise ValueError("Invalid step type, expected subhourly step (in hours or minutes), integer step or step range.")
+
+        hours = int(h_match.group(1)) if h_match else 0
+        minutes = int(m_match.group(1)) if m_match else 0
+
+        if hours == 0 and minutes == 0:
+            return 0
+
+        return pd.Timedelta(hours=hours, minutes=minutes)
+
     def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
         base_shapes = []
 
@@ -218,6 +245,8 @@ class PolytopeMars:
                         split[0] = pd.Timestamp(split[0])
                     if k == "time":
                         split[0] = self.convert_timestamp(split[0])
+                    if k == "step":
+                        split[0] = self.convert_step(split[0])
                     base_shapes.append(shapes.Select(k, split))
 
                 # Range a/to/b, "by" not supported -> Span
@@ -232,10 +261,15 @@ class PolytopeMars:
                         start = self.convert_timestamp(split[0])
                         end = self.convert_timestamp(split[2])
                         base_shapes.append(shapes.Span(k, lower=start, upper=end))
+                    elif k == "step":
+                        start = self.convert_step(split[0])
+                        end = self.convert_step(split[2])
+                        base_shapes.append(shapes.Span(k, lower=start, upper=end))
                     else:
                         base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
 
                 elif "by" in split:
+                    # TODO: add use of "by" for step axis
 
                     if split[-1] == "1":
                         if k == "date":
@@ -276,6 +310,11 @@ class PolytopeMars:
                         for s in split:
                             times.append(self.convert_timestamp(s))
                         split = times
+                    if k == "step":
+                        steps = []
+                        for s in split:
+                            steps.append(self.convert_step(s))
+                        split = steps
                     base_shapes.append(shapes.Select(k, split))
         else:
             time = request.pop("time").replace(":", "")
@@ -289,6 +328,15 @@ class PolytopeMars:
                     times = pd.date_range(start=start, end=end, freq="1H")
                 time = times.strftime("%H:%M:%S").tolist()
                 # raise NotImplementedError("Time ranges with 'to' keyword not supported yet")  # noqa: E501
+
+            step = request.pop("step")
+            step = step.split("/")
+            if "to" in step:
+                start_step = self.convert_step(step[0])
+                end_step = self.convert_step(step[2])
+                if "by" in step:
+                    # TODO: implement "by" for step ranges
+                    raise NotImplementedError("Step ranges do not support 'by' keyword yet.")
 
             for k, v in request.items():
                 split = str(v).split("/")
@@ -321,6 +369,8 @@ class PolytopeMars:
                         for t in time:
                             new_split.append(pd.Timestamp(split[0] + "T" + t))
                         split = new_split
+                    if k == "step":
+                        split = [self.convert_step(split[0])]
                     base_shapes.append(shapes.Select(k, split))
 
                 # Range a/to/b, "by" not supported -> Span
@@ -336,10 +386,13 @@ class PolytopeMars:
                                 dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
                             # dates.append(s)
                         base_shapes.append(shapes.Select(k, dates))
+                    if k == "step":
+                        base_shapes.append(shapes.Span(k, lower=start_step, upper=end_step))
                     else:
                         base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
 
                 elif "by" in split:
+                    # TODO: implement "by" for step ranges
                     if split[-1] == "1":
                         if k == "date":
                             start = pd.Timestamp(split[0] + "T" + time[0])
@@ -374,6 +427,8 @@ class PolytopeMars:
                             for t in time:
                                 dates.append(pd.Timestamp(s + "T" + t))
                         split = dates
+                    if k == "step":
+                        split = [self.convert_step(s) for s in split]
                     base_shapes.append(shapes.Select(k, split))
 
         return base_shapes
