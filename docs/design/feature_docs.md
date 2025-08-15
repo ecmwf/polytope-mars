@@ -92,7 +92,7 @@ request = {
     "date" : "20241006",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/to/50",
@@ -113,7 +113,7 @@ request = {
     "date" : "20241006",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/to/50",
@@ -139,7 +139,7 @@ request = {
     "date" : "20241006",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/to/50",
@@ -178,7 +178,7 @@ request = {
     "date" : "20241006",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/to/50",
@@ -204,7 +204,7 @@ request = {
     "date" : "20241006",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/to/50",
@@ -225,7 +225,7 @@ request = {
     "stream" : "enfo",
     "type" : "pf",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/to/50",
@@ -333,7 +333,7 @@ request = {
     "type" : "pf",
     "date" : "20240930",
     "time" : "0000",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "levtype" : "pl",
@@ -353,7 +353,7 @@ This request will return a trajectory with forecast date of `20240930T000000` fo
 
 The `trajectory` `feature` also contains another field called `padding` with a default of 1. This is the radius of the circle swept around the trajectory where points within this radius are returned to the user.
 
-`axes` must contain at minimum `lat` and `long` however a time and level axes are optional if provided in the main body of the request. The level and time axes can also take different values such as `step` or `datetime` for the time axes. 
+`axes` must contain at minimum `lat` and `long` however a time and level axes are optional if provided in the main body of the request. The level and time axes can also take different values such as `step` or `datetime` for the time axes.
 
 The following is an example of a combination of `axes` that will cause an error:
 
@@ -364,7 +364,7 @@ request = {
     "type" : "pf",
     "date" : "20240930",
     "time" : "0000",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "levtype" : "pl",
@@ -387,7 +387,7 @@ request = {
     "type" : "pf",
     "date" : "20240930",
     "time" : "0000",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "levtype" : "pl",
@@ -431,7 +431,7 @@ request = {
     "date" : "20240930",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1",
@@ -453,7 +453,7 @@ request = {
     "date" : "20240930",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/2",
@@ -465,7 +465,7 @@ request = {
 }
 ```
 
-This request will return a polygon for each number and each step within that given number. 
+This request will return a polygon for each number and each step within that given number.
 Returned coverages as polygons:
 
 * `number: 1, step: 0, Points within shape`
@@ -484,5 +484,5 @@ CoverageJSON output type: MultiPoint
 
 CoverageJSON has a number of different output features. Depending on the feature selected the output type will vary.
 
-A coverageCollection is always returned even if there is only a single coverage. 
+A coverageCollection is always returned even if there is only a single coverage.
 A new coverage is created for each ensemble number and depending on the feature type each new date (except in timeseries). The only grouped field is param which will be in the same coverage.
