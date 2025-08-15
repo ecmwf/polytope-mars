@@ -189,11 +189,6 @@ class PolytopeMars:
 
         return formatted_timestamp
 
-    def format_subhourly_step_str(self, step: pd.Timedelta):
-        total_hours = int(step.total_seconds() // 3600)
-        minutes = int((step.total_seconds() % 3600) // 60)
-        return f"{total_hours}h{minutes}m"
-
     def find_step_intervals(self, step_start: str, step_end: str, step_freq: str):
         def format_subhourly_step_to_mars(step: pd.Timedelta):
             total_hours = int(step.total_seconds() // 3600)
