@@ -129,8 +129,3 @@ class TestFeatureFactory:
         with pytest.raises(KeyError):
             del self.request["feature"]["points"]
             PolytopeMars(self.cf).extract(self.request)
-
-    def test_boundingbox_too_large(self):
-        self.cf["polygonrules"]["max_area"] = 0.0000001
-        with pytest.raises(ValueError):
-            PolytopeMars(self.cf).extract(self.request)

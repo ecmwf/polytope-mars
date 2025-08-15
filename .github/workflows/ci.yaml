@@ -35,7 +35,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install black flake8 isort
       - name: Check isort
-        run: isort --check .
+        run: isort --check . --profile=black
 
       - name: Check black
         run: black --check .
