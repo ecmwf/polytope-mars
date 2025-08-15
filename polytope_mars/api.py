@@ -22,6 +22,7 @@ from .features.polygon import Polygons
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
+from .utils.datetimes import convert_timestamp, find_step_intervals
 
 features = {
     "timeseries": TimeSeries,
@@ -205,7 +206,7 @@ class PolytopeMars:
                     if k == "date":
                         split[0] = pd.Timestamp(split[0])
                     if k == "time":
-                        split[0] = self.convert_timestamp(split[0])
+                        split[0] = convert_timestamp(split[0])
                     base_shapes.append(shapes.Select(k, split))
 
                 # Range a/to/b, "by" not supported -> Span
@@ -217,8 +218,8 @@ class PolytopeMars:
                         end = pd.Timestamp(split[2])
                         base_shapes.append(shapes.Span(k, lower=start, upper=end))
                     elif k == "time":
-                        start = self.convert_timestamp(split[0])
-                        end = self.convert_timestamp(split[2])
+                        start = convert_timestamp(split[0])
+                        end = convert_timestamp(split[2])
                         base_shapes.append(shapes.Span(k, lower=start, upper=end))
                     else:
                         base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
@@ -231,8 +232,8 @@ class PolytopeMars:
                             end = pd.Timestamp(split[2])
                             base_shapes.append(shapes.Span(k, lower=start, upper=end))
                         elif k == "time":
-                            start = self.convert_timestamp(split[0])
-                            end = self.convert_timestamp(split[2])
+                            start = convert_timestamp(split[0])
+                            end = convert_timestamp(split[2])
                             base_shapes.append(shapes.Span(k, lower=start, upper=end))
                         else:
                             base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
@@ -243,8 +244,8 @@ class PolytopeMars:
                             timestamps = pd.date_range(start=start, end=end, freq=f"{split[-1]}D")
                             base_shapes.append(shapes.Select(k, timestamps.tolist()))
                         elif k == "time":
-                            start = self.convert_timestamp(split[0])
-                            end = self.convert_timestamp(split[2])
+                            start = convert_timestamp(split[0])
+                            end = convert_timestamp(split[2])
                             times = pd.date_range(start=start, end=end, freq=f"{split[-1]}H")
                             # print(times.strftime("%H%M").tolist())
                             base_shapes.append(shapes.Select(k, times.strftime("%H:%M:%S").tolist()))
@@ -262,15 +263,15 @@ class PolytopeMars:
                     if k == "time":
                         times = []
                         for s in split:
-                            times.append(self.convert_timestamp(s))
+                            times.append(convert_timestamp(s))
                         split = times
                     base_shapes.append(shapes.Select(k, split))
         else:
             time = request.pop("time").replace(":", "")
             time = time.split("/")
             if "to" in time:
-                start = self.convert_timestamp(time[0])
-                end = self.convert_timestamp(time[2])
+                start = convert_timestamp(time[0])
+                end = convert_timestamp(time[2])
                 if "by" in time:
                     times = pd.date_range(start=start, end=end, freq=f"{time[-1]}H")
                 else:
@@ -351,7 +352,7 @@ class PolytopeMars:
                                 # dates.append(s)
                             base_shapes.append(shapes.Select(k, dates))
                         elif k == "step":
-                            steps = self.find_step_intervals(split[0], split[2], split[-1])
+                            steps = find_step_intervals(split[0], split[2], split[-1])
                             base_shapes.append(shapes.Select(k, steps))
                         else:
                             expansion = list(range(int(split[0]), int(split[2]), int(split[-1])))
