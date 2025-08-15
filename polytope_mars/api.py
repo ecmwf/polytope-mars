@@ -3,6 +3,7 @@ import json
 import logging
 import time
 from typing import List
+import re
 
 import pandas as pd
 import pygribjump as gj
@@ -188,6 +189,27 @@ class PolytopeMars:
 
         return formatted_timestamp
 
+    def format_subhourly_step_str(self, step: pd.Timedelta):
+        total_hours = int(step.total_seconds() // 3600)
+        minutes = int((step.total_seconds() % 3600) // 60)
+        return f"{total_hours}h{minutes}m"
+
+    def find_step_intervals(self, step_start: str, step_end: str, step_freq: str):
+        def format_subhourly_step_to_mars(step: pd.Timedelta):
+            total_hours = int(step.total_seconds() // 3600)
+            minutes = int((step.total_seconds() % 3600) // 60)
+            return f"{total_hours}h{minutes}m"
+
+        def format_step_str_to_pd(step: str):
+            return re.sub(r"m$", "min", step)
+
+        step_start_pd_format = format_step_str_to_pd(step_start)
+        step_end_pd_format = format_step_str_to_pd(step_end)
+        step_freq_pd_format = format_step_str_to_pd(step_freq)
+
+        step_values = pd.timedelta_range(start=step_start_pd_format, end=step_end_pd_format, freq=step_freq_pd_format)
+        return [format_subhourly_step_to_mars(val) for val in step_values]
+
     def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
         base_shapes = []
 
@@ -262,6 +284,9 @@ class PolytopeMars:
                             base_shapes.append(shapes.Select(k, times.strftime("%H:%M:%S").tolist()))
                             # base_shapes.append(shapes.Span(k, lower=start, upper=end))
                             # base_shapes.append(shapes.Span(k, lower=start, upper=end))
+                        elif k == "step":
+                            steps = self.find_step_intervals(split[0], split[2], split[-1])
+                            base_shapes.append(shapes.Select(k, steps))
                         # raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
 
                 # List of individual values -> Union of Selects
@@ -362,6 +387,9 @@ class PolytopeMars:
                                     dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
                                 # dates.append(s)
                             base_shapes.append(shapes.Select(k, dates))
+                        elif k == "step":
+                            steps = self.find_step_intervals(split[0], split[2], split[-1])
+                            base_shapes.append(shapes.Select(k, steps))
                         else:
                             expansion = list(range(int(split[0]), int(split[2]), int(split[-1])))
                             base_shapes.append(shapes.Select(k, expansion))
