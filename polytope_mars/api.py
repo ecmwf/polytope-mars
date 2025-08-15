@@ -3,7 +3,6 @@ import json
 import logging
 import time
 from typing import List
-import re
 
 import pandas as pd
 import pygribjump as gj
@@ -176,38 +175,6 @@ class PolytopeMars:
         logging.info(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
 
         return self.coverage
-
-    def convert_timestamp(self, timestamp):
-        # Ensure the input is a string
-        timestamp = str(timestamp)
-
-        # Pad the timestamp with leading zeros if necessary
-        timestamp = timestamp.zfill(4)
-
-        # Insert colons to format as HH:MM:SS
-        formatted_timestamp = f"{timestamp[:2]}:{timestamp[2:]}:00"
-
-        return formatted_timestamp
-
-    def find_step_intervals(self, step_start: str, step_end: str, step_freq: str):
-        def format_subhourly_step_to_mars(step: pd.Timedelta):
-            total_hours = int(step.total_seconds() // 3600)
-            minutes = int((step.total_seconds() % 3600) // 60)
-            return f"{total_hours}h{minutes}m"
-
-        def format_step_str_to_pd(step: str):
-            return re.sub(r"m$", "min", step)
-
-        # if we have normal digit steps only, treat like before
-        if step_start.isdigit() and step_end.isdigit() and step_freq.isdigit():
-            return list(range(int(step_start), int(step_end), int(step_freq)))
-
-        step_start_pd_format = format_step_str_to_pd(step_start)
-        step_end_pd_format = format_step_str_to_pd(step_end)
-        step_freq_pd_format = format_step_str_to_pd(step_freq)
-
-        step_values = pd.timedelta_range(start=step_start_pd_format, end=step_end_pd_format, freq=step_freq_pd_format)
-        return [format_subhourly_step_to_mars(val) for val in step_values]
 
     def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
         base_shapes = []
