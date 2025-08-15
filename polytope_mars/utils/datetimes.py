@@ -34,7 +34,6 @@ def hours_between_times(time1, time2):
     return abs(delta.total_seconds() / 3600)
 
 
-
 def convert_timestamp(timestamp):
     # Ensure the input is a string
     timestamp = str(timestamp)
@@ -67,6 +66,7 @@ def find_step_intervals(step_start: str, step_end: str, step_freq: str):
 
     step_values = pd.timedelta_range(start=step_start_pd_format, end=step_end_pd_format, freq=step_freq_pd_format)
     return [format_subhourly_step_to_mars(val) for val in step_values]
+
 
 def from_range_to_list_num(num_range):
     """
@@ -110,4 +110,3 @@ def from_range_to_list_date(date_range):
     else:
         date_list = date_range
     return date_list
-

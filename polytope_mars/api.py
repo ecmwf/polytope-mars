@@ -23,8 +23,8 @@ from .features.polygon import Polygons
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
-from .utils.datetimes import convert_timestamp, find_step_intervals
-from .utils.datetimes import from_range_to_list_date, from_range_to_list_num
+from .utils.datetimes import (convert_timestamp, find_step_intervals,
+                              from_range_to_list_date, from_range_to_list_num)
 
 features = {
     "timeseries": TimeSeries,
