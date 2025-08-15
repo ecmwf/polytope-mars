@@ -283,9 +283,6 @@ class PolytopeMars:
                             base_shapes.append(shapes.Select(k, times.strftime("%H:%M:%S").tolist()))
                             # base_shapes.append(shapes.Span(k, lower=start, upper=end))
                             # base_shapes.append(shapes.Span(k, lower=start, upper=end))
-                        elif k == "step":
-                            steps = self.find_step_intervals(split[0], split[2], split[-1])
-                            base_shapes.append(shapes.Select(k, steps))
                         # raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
 
                 # List of individual values -> Union of Selects
