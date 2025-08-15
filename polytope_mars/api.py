@@ -203,6 +203,10 @@ class PolytopeMars:
         def format_step_str_to_pd(step: str):
             return re.sub(r"m$", "min", step)
 
+        # if we have normal digit steps only, treat like before
+        if step_start.isdigit() and step_end.isdigit() and step_freq.isdigit():
+            return list(range(int(step_start), int(step_end), int(step_freq)))
+
         step_start_pd_format = format_step_str_to_pd(step_start)
         step_end_pd_format = format_step_str_to_pd(step_end)
         step_freq_pd_format = format_step_str_to_pd(step_freq)
