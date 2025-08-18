@@ -147,9 +147,24 @@ def get_boundingbox_area(points):
 
 
 def field_area(request, area):
+    """Calculate the area of a request based on the number of fields and the area of the feature.
+    :param request: The request dictionary containing fields and feature dictionary.
+    :param area: The area of the feature in square kilometers.
+    :return: The total area of the request in square kilometers.
+    """
+
     step_len = 1
     number_len = 1
     levelist_len = 1
+
+    # Check if the request contains a range for the feature instead of a step
+    if "range" in request["feature"]:
+        if "start" in request["feature"]["range"] and "end" in request["feature"]["range"]:
+            step_len = request["feature"]["range"]["end"] - request["feature"]["range"]["start"] + 1
+        elif "start" in request["feature"]["range"]:
+            step_len = 1
+        elif "end" in request["feature"]["range"]:
+            step_len = 1
 
     if "step" in request:
         step = request["step"].split("/")
@@ -161,7 +176,7 @@ def field_area(request, area):
     if "number" in request:
         number = request["number"].split("/")
         if "to" in number:
-            number_len = int(number[2]) - int(number[0])
+            number_len = int(number[2]) - int(number[0]) + 1
         else:
             number_len = len(number)
 
@@ -193,4 +208,23 @@ def field_area(request, area):
 
     shape_area = area
 
+    print(param_len, step_len, number_len, time_len, date_len, levelist_len, shape_area)
+
     return param_len * step_len * number_len * time_len * date_len * levelist_len * shape_area
+
+
+def request_cost(request):
+    """
+    Calculate the cost of a request based on the area and the number of fields.
+
+    :param request: The request dictionary containing fields and feature dictionary.
+    :return: The cost of the request.
+    """
+    if request["feature"]["type"] == "boundingbox":
+        area = get_boundingbox_area(request["feature"]["points"])
+    elif request["feature"]["type"] == "polygon":
+        area = get_polygon_area(request["feature"]["shape"])
+    else:
+        area = len(request["feature"]["points"])
+    field_area_value = field_area(request, area)
+    return field_area_value
