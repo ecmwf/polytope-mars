@@ -89,13 +89,13 @@ class TestCosting:
         request_cost_value = request_cost(self.bbox_request)
         assert math.isclose(
             request_cost_value, 36926 * 2, abs_tol=tolerance
-        ), f"Value {request_cost_value} is not within {tolerance} of {36926*2}"
+        ), f"Value {request_cost_value} is not within {tolerance} of {3692 * 2}"
 
         self.bbox_request["step"] = "0/to/6"
         request_cost_value = request_cost(self.bbox_request)
         assert math.isclose(
             request_cost_value, 36926 * 2 * 2, abs_tol=tolerance
-        ), f"Value {request_cost_value} is not within {tolerance} of {36926*2*2}"
+        ), f"Value {request_cost_value} is not within {tolerance} of {36926 * 2 * 2}"
 
     def test_polygon_cost(self):
         tolerance = 10
@@ -109,10 +109,10 @@ class TestCosting:
         request_cost_value = request_cost(self.polygon_request)
         assert math.isclose(
             request_cost_value, 36926 * 2, abs_tol=tolerance
-        ), f"Value {request_cost_value} is not within {tolerance} of {36926*2}"
+        ), f"Value {request_cost_value} is not within {tolerance} of {36926 * 2}"
 
         self.polygon_request["step"] = "0/to/6"
         request_cost_value = request_cost(self.polygon_request)
         assert math.isclose(
             request_cost_value, 36926 * 2 * 2, abs_tol=tolerance
-        ), f"Value {request_cost_value} is not within {tolerance} of {36926*2*2}"
+        ), f"Value {request_cost_value} is not within {tolerance} of {36926 * 2 * 2}"
