@@ -216,6 +216,7 @@ def field_area(request, area):
 def request_cost(request):
     """
     Calculate the cost of a request based on the area and the number of fields.
+    Note this is only a heuristic and does not take into account the actual cost of the request.
 
     :param request: The request dictionary containing fields and feature dictionary.
     :return: The cost of the request.
@@ -227,4 +228,8 @@ def request_cost(request):
     else:
         area = len(request["feature"]["points"])
     field_area_value = field_area(request, area)
+
+    if "dataset" in request:
+        field_area_value *= 2
+
     return field_area_value
