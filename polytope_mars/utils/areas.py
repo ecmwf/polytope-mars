@@ -208,8 +208,6 @@ def field_area(request, area):
 
     shape_area = area
 
-    print(param_len, step_len, number_len, time_len, date_len, levelist_len, shape_area)
-
     return param_len * step_len * number_len * time_len * date_len * levelist_len * shape_area
 
 
