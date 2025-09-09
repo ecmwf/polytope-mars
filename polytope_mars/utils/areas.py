@@ -147,7 +147,8 @@ def get_boundingbox_area(points):
 
 
 def field_area(request, area):
-    """Calculate the area of a request based on the number of fields and the area of the feature.
+    """
+    Calculate the area of a request based on the number of fields and the area of the feature.
     :param request: The request dictionary containing fields and feature dictionary.
     :param area: The area of the feature in square kilometers.
     :return: The total area of the request in square kilometers.

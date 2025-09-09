@@ -58,9 +58,7 @@ class TestCosting:
             "feature": {
                 "type": "timeseries",
                 "points": [[-9.10, 38.78]],
-                "time_axis": "step",
                 "axes": ["longitude", "latitude"],
-                # "range": {"start": 0, "end": 3},
             },
         }
 
