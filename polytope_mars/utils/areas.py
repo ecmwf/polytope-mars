@@ -158,32 +158,33 @@ def field_area(request, area):
     levelist_len = 1
 
     # Check if the request contains a range for the feature instead of a step
-    if "range" in request["feature"]:
-        if "start" in request["feature"]["range"] and "end" in request["feature"]["range"]:
-            step_len = request["feature"]["range"]["end"] - request["feature"]["range"]["start"] + 1
-        elif "start" in request["feature"]["range"]:
-            step_len = 1
-        elif "end" in request["feature"]["range"]:
-            step_len = 1
+    if "feature" in request:
+        if "range" in request["feature"]:
+            if "start" in request["feature"]["range"] and "end" in request["feature"]["range"]:
+                step_len = request["feature"]["range"]["end"] - request["feature"]["range"]["start"] + 1
+            elif "start" in request["feature"]["range"]:
+                step_len = 1
+            elif "end" in request["feature"]["range"]:
+                step_len = 1
 
     if "step" in request:
         step = request["step"].split("/")
         if "to" in step:
-            step_len = int(step[2]) - int(step[0])
+            step_len = len(range(int(step[0]), int(step[2]) + 1))
         else:
             step_len = len(step)
 
     if "number" in request:
         number = request["number"].split("/")
         if "to" in number:
-            number_len = int(number[2]) - int(number[0]) + 1
+            number_len = len(range(int(number[0]), int(number[2]) + 1))
         else:
             number_len = len(number)
 
     if "levelist" in request:
         levelist = request["levelist"].split("/")
         if "to" in levelist:
-            levelist_len = int(levelist[2]) - int(levelist[0])
+            levelist_len = len(range(int(levelist[0]), int(levelist[2]) + 1))
         else:
             levelist_len = len(levelist)
 
