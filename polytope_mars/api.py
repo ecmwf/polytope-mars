@@ -165,7 +165,7 @@ class PolytopeMars:
             "dataset" in request
             and request["dataset"] == "climate-dt"  # noqa: W503
             and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
-        ) or request["class"] == "ng":
+        ) or (request["class"] == "ng" and (feature_type == "timeseries" or feature_type == "polygon")):
             for k, v in request.items():
                 split = str(v).split("/")
 
