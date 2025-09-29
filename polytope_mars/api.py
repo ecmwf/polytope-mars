@@ -11,7 +11,6 @@ from covjsonkit.api import Covjsonkit
 from covjsonkit.param_db import get_param_ids
 from covjsonkit.utils import merge_coverage_collections
 from polytope_feature import shapes
-from polytope_feature.engine.hullslicer import HullSlicer
 from polytope_feature.polytope import Polytope, Request
 
 from .config import PolytopeMarsConfig
@@ -383,12 +382,10 @@ class PolytopeMars:
             fdbdatacube = gj.GribJump()
         else:
             raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
-        slicer = HullSlicer()
 
         logging.debug(f"Send log_context to polytope: {self.log_context}")
         self.api = Polytope(
             datacube=fdbdatacube,
-            engine=slicer,
             options=self.conf.options.model_dump(),
             context=self.log_context,
         )
