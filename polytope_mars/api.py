@@ -17,6 +17,7 @@ from .config import PolytopeMarsConfig
 from .features.boundingbox import BoundingBox
 from .features.circle import Circle
 from .features.frame import Frame
+from .features.grid import Grid
 from .features.path import Path
 from .features.polygon import Polygons
 from .features.shpfile import Shapefile
@@ -38,6 +39,7 @@ features = {
     "shapefile": Shapefile,
     "polygon": Polygons,
     "circle": Circle,
+    "grid": Grid,
 }
 
 
