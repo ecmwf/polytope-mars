@@ -17,6 +17,7 @@ from .config import PolytopeMarsConfig
 from .features.boundingbox import BoundingBox
 from .features.circle import Circle
 from .features.frame import Frame
+from .features.grid import Grid
 from .features.path import Path
 from .features.polygon import Polygons
 from .features.shpfile import Shapefile
@@ -38,6 +39,7 @@ features = {
     "shapefile": Shapefile,
     "polygon": Polygons,
     "circle": Circle,
+    "grid": Grid,
 }
 
 
@@ -53,6 +55,7 @@ class PolytopeMars:
             logging.debug(f"{self.id}: Config loaded from file: {self.conf}")  # noqa: E501
         # else initialise with provided config
         else:
+            config["return_indexes"] = False
             self.conf = PolytopeMarsConfig.model_validate(config)
             logging.debug(f"{self.id}: Config loaded from dictionary: {self.conf}")  # noqa: E501
 
@@ -376,6 +379,9 @@ class PolytopeMars:
             raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
 
         logging.debug(f"Send log_context to polytope: {self.log_context}")
+        if feature_type == "grid":
+            self.conf.options.return_indexes = True
+        print(self.conf.options.model_dump())
         self.api = Polytope(
             datacube=fdbdatacube,
             options=self.conf.options.model_dump(),
@@ -392,6 +398,8 @@ class PolytopeMars:
         logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
         result = self.api.retrieve(preq)
+
+        result.pprint()
 
         end = time.time()
         delta = end - start

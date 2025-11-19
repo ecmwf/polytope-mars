@@ -1,3 +1,5 @@
+from typing import Literal
+
 from conflator import ConfigModel
 from polytope_feature.options import Config
 
@@ -10,6 +12,7 @@ class DatacubeConfig(ConfigModel):
 
 class CovjsonKitConfig(ConfigModel):
     param_db: str = "ecmwf"
+    compression: Literal["zstd", "LZ4", "binpack", None] = None
 
 
 class PolygonRulesConfig(ConfigModel):
