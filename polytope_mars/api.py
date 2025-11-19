@@ -225,7 +225,6 @@ class PolytopeMars:
                             start = convert_timestamp(split[0])
                             end = convert_timestamp(split[2])
                             times = pd.date_range(start=start, end=end, freq=f"{split[-1]}H")
-                            # print(times.strftime("%H%M").tolist())
                             base_shapes.append(shapes.Select(k, times.strftime("%H:%M:%S").tolist()))
                             # base_shapes.append(shapes.Span(k, lower=start, upper=end))
                             # base_shapes.append(shapes.Span(k, lower=start, upper=end))
@@ -255,7 +254,6 @@ class PolytopeMars:
                 else:
                     times = pd.date_range(start=start, end=end, freq="1H")
                 time = times.strftime("%H:%M:%S").tolist()
-                # raise NotImplementedError("Time ranges with 'to' keyword not supported yet")  # noqa: E501
 
             for k, v in request.items():
                 split = str(v).split("/")
@@ -301,7 +299,6 @@ class PolytopeMars:
                         for s in pd.date_range(start, end):
                             for t in time:
                                 dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
-                            # dates.append(s)
                         base_shapes.append(shapes.Select(k, dates))
                     else:
                         base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
@@ -315,7 +312,6 @@ class PolytopeMars:
                             for s in pd.date_range(start, end):
                                 for t in time:
                                     dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
-                                # dates.append(s)
                             base_shapes.append(shapes.Select(k, dates))
                         else:
                             base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))
@@ -327,7 +323,6 @@ class PolytopeMars:
                             for s in pd.date_range(start, end, freq=f"{split[-1]}D"):
                                 for t in time:
                                     dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
-                                # dates.append(s)
                             base_shapes.append(shapes.Select(k, dates))
                         elif k == "step":
                             steps = find_step_intervals(split[0], split[2], split[-1])
@@ -408,7 +403,6 @@ class PolytopeMars:
             "CoverageCollection", feature_type
         )  # noqa: E501
 
-        # if timeseries_type == "date":
         if "dataset" in request:
             if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
                 coverage = encoder.from_polytope_step(result)
