@@ -19,6 +19,7 @@ from .features.circle import Circle
 from .features.frame import Frame
 from .features.path import Path
 from .features.polygon import Polygons
+from .features.position import Position
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
@@ -38,6 +39,7 @@ features = {
     "shapefile": Shapefile,
     "polygon": Polygons,
     "circle": Circle,
+    "position": Position,
 }
 
 
