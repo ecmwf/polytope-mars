@@ -123,11 +123,8 @@ class PolytopeMars:
 
         self.split_request = feature.split_request()
 
-        print("Self split", self.split_request)
-
+        logging.debug("Self split: %s", self.split_request)
         logging.debug("Parsed request: %s", request)
-
-        print("Request", request)
 
         if self.split_request:
             # If the request is split, we need to handle it differently
