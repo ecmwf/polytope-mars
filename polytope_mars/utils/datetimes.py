@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -101,7 +101,7 @@ def from_range_to_list_date(date_range):
         current_date = start_date
         while current_date <= end_date:
             date_list.append(current_date.strftime("%Y%m%d"))
-            current_date = current_date.replace(day=current_date.day + 1)
+            current_date += timedelta(days=1)
         if not date_list:
             raise ValueError("The date range does not include any valid dates.")
         if len(date_list) == 1:
