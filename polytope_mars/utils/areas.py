@@ -6,7 +6,7 @@ from geographiclib.polygonarea import PolygonArea
 from shapely.geometry import LineString, Polygon
 from shapely.ops import split
 
-from .datetimes import days_between_dates, hours_between_times
+from .datetimes import count_steps, days_between_dates, hours_between_times
 
 
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -169,11 +169,12 @@ def field_area(request, area):
                 step_len = 1
 
     if "step" in request:
-        step = request["step"].split("/")
-        if "to" in step:
-            step_len = len(range(int(step[0]), int(step[2]) + 1))
-        else:
-            step_len = len(step)
+        step_len = count_steps(request["step"])
+        # step = request["step"].split("/")
+        # if "to" in step:
+        #    step_len = len(range(int(step[0]), int(step[2]) + 1))
+        # else:
+        #    step_len = len(step)
 
     if "number" in request:
         number = request["number"].split("/")
