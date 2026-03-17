@@ -275,7 +275,7 @@ class PolytopeMars:
 
                 # Single value -> Select
                 elif len(split) == 1:
-                    if k == "date":
+                    if k in ["date", "hdate"]:
                         if int(split[0]) < 0:
                             split[0] = str(
                                 (
@@ -294,7 +294,7 @@ class PolytopeMars:
                 elif len(split) == 3 and split[1] == "to":
                     # if date then only get time of dates in span not
                     # all in times within date
-                    if k == "date":
+                    if k in ["date", "hdate"]:
                         start = pd.Timestamp(split[0] + "T" + time[0])
                         end = pd.Timestamp(split[2] + "T" + time[-1])
                         dates = []
@@ -307,7 +307,7 @@ class PolytopeMars:
 
                 elif "by" in split:
                     if split[-1] == "1":
-                        if k == "date":
+                        if k in ["date", "hdate"]:
                             start = pd.Timestamp(split[0] + "T" + time[0])
                             end = pd.Timestamp(split[2] + "T" + time[-1])
                             dates = []
@@ -318,7 +318,7 @@ class PolytopeMars:
                         else:
                             base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))
                     else:
-                        if k == "date":
+                        if k in ["date", "hdate"]:
                             start = pd.Timestamp(split[0] + "T" + time[0])
                             end = pd.Timestamp(split[2] + "T" + time[-1])
                             dates = []
@@ -335,7 +335,7 @@ class PolytopeMars:
 
                 # List of individual values -> Union of Selects
                 else:
-                    if k == "date":
+                    if k in ["date", "hdate"]:
                         dates = []
                         for s in split:
                             for t in time:
