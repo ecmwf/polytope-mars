@@ -457,7 +457,10 @@ class PolytopeMars:
 
         if "dataset" in request:
             if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
-                coverage = encoder.from_polytope_step(result)
+                if request.get("stream") == "clmn":
+                    coverage = encoder.from_polytope_month(result)
+                else:
+                    coverage = encoder.from_polytope_step(result)
             else:
                 coverage = encoder.from_polytope(result)
         elif request["class"] == "ng":  # noqa: E501
