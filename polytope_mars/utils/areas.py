@@ -185,28 +185,50 @@ def field_area(request, area):
         else:
             levelist_len = len(levelist)
 
-    date = request["date"].split("/")
-    time = request["time"].split("/")
     param = request["param"].split("/")
+    param_len = len(param)
 
-    if "to" in date:
-        date_len = days_between_dates(date[0], date[2])
+    # date / time lengths — not present when the time axis is month or year
+    if "date" in request:
+        date = request["date"].split("/")
+        if "to" in date:
+            date_len = days_between_dates(date[0], date[2])
+        else:
+            date_len = len(date)
+        if date_len == 0:
+            date_len = 1
     else:
-        date_len = len(date)
-
-    if date_len == 0:
         date_len = 1
 
-    if "to" in time:
-        time_len = hours_between_times(time[0], time[2])
+    if "time" in request:
+        time = request["time"].split("/")
+        if "to" in time:
+            time_len = hours_between_times(time[0], time[2])
+        else:
+            time_len = len(time)
     else:
-        time_len = len(time)
+        time_len = 1
 
-    param_len = len(param)
+    # month / year lengths — contribute to cost when the time axis is month or year
+    month_len = 1
+    if "month" in request:
+        month = str(request["month"]).split("/")
+        if "to" in month:
+            month_len = int(month[2]) - int(month[0]) + 1
+        else:
+            month_len = len(month)
+
+    year_len = 1
+    if "year" in request:
+        year = str(request["year"]).split("/")
+        if "to" in year:
+            year_len = int(year[2]) - int(year[0]) + 1
+        else:
+            year_len = len(year)
 
     shape_area = area
 
-    return param_len * step_len * number_len * time_len * date_len * levelist_len * shape_area
+    return param_len * step_len * number_len * time_len * date_len * month_len * year_len * levelist_len * shape_area
 
 
 def request_cost(request):
