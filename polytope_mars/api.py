@@ -1,3 +1,4 @@
+import copy
 import datetime
 import json
 import logging
@@ -68,6 +69,8 @@ class PolytopeMars:
                 request = json.loads(request)
             except ValueError:
                 raise ValueError("Request not in JSON format or python dictionary")  # noqa: E501
+        else:
+            request = copy.deepcopy(request)
 
         # expect a "feature" key in the request
         try:
