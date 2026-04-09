@@ -68,8 +68,8 @@ class TimeSeries(Feature):
         # if isinstance(feature_config["time_axis"], list):
         #    if "step" not in feature_config["time_axis"] and "date" not in feature_config["time_axis"]:
         #        raise ValueError("Timeseries axes must be step or date")
-        if feature_config["time_axis"] != "step" and feature_config["time_axis"] != "date":  # noqa: E501
-            raise ValueError("Timeseries axes must be step or date")
+        if feature_config["time_axis"] not in {"hdate", "date", "step"}:
+            raise ValueError("Timeseries axes must be hdate, date, or step")
 
         area = field_area(request, len(feature_config["points"]))
 
