@@ -601,11 +601,6 @@ class TensogramEncoder:
                     for step in fields["step"]:
                         param_data = {}
                         for para in fields["param"]:
-                            key = (
-                                (date, 0, num, para, step)
-                                if fields["levels"] == [0]
-                                else None
-                            )
                             # Try matching with actual level values
                             vals = []
                             for level in fields["levels"]:
@@ -721,7 +716,7 @@ class TensogramEncoder:
                         coverage_mars["Forecast date"] = date
 
                         levels_arr = np.array(
-                            [float(l) for l in fields["levels"]], dtype=np.float64
+                            [float(lv) for lv in fields["levels"]], dtype=np.float64
                         )
 
                         msg = self._encode_message(
@@ -761,11 +756,6 @@ class TensogramEncoder:
                     for para in fields["param"]:
                         vals = []
                         for step in fields["step"]:
-                            key = (
-                                (date, 0, num, para, step)
-                                if fields["levels"] == [0]
-                                else None
-                            )
                             for level in fields["levels"]:
                                 k = (date, level, num, para, step)
                                 vals.extend(range_dict.get(k, []))

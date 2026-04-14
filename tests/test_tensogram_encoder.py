@@ -12,7 +12,6 @@ from polytope_mars.encoders.tensogram_encoder import (
     _numpy_dtype_to_tensogram,
 )
 
-
 # ===================================================================
 # Helpers: mock TensorIndexTree nodes
 # ===================================================================
