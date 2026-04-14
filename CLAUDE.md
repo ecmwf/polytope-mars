@@ -19,61 +19,19 @@
   - ALWAYS document those features in docs/user_guide/
   - Remember to add examples in examples/ (Jupyter notebooks)
 
-- NOTE: When the user asks for "second pass", "third pass" or "N-th pass" perform:
-  - simplification opportunities,
-  - naming/comments/docs quality review,
-  - scan for edge-cases and logical regression,
-  - no bare excepts in Python code,
-  - all documentation up-to-date with changes,
-  - running required formatter/lint/tests
+# Slash Commands
 
-- NOTE: when user asks for 'error handling' checks:
-  - verify no bare except clauses
-  - verify how errors are handled across the codebase
-  - ensure all errors handled and reported correctly with enough information reaching users
-  - document all error paths in docs/
+The following slash commands are available in `.claude/commands/`:
 
-- NOTE: when user asks for 'edge cases':
-  - look specifically for edge cases
-  - look for undefined behaviour or ambiguities
-  - if necessary, ask the user to clarify
-  - document all those in docs/
-
-- NOTE: when user asks for 'code coverage':
-    - explore all the code base looking for code that isn't yet tested.
-    - Look specifically for testing edge cases.
-    - Aim to have at least 95% test coverage.
-    - Note: tests marked `data` require a local FDB or GribJump server.
-
-- NOTE: When user asks for 'final prep' make:
-    - final check everything installs and all tests pass
-    - all examples (notebooks) run
-    - all docs build
-    - if successful, carefully:
-        - select files and contributions to git add
-        - ignore build files and artifacts, don't add hidden directories
-        - if not in a branch, create a new properly named branch
-        - git commit
-        - make a pull request to upstream github project
-
-- NOTE: when user asks to do 'pr reply' or 'pull request reply':
-    - check github pull request reviews
-    - consider them with respect to the philosophy and aims of this software
-    - if in doubt seek user clarifications
-    - fix code and address the raised issues
-    - update the docs/
-    - make a summary and push your changes to update the PR
-    - poll to wait for the CI to finish running
-    - continue iterating until all recommendations and issues were addressed
-
-- NOTE: When user asks for 'make release' execute:
-    - check all changes are committed and pushed upstream
-    - final check everything installs and all tests pass
-    - all docs build
-    - if any of the above fails STOP and prompt the user for action
-    - otherwise, check the latest version upstream and in polytope_mars/version.py
-    - if needed, bump version in polytope_mars/version.py, commit and tag then push upstream
-    - make a Github release
+| Command | Trigger | Description |
+|---------|---------|-------------|
+| `/make-further-pass N` | "second pass", "third pass", "Nth pass" | Quality review with increasing strictness per pass number |
+| `/improve-error-handling` | "error handling" | Audit bare excepts, error messages, error paths |
+| `/improve-edge-cases` | "edge cases" | Systematic edge case audit and hardening |
+| `/improve-code-coverage` | "code coverage" | Measure coverage, fill gaps to 95%+ |
+| `/prepare-make-pr` | "final prep" | Pre-flight checks, commit, push, create PR |
+| `/address-pr-comments N` | "pr reply", "pull request reply" | Fetch and address all PR review comments |
+| `/make-release X.Y.Z` | "make release" | Full release workflow with checks, tag, GitHub release |
 
 # Design & Purpose
 
