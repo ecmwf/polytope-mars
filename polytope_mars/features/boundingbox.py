@@ -8,7 +8,8 @@ from ..utils.areas import field_area, get_boundingbox_area
 
 class BoundingBox(Feature):
     def __init__(self, feature_config, client_config):
-        assert feature_config.pop("type") == "boundingbox"
+        if feature_config.pop("type") != "boundingbox":
+            raise ValueError("Feature type must be 'boundingbox'")
         if "points" not in feature_config:
             raise KeyError("Bounding box must have points in feature")
         self.points = feature_config.pop("points", [])
@@ -21,7 +22,8 @@ class BoundingBox(Feature):
         if "axes" in feature_config:
             raise ValueError("Bounding box does not have axes in feature, did you mean axes?")  # noqa: E501
 
-        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
+        if len(feature_config) != 0:
+            raise ValueError(f"Unexpected keys in feature config: {list(feature_config.keys())}")
 
         self.area_bb = get_boundingbox_area(self.points)
         logging.info(f"Area of bounding box: {self.area_bb} km\u00b2")

@@ -11,23 +11,27 @@ def get_coords(geom):
         for point in geom.exterior.coords:
             coords.append([point[0], point[1]])
         return [coords]
-    else:
+    elif geom.geom_type == "MultiPolygon":
         coords = []
-        for geom in geom.geoms:
+        for sub_geom in geom.geoms:
             coord = []
-            for point in geom.exterior.coords:
+            for point in sub_geom.exterior.coords:
                 coord.append([point[0], point[1]])
             coords.append(coord)
-    return coords
+        return coords
+    else:
+        raise ValueError(f"Unsupported geometry type '{geom.geom_type}', expected Polygon or MultiPolygon")
 
 
 class Shapefile(Feature):
     def __init__(self, feature_config, client_config):
-        assert feature_config.pop("type") == "shapefile"
+        if feature_config.pop("type") != "shapefile":
+            raise ValueError("Feature type must be 'shapefile'")
         self.file = feature_config.pop("file")
         self.df = gpd.read_file(self.file)
 
-        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
+        if len(feature_config) != 0:
+            raise ValueError(f"Unexpected keys in feature config: {list(feature_config.keys())}")
 
     def get_shapes(self):
         self.df = self.df.head(1)
@@ -47,6 +51,12 @@ class Shapefile(Feature):
 
     def name(self):
         return "Shapefile"
+
+    def required_keys(self):
+        return ["type", "file"]
+
+    def required_axes(self):
+        return ["latitude", "longitude"]
 
     def parse(self, request, feature_config):
         return request

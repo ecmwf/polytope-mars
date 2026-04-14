@@ -8,7 +8,8 @@ from ..utils.areas import field_area
 
 class TimeSeries(Feature):
     def __init__(self, feature_config, client_config):
-        assert feature_config.pop("type") == "timeseries"
+        if feature_config.pop("type") != "timeseries":
+            raise ValueError("Feature type must be 'timeseries'")
         # self.start_step = config.pop("start", None)
         # self.end_step = config.pop("end", None)
         self.axes = feature_config.pop("axes", [])
@@ -25,11 +26,14 @@ class TimeSeries(Feature):
             self.axes = ["latitude", "longitude"]
 
         self.points = feature_config.pop("points", [])
+        if not self.points:
+            raise ValueError("Timeseries feature requires at least one point in 'points'")
 
         if "range" in feature_config:
             feature_config.pop("range")
 
-        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
+        if len(feature_config) != 0:
+            raise ValueError(f"Unexpected keys in feature config: {list(feature_config.keys())}")
 
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
