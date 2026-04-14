@@ -51,7 +51,9 @@ class PolytopeMars:
 
         # If no config check default locations
         if config is None:
-            self.conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()  # noqa: E501
+            self.conf = Conflator(
+                app_name="polytope_mars", model=PolytopeMarsConfig
+            ).load()  # noqa: E501
             logging.debug(f"{self.id}: Config loaded from file: {self.conf}")  # noqa: E501
         # else initialise with provided config
         else:
@@ -76,12 +78,11 @@ class PolytopeMars:
         except KeyError:
             raise KeyError("Request does not contain a 'feature' keyword")
 
-        try:
-            format = request.pop("format")
-            if format != "covjson":
-                raise ValueError("Only covjson format is currently supported")
-        except KeyError:
-            pass
+        self.format = request.pop("format", "covjson")
+        if self.format not in ("covjson", "tensogram"):
+            raise ValueError(
+                f"Unsupported format '{self.format}'. Supported formats: covjson, tensogram"
+            )
 
         # get feature type
         try:
@@ -132,6 +133,14 @@ class PolytopeMars:
         logging.debug("Self split: %s", self.split_request)
         logging.debug("Parsed request: %s", request)
 
+        # Initialise the result container based on format
+        if self.format == "tensogram":
+            from .encoders.tensogram_encoder import TensogramResult
+
+            self.coverage = TensogramResult()
+        else:
+            self.coverage = {}
+
         if self.split_request:
             # If the request is split, we need to handle it differently
             dates = from_range_to_list_date(request["date"])
@@ -143,18 +152,22 @@ class PolytopeMars:
                             copied_request = request.copy()
                             copied_request["date"] = date
                             copied_request["number"] = number
-                            coverage = self.retrieve_data(copied_request, feature_type, feature)  # noqa: E501
-                            self.coverage = merge_coverage_collections(self.coverage, coverage)  # noqa: E501
+                            coverage = self.retrieve_data(
+                                copied_request, feature_type, feature
+                            )  # noqa: E501
+                            self._merge_coverage(coverage)
                     else:
                         copied_request = request.copy()
                         copied_request["date"] = date
-                        coverage = self.retrieve_data(copied_request, feature_type, feature)
-                        self.coverage = merge_coverage_collections(self.coverage, coverage)
+                        coverage = self.retrieve_data(
+                            copied_request, feature_type, feature
+                        )
+                        self._merge_coverage(coverage)
                 else:
                     copied_request = request.copy()
                     copied_request["date"] = date
                     coverage = self.retrieve_data(copied_request, feature_type, feature)
-                    self.coverage = merge_coverage_collections(self.coverage, coverage)
+                    self._merge_coverage(coverage)
 
         else:
             self.coverage = self.retrieve_data(request, feature_type, feature)  # noqa: E501
@@ -168,7 +181,10 @@ class PolytopeMars:
             "dataset" in request
             and request["dataset"] == "climate-dt"  # noqa: W503
             and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
-        ) or (request["class"] == "ng" and (feature_type == "timeseries" or feature_type == "polygon")):
+        ) or (
+            request["class"] == "ng"
+            and (feature_type == "timeseries" or feature_type == "polygon")
+        ):
             for k, v in request.items():
                 split = str(v).split("/")
 
@@ -193,7 +209,9 @@ class PolytopeMars:
 
                     # Range a/to/b -> Span with integer bounds
                     elif len(split) == 3 and split[1] == "to":
-                        base_shapes.append(shapes.Span(k, lower=int(split[0]), upper=int(split[2])))
+                        base_shapes.append(
+                            shapes.Span(k, lower=int(split[0]), upper=int(split[2]))
+                        )
 
                     # Range a/to/b/by/step -> Select of integers
                     elif "by" in split:
@@ -226,10 +244,11 @@ class PolytopeMars:
                         end = convert_timestamp(split[2])
                         base_shapes.append(shapes.Span(k, lower=start, upper=end))
                     else:
-                        base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
+                        base_shapes.append(
+                            shapes.Span(k, lower=split[0], upper=split[2])
+                        )  # noqa: E501
 
                 elif "by" in split:
-
                     if split[-1] == "1":
                         if k == "date":
                             start = pd.Timestamp(split[0])
@@ -240,18 +259,26 @@ class PolytopeMars:
                             end = convert_timestamp(split[2])
                             base_shapes.append(shapes.Span(k, lower=start, upper=end))
                         else:
-                            base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
+                            base_shapes.append(
+                                shapes.Span(k, lower=split[0], upper=split[2])
+                            )  # noqa: E501
                     else:
                         if k == "date":
                             start = pd.Timestamp(split[0])
                             end = pd.Timestamp(split[2])
-                            timestamps = pd.date_range(start=start, end=end, freq=f"{split[-1]}D")
+                            timestamps = pd.date_range(
+                                start=start, end=end, freq=f"{split[-1]}D"
+                            )
                             base_shapes.append(shapes.Select(k, timestamps.tolist()))
                         elif k == "time":
                             start = convert_timestamp(split[0])
                             end = convert_timestamp(split[2])
-                            times = pd.date_range(start=start, end=end, freq=f"{split[-1]}H")
-                            base_shapes.append(shapes.Select(k, times.strftime("%H:%M:%S").tolist()))
+                            times = pd.date_range(
+                                start=start, end=end, freq=f"{split[-1]}H"
+                            )
+                            base_shapes.append(
+                                shapes.Select(k, times.strftime("%H:%M:%S").tolist())
+                            )
                             # base_shapes.append(shapes.Span(k, lower=start, upper=end))
                             # base_shapes.append(shapes.Span(k, lower=start, upper=end))
                         # raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
@@ -310,7 +337,9 @@ class PolytopeMars:
 
                     # Range a/to/b -> Span with integer bounds
                     elif len(split) == 3 and split[1] == "to":
-                        base_shapes.append(shapes.Span(k, lower=int(split[0]), upper=int(split[2])))
+                        base_shapes.append(
+                            shapes.Span(k, lower=int(split[0]), upper=int(split[2]))
+                        )
 
                     # Range a/to/b/by/step -> Select of integers
                     elif "by" in split:
@@ -328,7 +357,8 @@ class PolytopeMars:
                         if int(split[0]) < 0:
                             split[0] = str(
                                 (
-                                    datetime.datetime.now() + datetime.timedelta(days=int(split[0]))
+                                    datetime.datetime.now()
+                                    + datetime.timedelta(days=int(split[0]))
                                 ).strftime(  # noqa: E501
                                     "%Y%m%d"
                                 )  # noqa: E501
@@ -349,10 +379,14 @@ class PolytopeMars:
                         dates = []
                         for s in pd.date_range(start, end):
                             for t in time:
-                                dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
+                                dates.append(
+                                    pd.Timestamp(s.strftime("%Y%m%d") + "T" + t)
+                                )
                         base_shapes.append(shapes.Select(k, dates))
                     else:
-                        base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
+                        base_shapes.append(
+                            shapes.Span(k, lower=split[0], upper=split[2])
+                        )  # noqa: E501
 
                 elif "by" in split:
                     if split[-1] == "1":
@@ -362,10 +396,14 @@ class PolytopeMars:
                             dates = []
                             for s in pd.date_range(start, end):
                                 for t in time:
-                                    dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
+                                    dates.append(
+                                        pd.Timestamp(s.strftime("%Y%m%d") + "T" + t)
+                                    )
                             base_shapes.append(shapes.Select(k, dates))
                         else:
-                            base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))
+                            base_shapes.append(
+                                shapes.Span(k, lower=split[0], upper=split[2])
+                            )
                     else:
                         if k == "date":
                             start = pd.Timestamp(split[0] + "T" + time[0])
@@ -373,13 +411,17 @@ class PolytopeMars:
                             dates = []
                             for s in pd.date_range(start, end, freq=f"{split[-1]}D"):
                                 for t in time:
-                                    dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
+                                    dates.append(
+                                        pd.Timestamp(s.strftime("%Y%m%d") + "T" + t)
+                                    )
                             base_shapes.append(shapes.Select(k, dates))
                         elif k == "step":
                             steps = find_step_intervals(split[0], split[2], split[-1])
                             base_shapes.append(shapes.Select(k, steps))
                         else:
-                            expansion = list(range(int(split[0]), int(split[2]), int(split[-1])))
+                            expansion = list(
+                                range(int(split[0]), int(split[2]), int(split[-1]))
+                            )
                             base_shapes.append(shapes.Select(k, expansion))
 
                 # List of individual values -> Union of Selects
@@ -394,6 +436,13 @@ class PolytopeMars:
 
         return base_shapes
 
+    def _merge_coverage(self, coverage):
+        """Merge a sub-request coverage into self.coverage."""
+        if self.format == "tensogram":
+            self.coverage.merge(coverage)
+        else:
+            self.coverage = merge_coverage_collections(self.coverage, coverage)
+
     def _feature_factory(self, feature_name, feature_config, config=None):
         feature_class = features.get(feature_name)
         if feature_class:
@@ -405,12 +454,12 @@ class PolytopeMars:
         """
         Retrieves data from the Polytope engine based on the request and feature type.
         This method sets up the Polytope engine, prepares the request, and encodes the
-        result into a Covjson format.
+        result into the requested output format (covjson or tensogram).
 
         :param request: The request dictionary containing parameters for data retrieval.
         :param feature_type: The type of feature being requested (e.g., 'timeseries', 'polygon').
         :param feature: The feature object that contains the logic for data retrieval.
-        :return: The coverage data in Covjson format.
+        :return: The coverage data in the requested format.
         """
         shapes = self._create_base_shapes(request, feature_type)
 
@@ -424,7 +473,9 @@ class PolytopeMars:
         if self.conf.datacube.type == "gribjump":
             fdbdatacube = gj.GribJump()
         else:
-            raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
+            raise NotImplementedError(
+                f"Datacube type '{self.conf.datacube.type}' not found"
+            )  # noqa: E501
 
         logging.debug(f"Send log_context to polytope: {self.log_context}")
         self.api = Polytope(
@@ -438,44 +489,67 @@ class PolytopeMars:
         logging.debug(f"{self.id}: Gribjump/setup time end: {end}")  # noqa: E501
         logging.info(f"{self.id}: Gribjump/setup time taken: {delta}")  # noqa: E501
 
-        logging.debug(f"{self.id}: The request we give polytope from polytope-mars is: {preq}")  # noqa: E501
+        logging.debug(
+            f"{self.id}: The request we give polytope from polytope-mars is: {preq}"
+        )  # noqa: E501
         start = time.time()
         logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
         result = self.api.retrieve(preq)
-        print(result.pprint())
+        logging.debug(result.pprint())
 
         end = time.time()
         delta = end - start
         logging.debug(f"{self.id}: Polytope time end: {end}")  # noqa: E501
         logging.info(f"{self.id}: Polytope time taken: {delta}")  # noqa: E501
         start = time.time()
-        logging.info(f"{self.id}: Covjson time start: {start}")  # noqa: E501
-        encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
-            "CoverageCollection", feature_type
-        )  # noqa: E501
 
+        # ---- Encode the result into the requested format ----
+        if self.format == "tensogram":
+            logging.info(f"{self.id}: Tensogram encoding time start: {start}")  # noqa: E501
+            from .encoders.tensogram_encoder import TensogramEncoder
+
+            encoder = TensogramEncoder(self.conf.coverageconfig, feature_type)
+            coverage = self._encode_with_walker(encoder, request, feature_type, result)
+
+            end = time.time()
+            delta = end - start
+            logging.info(f"{self.id}: Tensogram encoding time taken: {delta}")  # noqa: E501
+        else:
+            logging.info(f"{self.id}: Covjson time start: {start}")  # noqa: E501
+            encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
+                "CoverageCollection", feature_type
+            )  # noqa: E501
+            coverage = self._encode_with_walker(encoder, request, feature_type, result)
+
+            end = time.time()
+            delta = end - start
+            logging.debug(f"{self.id}: Covjsonkit time end: {end}")  # noqa: E501
+            logging.info(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
+
+        return coverage
+
+    def _encode_with_walker(self, encoder, request, feature_type, result):
+        """Select the correct tree-walk variant and encode the result.
+
+        Both covjsonkit encoders and TensogramEncoder implement the same
+        ``from_polytope`` / ``from_polytope_step`` / ``from_polytope_month``
+        interface, so the routing logic is shared.
+        """
         if "dataset" in request:
             if request["dataset"] == "climate-dt":
                 if request.get("stream") == "clmn":
-                    coverage = encoder.from_polytope_month(result)
+                    return encoder.from_polytope_month(result)
                 elif feature_type in ("timeseries", "polygon"):
-                    coverage = encoder.from_polytope_step(result)
+                    return encoder.from_polytope_step(result)
                 else:
-                    coverage = encoder.from_polytope(result)
+                    return encoder.from_polytope(result)
             else:
-                coverage = encoder.from_polytope(result)
-        elif request["class"] == "ng":  # noqa: E501
-            if feature_type == "timeseries" or feature_type == "polygon":
-                coverage = encoder.from_polytope_step(result)
+                return encoder.from_polytope(result)
+        elif request.get("class") == "ng":
+            if feature_type in ("timeseries", "polygon"):
+                return encoder.from_polytope_step(result)
             else:
-                coverage = encoder.from_polytope(result)
+                return encoder.from_polytope(result)
         else:
-            coverage = encoder.from_polytope(result)
-
-        end = time.time()
-        delta = end - start
-        logging.debug(f"{self.id}: Covjsonkit time end: {end}")  # noqa: E501
-        logging.info(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
-
-        return coverage
+            return encoder.from_polytope(result)
