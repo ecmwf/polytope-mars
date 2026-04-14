@@ -5,7 +5,8 @@ from ..feature import Feature
 
 class Path(Feature):
     def __init__(self, feature_config, client_config):
-        assert feature_config.pop("type") == "trajectory"
+        if feature_config.pop("type") != "trajectory":
+            raise ValueError("Feature type must be 'trajectory'")
         self.points = feature_config.pop("points", [])
         if "axes" in feature_config:
             self.axes = feature_config.pop("axes")
@@ -30,7 +31,8 @@ class Path(Feature):
         if "axis" in feature_config:
             raise ValueError("Trajectory does not have axis in feature, did you mean axes?")  # noqa: E501
 
-        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
+        if len(feature_config) != 0:
+            raise ValueError(f"Unexpected keys in feature config: {list(feature_config.keys())}")
 
     def get_shapes(self):
         if len(self.points[0]) == 2:
@@ -90,6 +92,8 @@ class Path(Feature):
                     *self.points,
                 )
             ]
+        else:
+            raise ValueError(f"Trajectory points must have 2, 3, or 4 values each, got {len(self.points[0])}")
 
     def incompatible_keys(self):
         return []

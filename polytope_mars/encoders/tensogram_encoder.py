@@ -198,9 +198,7 @@ class TensogramEncoder:
         range_dict = {}
 
         self.walk_tree(result, fields, coords, mars_metadata, range_dict)
-        return self._build_messages(
-            fields, coords, mars_metadata, range_dict, walker="standard"
-        )
+        return self._build_messages(fields, coords, mars_metadata, range_dict, walker="standard")
 
     def from_polytope_step(self, result) -> TensogramResult:
         """Walk a climate-dt polytope result tree (step-as-time)."""
@@ -218,9 +216,7 @@ class TensogramEncoder:
         range_dict = {}
 
         self.walk_tree_step(result, fields, coords, mars_metadata, range_dict)
-        return self._build_messages(
-            fields, coords, mars_metadata, range_dict, walker="step"
-        )
+        return self._build_messages(fields, coords, mars_metadata, range_dict, walker="step")
 
     def from_polytope_month(self, result) -> TensogramResult:
         """Walk a monthly-mean polytope result tree."""
@@ -237,9 +233,7 @@ class TensogramEncoder:
         range_dict = {}
 
         self.walk_tree_month(result, fields, coords, mars_metadata, range_dict)
-        return self._build_messages(
-            fields, coords, mars_metadata, range_dict, walker="month"
-        )
+        return self._build_messages(fields, coords, mars_metadata, range_dict, walker="month")
 
     # ==================================================================
     # Tree walkers (adapted from covjsonkit encoder.py)
@@ -306,12 +300,7 @@ class TensogramEncoder:
                 for ni, num in enumerate(fields["number"]):
                     for pi, para in enumerate(fields["param"]):
                         for si, step in enumerate(fields["step"]):
-                            start = int(
-                                li * level_len
-                                + ni * num_len
-                                + pi * para_len
-                                + si * step_len
-                            )
+                            start = int(li * level_len + ni * num_len + pi * para_len + si * step_len)
                             end = int(start + step_len)
                             key = (current_date, level, num, para, step)
                             if key not in range_dict:
@@ -463,46 +452,32 @@ class TensogramEncoder:
     # Message building — dispatches per domain type
     # ==================================================================
 
-    def _build_messages(
-        self, fields, coords, mars_metadata, range_dict, walker="standard"
-    ):
+    def _build_messages(self, fields, coords, mars_metadata, range_dict, walker="standard"):
         """Dispatch to the appropriate builder based on feature type."""
         result = TensogramResult()
 
         if self.feature_type in ("timeseries", "position"):
-            self._build_messages_pointseries(
-                result, fields, coords, mars_metadata, range_dict, walker
-            )
+            self._build_messages_pointseries(result, fields, coords, mars_metadata, range_dict, walker)
         elif self.feature_type == "verticalprofile":
-            self._build_messages_verticalprofile(
-                result, fields, coords, mars_metadata, range_dict, walker
-            )
+            self._build_messages_verticalprofile(result, fields, coords, mars_metadata, range_dict, walker)
         elif self.feature_type == "trajectory":
-            self._build_messages_trajectory(
-                result, fields, coords, mars_metadata, range_dict, walker
-            )
+            self._build_messages_trajectory(result, fields, coords, mars_metadata, range_dict, walker)
         elif self.feature_type in _MULTIPOINT_FEATURES:
-            self._build_messages_multipoint(
-                result, fields, coords, mars_metadata, range_dict, walker
-            )
+            self._build_messages_multipoint(result, fields, coords, mars_metadata, range_dict, walker)
         else:
             # Fallback: treat as multipoint
             logger.warning(
                 "Unknown feature type '%s', falling back to multipoint encoding",
                 self.feature_type,
             )
-            self._build_messages_multipoint(
-                result, fields, coords, mars_metadata, range_dict, walker
-            )
+            self._build_messages_multipoint(result, fields, coords, mars_metadata, range_dict, walker)
 
         return result
 
     # ------------------------------------------------------------------
     # PointSeries (TimeSeries, Position)
     # ------------------------------------------------------------------
-    def _build_messages_pointseries(
-        self, result, fields, coords, mars_metadata, range_dict, walker
-    ):
+    def _build_messages_pointseries(self, result, fields, coords, mars_metadata, range_dict, walker):
         """One message per (spatial-point, date, level, number)."""
         for date in fields["dates"]:
             if date not in coords:
@@ -535,27 +510,18 @@ class TensogramEncoder:
                                 key = (date, level, num, para)
                                 data = range_dict.get(key, [])
                                 if point_i < len(data):
-                                    vals = (
-                                        data[point_i]
-                                        if isinstance(data[point_i], list)
-                                        else [data[point_i]]
-                                    )
+                                    vals = data[point_i] if isinstance(data[point_i], list) else [data[point_i]]
                                 else:
                                     vals = []
                                 param_data[para] = vals
-                            step_values = [
-                                float(s)
-                                for s in fields.get("times", fields.get("step", []))
-                            ]
+                            step_values = [float(s) for s in fields.get("times", fields.get("step", []))]
 
                         # Skip empty coverages
                         if all(len(v) == 0 for v in param_data.values()):
                             continue
 
                         # Build time_values for metadata
-                        time_values = self._compute_time_strings(
-                            date, step_values, walker
-                        )
+                        time_values = self._compute_time_strings(date, step_values, walker)
 
                         # Build MARS metadata for this coverage
                         coverage_mars = dict(mars_metadata)
@@ -579,9 +545,7 @@ class TensogramEncoder:
     # ------------------------------------------------------------------
     # MultiPoint (BoundingBox, Polygon, Circle, Frame, Shapefile)
     # ------------------------------------------------------------------
-    def _build_messages_multipoint(
-        self, result, fields, coords, mars_metadata, range_dict, walker
-    ):
+    def _build_messages_multipoint(self, result, fields, coords, mars_metadata, range_dict, walker):
         """One message per (date, number, step)."""
         for date in fields["dates"]:
             if date not in coords:
@@ -592,9 +556,7 @@ class TensogramEncoder:
 
             lats = np.array([c[0] for c in composite], dtype=np.float64)
             lons = np.array([c[1] for c in composite], dtype=np.float64)
-            levels_arr = np.array(
-                [c[2] if len(c) > 2 else 0 for c in composite], dtype=np.float64
-            )
+            levels_arr = np.array([c[2] if len(c) > 2 else 0 for c in composite], dtype=np.float64)
 
             for num in fields["number"]:
                 if walker == "standard":
@@ -611,9 +573,7 @@ class TensogramEncoder:
                         if all(len(v) == 0 for v in param_data.values()):
                             continue
 
-                        time_values = self._compute_time_strings(
-                            date, [float(step)], walker
-                        )
+                        time_values = self._compute_time_strings(date, [float(step)], walker)
 
                         coverage_mars = dict(mars_metadata)
                         coverage_mars["number"] = num
@@ -675,9 +635,7 @@ class TensogramEncoder:
     # ------------------------------------------------------------------
     # VerticalProfile
     # ------------------------------------------------------------------
-    def _build_messages_verticalprofile(
-        self, result, fields, coords, mars_metadata, range_dict, walker
-    ):
+    def _build_messages_verticalprofile(self, result, fields, coords, mars_metadata, range_dict, walker):
         """One message per (spatial-point, date, number, step)."""
         for date in fields["dates"]:
             if date not in coords:
@@ -706,18 +664,14 @@ class TensogramEncoder:
                         if all(len(v) == 0 for v in param_data.values()):
                             continue
 
-                        time_values = self._compute_time_strings(
-                            date, [float(step)], walker
-                        )
+                        time_values = self._compute_time_strings(date, [float(step)], walker)
 
                         coverage_mars = dict(mars_metadata)
                         coverage_mars["number"] = num
                         coverage_mars["step"] = step
                         coverage_mars["Forecast date"] = date
 
-                        levels_arr = np.array(
-                            [float(lv) for lv in fields["levels"]], dtype=np.float64
-                        )
+                        levels_arr = np.array([float(lv) for lv in fields["levels"]], dtype=np.float64)
 
                         msg = self._encode_message(
                             mars_meta=coverage_mars,
@@ -734,9 +688,7 @@ class TensogramEncoder:
     # ------------------------------------------------------------------
     # Trajectory
     # ------------------------------------------------------------------
-    def _build_messages_trajectory(
-        self, result, fields, coords, mars_metadata, range_dict, walker
-    ):
+    def _build_messages_trajectory(self, result, fields, coords, mars_metadata, range_dict, walker):
         """One message per (date, number)."""
         for date in fields["dates"]:
             if date not in coords:

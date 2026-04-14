@@ -36,13 +36,12 @@ class Feature(ABC):
     def split_request(self):
         """
         Determines if the request should be split based on the feature configuration.
-        This method can be overridden by subclasses to implement specific splitting logic.
+        Only features that set ``field_area`` and ``max_area`` (Polygon, BoundingBox)
+        can trigger a split.  All other features return False.
         """
-        if self.name() == "Polygon" or self.name() == "BoundingBox":
+        if hasattr(self, "field_area") and hasattr(self, "max_area"):
             if self.field_area > self.max_area:
-                # If the area of the request exceeds the maximum allowed area, we split the request.
                 return True
-        # Otherwise, we do not split the request.
         return False
 
     def validate(self, request, feature_config):

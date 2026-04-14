@@ -5,7 +5,8 @@ from ..feature import Feature
 
 class VerticalProfile(Feature):
     def __init__(self, feature_config, client_config):
-        assert feature_config.pop("type") == "verticalprofile"
+        if feature_config.pop("type") != "verticalprofile":
+            raise ValueError("Feature type must be 'verticalprofile'")
         # self.start_step = config.pop("start", None)
         # self.end_step = config.pop("end", None)
         if "axes" in feature_config:
@@ -23,7 +24,8 @@ class VerticalProfile(Feature):
         if "range" in feature_config:
             feature_config.pop("range")
 
-        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
+        if len(feature_config) != 0:
+            raise ValueError(f"Unexpected keys in feature config: {list(feature_config.keys())}")
 
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501

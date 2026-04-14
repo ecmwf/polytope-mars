@@ -6,8 +6,11 @@ from ..utils.areas import field_area, get_polygon_area
 
 class Polygons(Feature):
     def __init__(self, feature_config, client_config):
-        assert feature_config.pop("type") == "polygon"
+        if feature_config.pop("type") != "polygon":
+            raise ValueError("Feature type must be 'polygon'")
         self.shape = feature_config.pop("shape")
+        if not self.shape:
+            raise ValueError("Polygon feature requires at least one polygon in 'shape'")
         self.max_area = client_config.polygonrules.max_area
         self.area = 0
         self.field_area = 0
@@ -43,7 +46,8 @@ class Polygons(Feature):
         else:
             self.axes = feature_config.pop("axes")
 
-        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
+        if len(feature_config) != 0:
+            raise ValueError(f"Unexpected keys in feature config: {list(feature_config.keys())}")
 
     def get_shapes(self):
         polygons = []

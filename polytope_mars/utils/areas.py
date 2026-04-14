@@ -185,6 +185,8 @@ def field_area(request, area):
         else:
             levelist_len = len(levelist)
 
+    if "param" not in request:
+        raise ValueError("Request must contain a 'param' field for cost estimation")
     param = request["param"].split("/")
     param_len = len(param)
 

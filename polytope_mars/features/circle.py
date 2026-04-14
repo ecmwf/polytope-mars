@@ -6,14 +6,20 @@ from ..utils.areas import field_area, get_circle_area_from_coords
 
 class Circle(Feature):
     def __init__(self, feature_config, client_config):
-        assert feature_config.pop("type") == "circle"
+        if feature_config.pop("type") != "circle":
+            raise ValueError("Feature type must be 'circle'")
+        if "center" not in feature_config or not feature_config["center"]:
+            raise ValueError("Circle feature requires a 'center' with at least one point")
         if len(feature_config["center"][0]) < 2 or len(feature_config["center"][0]) > 3:
             raise ValueError("Circle center must have two values, latitude and longitude")
         self.center = feature_config.pop("center")
         self.max_area = client_config.polygonrules.max_area
         self.radius = feature_config.pop("radius")
         self.area = get_circle_area_from_coords(
-            self.center[0][0], self.center[0][1], self.center[0][0] + self.radius, self.center[0][1] + self.radius
+            self.center[0][0],
+            self.center[0][1],
+            self.center[0][0] + self.radius,
+            self.center[0][1] + self.radius,
         )
         if self.area > client_config.polygonrules.max_area:
             raise ValueError(
@@ -25,7 +31,8 @@ class Circle(Feature):
         else:
             self.axes = feature_config.pop("axes")
 
-        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
+        if len(feature_config) != 0:
+            raise ValueError(f"Unexpected keys in feature config: {list(feature_config.keys())}")
 
     def get_shapes(self):
         if len(self.center[0]) == 2:

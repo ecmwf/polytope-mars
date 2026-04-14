@@ -8,7 +8,8 @@ from ..utils.areas import field_area
 
 class Position(Feature):
     def __init__(self, feature_config, client_config):
-        assert feature_config.pop("type") == "position"
+        if feature_config.pop("type") != "position":
+            raise ValueError("Feature type must be 'position'")
         self.axes = feature_config.pop("axes", [])
 
         self.max_size = client_config.polygonrules.max_area
@@ -27,8 +28,11 @@ class Position(Feature):
             self.axes = ["latitude", "longitude"]
 
         self.points = feature_config.pop("points", [])
+        if not self.points:
+            raise ValueError("Position feature requires at least one point in 'points'")
 
-        assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
+        if len(feature_config) != 0:
+            raise ValueError(f"Unexpected keys in feature config: {list(feature_config.keys())}")
 
     def get_shapes(self):
         return [
@@ -67,7 +71,7 @@ class Position(Feature):
 
         if area > self.max_size:
             raise ValueError(
-                f"Number of coordinates*fields for timeseries {area} exceeds total number allowed, please reduce the number of coordinates or fields requested"  # noqa: E501
+                f"Number of coordinates*fields for position {area} exceeds total number allowed, please reduce the number of coordinates or fields requested"  # noqa: E501
             )
 
         if len(feature_config["points"][0]) != 2:

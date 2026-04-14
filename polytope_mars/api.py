@@ -180,7 +180,7 @@ class PolytopeMars:
                 if k == "param":
                     try:
                         int(split[0])
-                    except:  # noqa: E722
+                    except (ValueError, TypeError):
                         new_split = []
                         for s in split:
                             new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
@@ -296,7 +296,7 @@ class PolytopeMars:
                 if k == "param":
                     try:
                         int(split[0])
-                    except:  # noqa: E722
+                    except (ValueError, TypeError):
                         new_split = []
                         for s in split:
                             new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
