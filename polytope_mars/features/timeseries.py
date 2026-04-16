@@ -64,7 +64,7 @@ class TimeSeries(Feature):
         return ["latitude", "longitude"]
 
     def allowed_time_axis(self):
-        return ["step", "date", "month", "year"]
+        return ["step", "date", "month", "year", "hdate"]
 
     def parse(self, request, feature_config):
         logging.debug("Feature config: %s", feature_config)

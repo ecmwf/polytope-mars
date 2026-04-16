@@ -1,9 +1,12 @@
 import copy
 from datetime import datetime, timedelta
 
+import pandas as pd
 import pytest
 from conflator import Conflator
 from covjsonkit.api import Covjsonkit
+from polytope_feature import shapes
+from polytope_feature.polytope import Request
 
 from polytope_mars.api import PolytopeMars
 from polytope_mars.config import PolytopeMarsConfig
@@ -178,3 +181,124 @@ class TestFeatureFactory:
     def test_timeseries_number_interval(self):
         self.request["number"] = "1/to/10/by/2"
         PolytopeMars(self.cf).extract(self.request)
+
+
+class TestHdateRequestConstruction:
+    def setup_method(self):
+        self.request = {
+            "class": "ce",
+            "stream": "efcl",
+            "type": "sfo",
+            "date": "20240301",
+            "time": "0600",
+            "hdate": "20250714",
+            "levtype": "sfc",
+            "expver": "4321",
+            "domain": "g",
+            "model": "lisflood",
+            "origin": "ecmf",
+            "param": "240023",
+            "step": "6",
+            "feature": {
+                "type": "timeseries",
+                "points": [[51.5, 6.5]],
+                "time_axis": "hdate",
+            },
+        }
+
+        self.options = {
+            "axis_config": [
+                {
+                    "axis_name": "hdate",
+                    "transformations": [{"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}],
+                },
+                {"axis_name": "step", "transformations": [{"name": "type_change", "type": "int"}]},
+                {"axis_name": "number", "transformations": [{"name": "type_change", "type": "int"}]},
+                {"axis_name": "levelist", "transformations": [{"name": "type_change", "type": "int"}]},
+            ],
+            "compressed_axes_config": [
+                "longitude",
+                "latitude",
+                "levtype",
+                "step",
+                "date",
+                "hdate",
+                "domain",
+                "expver",
+                "param",
+                "class",
+                "stream",
+                "type",
+            ],
+        }
+
+        conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()
+        self.cf = conf.model_dump()
+        self.cf["options"] = self.options
+
+    def _build_request(self, request):
+        pm = PolytopeMars(self.cf)
+        request = copy.deepcopy(request)
+        feature_config = request.pop("feature")
+        feature_config_copy = feature_config.copy()
+        feature_type = feature_config["type"]
+        feature = pm._feature_factory(feature_type, feature_config, pm.conf)
+        feature.validate(request, feature_config_copy)
+        request = feature.parse(request, feature_config_copy)
+        s = pm._create_base_shapes(request, feature_type)
+        s.extend(feature.get_shapes())
+        return Request(*s)
+
+    def _shapes_to_dict(self, preq):
+        result = {}
+        for s in preq.shapes:
+            if isinstance(s, shapes.Select):
+                result[s.axis] = s.values
+            elif isinstance(s, shapes.Span):
+                result[s.axis] = (s.lower, s.upper)
+        return result
+
+    def test_hdate_single_time_request(self):
+        preq = self._build_request(self.request)
+        d = self._shapes_to_dict(preq)
+
+        assert d["hdate"] == [pd.Timestamp("20250714T0600")]
+        assert d["date"] == ["20240301"]
+        assert "time" not in d
+
+    def test_hdate_multiple_times_request(self):
+        request = copy.deepcopy(self.request)
+        request["time"] = "0600/1200"
+        preq = self._build_request(request)
+        d = self._shapes_to_dict(preq)
+
+        assert d["hdate"] == [pd.Timestamp("20250714T0600"), pd.Timestamp("20250714T1200")]
+        assert d["date"] == ["20240301"]
+        assert "time" not in d
+
+    def test_hdate_multiple_hdates_request(self):
+        request = copy.deepcopy(self.request)
+        request["hdate"] = "20250714/20250715"
+        preq = self._build_request(request)
+        d = self._shapes_to_dict(preq)
+
+        assert d["hdate"] == [pd.Timestamp("20250714T0600"), pd.Timestamp("20250715T0600")]
+        assert d["date"] == ["20240301"]
+        assert "time" not in d
+
+    def test_hdate_multiple_hdates_multiple_times_request(self):
+        request = copy.deepcopy(self.request)
+        request["hdate"] = "20250714/20250715"
+        request["time"] = "0600/1200"
+        preq = self._build_request(request)
+        d = self._shapes_to_dict(preq)
+
+        assert len(d["hdate"]) == 4
+        assert d["hdate"] == [
+            pd.Timestamp("20250714T0600"),
+            pd.Timestamp("20250714T1200"),
+            pd.Timestamp("20250715T0600"),
+            pd.Timestamp("20250715T1200"),
+        ]
+        assert d["date"] == ["20240301"]
+        assert "time" not in d
