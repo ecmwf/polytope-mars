@@ -474,6 +474,8 @@ class PolytopeMars:
                 coverage = encoder.from_polytope_step(result)
             else:
                 coverage = encoder.from_polytope(result)
+        elif request["class"] == "ce" and request["stream"] == "efcl":
+            coverage = encoder.from_polytope_reforecast(result)
         else:
             coverage = encoder.from_polytope(result)
 
