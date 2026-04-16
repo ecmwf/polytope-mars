@@ -63,13 +63,16 @@ class TimeSeries(Feature):
     def required_axes(self):
         return ["latitude", "longitude"]
 
+    def allowed_time_axis(self):
+        return ["step", "date", "month", "year", "hdate"]
+
     def parse(self, request, feature_config):
         logging.debug("Feature config: %s", feature_config)
         # if isinstance(feature_config["time_axis"], list):
         #    if "step" not in feature_config["time_axis"] and "date" not in feature_config["time_axis"]:
         #        raise ValueError("Timeseries axes must be step or date")
-        if feature_config["time_axis"] not in {"hdate", "date", "step"}:
-            raise ValueError("Timeseries axes must be hdate, date, or step")
+        if feature_config["time_axis"] not in self.allowed_time_axis():  # noqa: E501
+            raise ValueError(f"Timeseries axes must be in {self.allowed_time_axis()}")
 
         area = field_area(request, len(feature_config["points"]))
 

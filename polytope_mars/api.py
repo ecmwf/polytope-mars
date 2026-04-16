@@ -108,6 +108,10 @@ class PolytopeMars:
                         raise ValueError(
                             "Date axis not supported in 'axes' keyword, must be in 'time_axis'"
                         )  # noqa: E501
+                    elif "month" in feature_config["axes"]:
+                        raise ValueError(
+                            "Month axis not supported in 'axes' keyword, must be in 'time_axis'"
+                        )  # noqa: E501
 
             except KeyError:
                 raise KeyError("The timeseries feature requires a 'time_axis' keyword")  # noqa: E501
@@ -181,6 +185,26 @@ class PolytopeMars:
                 if len(split) == 1 and split[0] == "ALL":
                     base_shapes.append(shapes.All(k))
 
+                # month / year axes: values are always passed as integers
+                elif k in ("month", "year"):
+                    # Single integer value -> Select
+                    if len(split) == 1:
+                        base_shapes.append(shapes.Select(k, [int(split[0])]))
+
+                    # Range a/to/b -> Span with integer bounds
+                    elif len(split) == 3 and split[1] == "to":
+                        base_shapes.append(shapes.Span(k, lower=int(split[0]), upper=int(split[2])))
+
+                    # Range a/to/b/by/step -> Select of integers
+                    elif "by" in split:
+                        step = int(split[-1])
+                        expansion = list(range(int(split[0]), int(split[2]) + 1, step))
+                        base_shapes.append(shapes.Select(k, expansion))
+
+                    # List of individual integer values -> Select
+                    else:
+                        base_shapes.append(shapes.Select(k, [int(s) for s in split]))
+
                 # Single value -> Select
                 elif len(split) == 1:
                     if k == "date":
@@ -246,16 +270,21 @@ class PolytopeMars:
                         split = times
                     base_shapes.append(shapes.Select(k, split))
         else:
-            time = request.pop("time").replace(":", "")
-            time = time.split("/")
-            if "to" in time:
-                start = convert_timestamp(time[0])
-                end = convert_timestamp(time[2])
-                if "by" in time:
-                    times = pd.date_range(start=start, end=end, freq=f"{time[-1]}H")
-                else:
-                    times = pd.date_range(start=start, end=end, freq="1H")
-                time = times.strftime("%H:%M:%S").tolist()
+            # When the time axis is month or year, there is no "date" key in
+            # the request – "time" may also be absent.  Only pop "time" when it
+            # is actually present so we don't break month/year requests.
+            time = []
+            if "time" in request:
+                time = request.pop("time").replace(":", "")
+                time = time.split("/")
+                if "to" in time:
+                    start = convert_timestamp(time[0])
+                    end = convert_timestamp(time[2])
+                    if "by" in time:
+                        times = pd.date_range(start=start, end=end, freq=f"{time[-1]}H")
+                    else:
+                        times = pd.date_range(start=start, end=end, freq="1H")
+                    time = times.strftime("%H:%M:%S").tolist()
 
             # TODO: when has_hdate, "date" stays a plain string (not cast to pd.Timestamp).
             # Need to check if polytope can handle that or if we need a type_change config for date.
@@ -276,6 +305,26 @@ class PolytopeMars:
                 # ALL -> All
                 if len(split) == 1 and split[0] == "ALL":
                     base_shapes.append(shapes.All(k))
+
+                # month / year axes: values are always passed as integers
+                elif k in ("month", "year"):
+                    # Single integer value -> Select
+                    if len(split) == 1:
+                        base_shapes.append(shapes.Select(k, [int(split[0])]))
+
+                    # Range a/to/b -> Span with integer bounds
+                    elif len(split) == 3 and split[1] == "to":
+                        base_shapes.append(shapes.Span(k, lower=int(split[0]), upper=int(split[2])))
+
+                    # Range a/to/b/by/step -> Select of integers
+                    elif "by" in split:
+                        step = int(split[-1])
+                        expansion = list(range(int(split[0]), int(split[2]) + 1, step))
+                        base_shapes.append(shapes.Select(k, expansion))
+
+                    # List of individual integer values -> Select
+                    else:
+                        base_shapes.append(shapes.Select(k, [int(s) for s in split]))
 
                 # Single value -> Select
                 elif len(split) == 1:
@@ -398,6 +447,7 @@ class PolytopeMars:
         logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
         result = self.api.retrieve(preq)
+        print(result.pprint())
 
         end = time.time()
         delta = end - start
@@ -410,8 +460,13 @@ class PolytopeMars:
         )  # noqa: E501
 
         if "dataset" in request:
-            if request["dataset"] == "climate-dt" and (feature_type == "timeseries" or feature_type == "polygon"):
-                coverage = encoder.from_polytope_step(result)
+            if request["dataset"] == "climate-dt":
+                if request.get("stream") == "clmn":
+                    coverage = encoder.from_polytope_month(result)
+                elif feature_type in ("timeseries", "polygon"):
+                    coverage = encoder.from_polytope_step(result)
+                else:
+                    coverage = encoder.from_polytope(result)
             else:
                 coverage = encoder.from_polytope(result)
         elif request["class"] == "ng":  # noqa: E501
