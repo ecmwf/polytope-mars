@@ -383,7 +383,7 @@ class PolytopeMars:
                             steps = find_step_intervals(split[0], split[2], split[-1])
                             base_shapes.append(shapes.Select(k, steps))
                         else:
-                            expansion = list(range(int(split[0]), int(split[2]), int(split[-1])))
+                            expansion = list(range(int(split[0]), int(split[2]) + 1, int(split[-1])))
                             base_shapes.append(shapes.Select(k, expansion))
 
                 # List of individual values -> Union of Selects

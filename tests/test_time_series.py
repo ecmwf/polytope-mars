@@ -302,3 +302,12 @@ class TestHdateRequestConstruction:
         ]
         assert d["date"] == ["20240301"]
         assert "time" not in d
+
+    def test_generic_numeric_by_range_inclusive(self):
+        """Generic numeric axis with 'by' range must include upper bound."""
+        request = copy.deepcopy(self.request)
+        request["number"] = "2/to/10/by/2"
+        preq = self._build_request(request)
+        d = self._shapes_to_dict(preq)
+
+        assert d["number"] == [2, 4, 6, 8, 10]
