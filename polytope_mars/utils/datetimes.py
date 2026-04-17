@@ -58,7 +58,7 @@ def find_step_intervals(step_start: str, step_end: str, step_freq: str):
 
     # if we have normal digit steps only, treat like before
     if step_start.isdigit() and step_end.isdigit() and step_freq.isdigit():
-        return list(range(int(step_start), int(step_end), int(step_freq)))
+        return list(range(int(step_start), int(step_end) + 1, int(step_freq)))
 
     step_start_pd_format = format_step_str_to_pd(step_start)
     step_end_pd_format = format_step_str_to_pd(step_end)
