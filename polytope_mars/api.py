@@ -61,6 +61,41 @@ class PolytopeMars:
         self.coverage = {}
         self.split_request = False
 
+    def _has_subhourly_step_transform(self) -> bool:
+        """Check if the step axis has a subhourly_step type_change transform configured."""
+        for axis_config in self.conf.options.axis_config:
+            if axis_config.axis_name == "step":
+                for transform in axis_config.transformations:
+                    # Check if it's a type_change transform with type subhourly_step
+                    if hasattr(transform, "name") and transform.name == "type_change":
+                        if hasattr(transform, "type") and transform.type == "subhourly_step":
+                            return True
+        return False
+
+    def _format_step_as_subhourly(self, step_value) -> str:
+        """
+        Convert a step value to subhourly format (e.g., "0h0m").
+
+        :param step_value: Step value as int, str, or pd.Timedelta
+        :return: Step formatted as string like "0h0m", "1h30m", etc.
+        """
+        # Convert to timedelta first
+        if isinstance(step_value, int):
+            td = pd.Timedelta(hours=step_value)
+        elif isinstance(step_value, str) and step_value.isdigit():
+            td = pd.Timedelta(hours=int(step_value))
+        elif isinstance(step_value, pd.Timedelta):
+            td = step_value
+        else:
+            # Already in subhourly format or other string format
+            return step_value
+
+        # Format as "Xh Ym"
+        total_seconds = int(td.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        return f"{hours}h{minutes}m"
+
     def extract(self, request):
         # request expected in JSON or dict
         if not isinstance(request, dict):
@@ -211,6 +246,8 @@ class PolytopeMars:
                         split[0] = pd.Timestamp(split[0])
                     if k == "time":
                         split[0] = convert_timestamp(split[0])
+                    if k == "step" and self._has_subhourly_step_transform():
+                        split = [self._format_step_as_subhourly(split[0])]
                     base_shapes.append(shapes.Select(k, split))
 
                 # Range a/to/b, "by" not supported -> Span
@@ -225,6 +262,11 @@ class PolytopeMars:
                         start = convert_timestamp(split[0])
                         end = convert_timestamp(split[2])
                         base_shapes.append(shapes.Span(k, lower=start, upper=end))
+                    elif k == "step" and self._has_subhourly_step_transform():
+                        # Convert step range bounds to subhourly format
+                        lower = self._format_step_as_subhourly(split[0])
+                        upper = self._format_step_as_subhourly(split[2])
+                        base_shapes.append(shapes.Span(k, lower=lower, upper=upper))
                     else:
                         base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
 
@@ -239,6 +281,11 @@ class PolytopeMars:
                             start = convert_timestamp(split[0])
                             end = convert_timestamp(split[2])
                             base_shapes.append(shapes.Span(k, lower=start, upper=end))
+                        elif k == "step" and self._has_subhourly_step_transform():
+                            # Convert step range bounds to subhourly format
+                            lower = self._format_step_as_subhourly(split[0])
+                            upper = self._format_step_as_subhourly(split[2])
+                            base_shapes.append(shapes.Span(k, lower=lower, upper=upper))
                         else:
                             base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
                     else:
@@ -268,6 +315,8 @@ class PolytopeMars:
                         for s in split:
                             times.append(convert_timestamp(s))
                         split = times
+                    if k == "step" and self._has_subhourly_step_transform():
+                        split = [self._format_step_as_subhourly(s) for s in split]
                     base_shapes.append(shapes.Select(k, split))
         else:
             # When the time axis is month or year, there is no "date" key in
@@ -341,6 +390,9 @@ class PolytopeMars:
                         for t in time:
                             new_split.append(pd.Timestamp(split[0] + "T" + t))
                         split = new_split
+                    elif k == "step" and self._has_subhourly_step_transform():
+                        # Convert step to subhourly format if transform is configured
+                        split = [self._format_step_as_subhourly(split[0])]
                     base_shapes.append(shapes.Select(k, split))
 
                 # Range a/to/b, "by" not supported -> Span
@@ -355,6 +407,11 @@ class PolytopeMars:
                             for t in time:
                                 dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
                         base_shapes.append(shapes.Select(k, dates))
+                    elif k == "step" and self._has_subhourly_step_transform():
+                        # Convert step range bounds to subhourly format
+                        lower = self._format_step_as_subhourly(split[0])
+                        upper = self._format_step_as_subhourly(split[2])
+                        base_shapes.append(shapes.Span(k, lower=lower, upper=upper))
                     else:
                         base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
 
@@ -368,6 +425,11 @@ class PolytopeMars:
                                 for t in time:
                                     dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
                             base_shapes.append(shapes.Select(k, dates))
+                        elif k == "step" and self._has_subhourly_step_transform():
+                            # Convert step range bounds to subhourly format
+                            lower = self._format_step_as_subhourly(split[0])
+                            upper = self._format_step_as_subhourly(split[2])
+                            base_shapes.append(shapes.Span(k, lower=lower, upper=upper))
                         else:
                             base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))
                     else:
@@ -381,6 +443,9 @@ class PolytopeMars:
                             base_shapes.append(shapes.Select(k, dates))
                         elif k == "step":
                             steps = find_step_intervals(split[0], split[2], split[-1])
+                            # If subhourly_step transform is configured, ensure all steps are in subhourly format
+                            if self._has_subhourly_step_transform():
+                                steps = [self._format_step_as_subhourly(s) for s in steps]
                             base_shapes.append(shapes.Select(k, steps))
                         else:
                             expansion = list(range(int(split[0]), int(split[2]), int(split[-1])))
@@ -394,6 +459,9 @@ class PolytopeMars:
                             for t in time:
                                 dates.append(pd.Timestamp(s + "T" + t))
                         split = dates
+                    elif k == "step" and self._has_subhourly_step_transform():
+                        # Convert each step value to subhourly format if transform is configured
+                        split = [self._format_step_as_subhourly(s) for s in split]
                     base_shapes.append(shapes.Select(k, split))
 
         return base_shapes
