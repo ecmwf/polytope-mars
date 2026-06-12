@@ -172,14 +172,14 @@ def field_area(request, area):
         step_len = count_steps(request["step"])
 
     if "number" in request:
-        number = request["number"].split("/")
+        number = str(request["number"]).split("/")
         if "to" in number:
             number_len = len(range(int(number[0]), int(number[2]) + 1))
         else:
             number_len = len(number)
 
     if "levelist" in request:
-        levelist = request["levelist"].split("/")
+        levelist = str(request["levelist"]).split("/")
         if "to" in levelist:
             levelist_len = len(range(int(levelist[0]), int(levelist[2]) + 1))
         else:
