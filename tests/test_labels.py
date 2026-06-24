@@ -1,4 +1,4 @@
-"""Tests for the optional 'identifiers' field in the timeseries feature dictionary."""
+"""Tests for the optional 'labels' field in the timeseries feature dictionary."""
 
 import copy
 from datetime import datetime, timedelta
@@ -34,7 +34,7 @@ class TestIdentifiersValidation:
             "feature": {
                 "type": "timeseries",
                 "points": [[-9.10, 38.78], [51.5, 6.5]],
-                "identifiers": ["Lisbon", "Dusseldorf"],
+                "labels": ["Lisbon", "Dusseldorf"],
                 "time_axis": "step",
                 "axes": ["latitude", "longitude"],
                 "range": {"start": 0, "end": 3},
@@ -119,56 +119,56 @@ class TestIdentifiersValidation:
     # -- Basic acceptance tests --
 
     def test_identifiers_accepted_in_feature_config(self):
-        """Identifiers field is accepted without error when count matches points."""
+        """Labels field is accepted without error when count matches points."""
         preq, feature = self._build_request_shapes(self.request)
         assert feature.identifiers == ["Lisbon", "Dusseldorf"]
 
     def test_identifiers_none_when_not_provided(self):
-        """When identifiers is omitted, feature.identifiers is None."""
+        """When labels is omitted, feature.identifiers is None."""
         request = copy.deepcopy(self.request)
-        del request["feature"]["identifiers"]
+        del request["feature"]["labels"]
         preq, feature = self._build_request_shapes(request)
         assert feature.identifiers is None
 
     def test_identifiers_single_point(self):
-        """Identifiers works with a single point."""
+        """Labels works with a single point."""
         request = copy.deepcopy(self.request)
         request["feature"]["points"] = [[48.0, 11.0]]
-        request["feature"]["identifiers"] = ["Munich"]
+        request["feature"]["labels"] = ["Munich"]
         preq, feature = self._build_request_shapes(request)
         assert feature.identifiers == ["Munich"]
 
     def test_identifiers_many_points(self):
-        """Identifiers works with many points."""
+        """Labels works with many points."""
         request = copy.deepcopy(self.request)
         points = [[-9.10, 38.78], [51.5, 6.5], [48.0, 11.0], [40.4, -3.7]]
         identifiers = ["Lisbon", "Dusseldorf", "Munich", "Madrid"]
         request["feature"]["points"] = points
-        request["feature"]["identifiers"] = identifiers
+        request["feature"]["labels"] = identifiers
         preq, feature = self._build_request_shapes(request)
         assert feature.identifiers == identifiers
 
     # -- Validation error tests --
 
     def test_identifiers_mismatch_too_few(self):
-        """Raises ValueError when fewer identifiers than points."""
+        """Raises ValueError when fewer labels than points."""
         request = copy.deepcopy(self.request)
-        request["feature"]["identifiers"] = ["Lisbon"]  # only 1, but 2 points
-        with pytest.raises(ValueError, match="Number of identifiers"):
+        request["feature"]["labels"] = ["Lisbon"]  # only 1, but 2 points
+        with pytest.raises(ValueError, match="Number of labels"):
             self._build_request_shapes(request)
 
     def test_identifiers_mismatch_too_many(self):
-        """Raises ValueError when more identifiers than points."""
+        """Raises ValueError when more labels than points."""
         request = copy.deepcopy(self.request)
-        request["feature"]["identifiers"] = ["Lisbon", "Dusseldorf", "Munich"]  # 3, but 2 points
-        with pytest.raises(ValueError, match="Number of identifiers"):
+        request["feature"]["labels"] = ["Lisbon", "Dusseldorf", "Munich"]  # 3, but 2 points
+        with pytest.raises(ValueError, match="Number of labels"):
             self._build_request_shapes(request)
 
     def test_identifiers_empty_list_with_points(self):
-        """Raises ValueError when identifiers is empty but points exist."""
+        """Raises ValueError when labels is empty but points exist."""
         request = copy.deepcopy(self.request)
-        request["feature"]["identifiers"] = []
-        with pytest.raises(ValueError, match="Number of identifiers"):
+        request["feature"]["labels"] = []
+        with pytest.raises(ValueError, match="Number of labels"):
             self._build_request_shapes(request)
 
     # -- Shape construction tests --
@@ -196,9 +196,9 @@ class TestIdentifiersValidation:
         assert tags == ["Lisbon", "Dusseldorf"]
 
     def test_no_identifiers_means_no_tags(self):
-        """When identifiers is not provided, Point shapes have tag=None."""
+        """When labels is not provided, Point shapes have tag=None."""
         request = copy.deepcopy(self.request)
-        del request["feature"]["identifiers"]
+        del request["feature"]["labels"]
         preq, feature = self._build_request_shapes(request)
 
         union_shape = None
@@ -213,11 +213,11 @@ class TestIdentifiersValidation:
             assert p.tag is None
 
     def test_identifiers_with_swapped_axes(self):
-        """Identifiers work correctly when axes are [longitude, latitude]."""
+        """Labels work correctly when axes are [longitude, latitude]."""
         request = copy.deepcopy(self.request)
         request["feature"]["axes"] = ["longitude", "latitude"]
         request["feature"]["points"] = [[38.78, -9.10], [6.5, 51.5]]
-        request["feature"]["identifiers"] = ["Lisbon", "Dusseldorf"]
+        request["feature"]["labels"] = ["Lisbon", "Dusseldorf"]
         preq, feature = self._build_request_shapes(request)
 
         union_shape = None
@@ -232,9 +232,9 @@ class TestIdentifiersValidation:
         assert tags == ["Lisbon", "Dusseldorf"]
 
     def test_identifiers_numeric_values(self):
-        """Identifiers can be numeric (e.g. station IDs)."""
+        """Labels can be numeric (e.g. station IDs)."""
         request = copy.deepcopy(self.request)
-        request["feature"]["identifiers"] = [12345, 67890]
+        request["feature"]["labels"] = [12345, 67890]
         preq, feature = self._build_request_shapes(request)
 
         union_shape = None
@@ -248,10 +248,10 @@ class TestIdentifiersValidation:
         assert tags == [12345, 67890]
 
     def test_identifiers_not_allowed_without_points(self):
-        """If points is empty but identifiers is provided, validation fails."""
+        """If points is empty but labels is provided, validation fails."""
         request = copy.deepcopy(self.request)
         request["feature"]["points"] = []
-        request["feature"]["identifiers"] = ["Lisbon"]
+        request["feature"]["labels"] = ["Lisbon"]
         # This should fail because points is empty but identifiers has values
         # The parse step will fail because points[0] doesn't exist
         with pytest.raises((ValueError, IndexError)):
@@ -322,7 +322,7 @@ class TestIdentifiersIntegration:
         self.cf["options"] = self.options
 
     def test_extract_with_identifiers(self):
-        """Full extract pipeline accepts identifiers without error."""
+        """Full extract pipeline accepts labels without error."""
         request = {
             "class": "od",
             "stream": "enfo",
@@ -337,7 +337,7 @@ class TestIdentifiersIntegration:
             "feature": {
                 "type": "timeseries",
                 "points": [[-9.10, 38.78], [51.5, 6.5]],
-                "identifiers": ["Lisbon", "Dusseldorf"],
+                "labels": ["Lisbon", "Dusseldorf"],
                 "time_axis": "step",
                 "axes": ["latitude", "longitude"],
                 "range": {"start": 0, "end": 3},
@@ -353,7 +353,7 @@ class TestIdentifiersIntegration:
             raise
 
     def test_extract_without_identifiers_still_works(self):
-        """Full extract pipeline still works when identifiers is not provided."""
+        """Full extract pipeline still works when labels is not provided."""
         request = {
             "class": "od",
             "stream": "enfo",
@@ -382,7 +382,7 @@ class TestIdentifiersIntegration:
             raise
 
     def test_merged_points_duplicate_coverages(self):
-        """When two points snap to the same grid cell, each identifier gets its own coverage."""
+        """When two points snap to the same grid cell, each label gets its own coverage."""
         request = {
             "class": "od",
             "stream": "enfo",
@@ -398,7 +398,7 @@ class TestIdentifiersIntegration:
                 "type": "timeseries",
                 # Two points very close together (snap to same grid point) + one distinct
                 "points": [[-9.10, 38.78], [-9.11, 38.79], [51.5, 6.5]],
-                "identifiers": ["Lisbon_StationA", "Lisbon_StationB", "Dusseldorf"],
+                "labels": ["Lisbon_StationA", "Lisbon_StationB", "Dusseldorf"],
                 "time_axis": "step",
                 "axes": ["latitude", "longitude"],
                 "range": {"start": 0, "end": 3},
@@ -416,11 +416,11 @@ class TestIdentifiersIntegration:
         # Should get 3 coverages even though only 2 unique grid points
         assert len(coverages) == 3
 
-        # Collect identifiers from all coverages
-        identifiers = [c["mars:metadata"]["identifier"] for c in coverages]
-        assert "Lisbon_StationA" in identifiers
-        assert "Lisbon_StationB" in identifiers
-        assert "Dusseldorf" in identifiers
+        # Collect labels from all coverages
+        labels = [c["mars:metadata"]["label"] for c in coverages]
+        assert "Lisbon_StationA" in labels
+        assert "Lisbon_StationB" in labels
+        assert "Dusseldorf" in labels
 
     def test_merged_points_same_data(self):
         """Coverages for merged points have identical data values."""
@@ -439,7 +439,7 @@ class TestIdentifiersIntegration:
                 "type": "timeseries",
                 # Two points that will snap to the same grid point
                 "points": [[-9.10, 38.78], [-9.11, 38.79]],
-                "identifiers": ["StationA", "StationB"],
+                "labels": ["StationA", "StationB"],
                 "time_axis": "step",
                 "axes": ["latitude", "longitude"],
                 "range": {"start": 0, "end": 3},
@@ -469,14 +469,14 @@ class TestIdentifiersIntegration:
         values_b = coverages[1]["ranges"][param_key]["values"]
         assert values_a == values_b
 
-        # But different identifiers
-        id_a = coverages[0]["mars:metadata"]["identifier"]
-        id_b = coverages[1]["mars:metadata"]["identifier"]
+        # But different labels
+        id_a = coverages[0]["mars:metadata"]["label"]
+        id_b = coverages[1]["mars:metadata"]["label"]
         assert id_a != id_b
         assert {id_a, id_b} == {"StationA", "StationB"}
 
     def test_merged_points_no_identifiers(self):
-        """Without identifiers, merged points still produce only one coverage (no duplication)."""
+        """Without labels, merged points still produce only one coverage (no duplication)."""
         request = {
             "class": "od",
             "stream": "enfo",
@@ -505,6 +505,6 @@ class TestIdentifiersIntegration:
             raise
 
         coverages = result["coverages"]
-        # Without identifiers, merged points produce a single coverage (polytope deduplication)
+        # Without labels, merged points produce a single coverage (polytope deduplication)
         assert len(coverages) == 1
-        assert "identifier" not in coverages[0]["mars:metadata"]
+        assert "label" not in coverages[0]["mars:metadata"]

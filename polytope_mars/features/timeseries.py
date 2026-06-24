@@ -25,7 +25,7 @@ class TimeSeries(Feature):
             self.axes = ["latitude", "longitude"]
 
         self.points = feature_config.pop("points", [])
-        self.identifiers = feature_config.pop("identifiers", None)
+        self.identifiers = feature_config.pop("labels", None)
 
         if "range" in feature_config:
             feature_config.pop("range")
@@ -107,7 +107,7 @@ class TimeSeries(Feature):
             raise ValueError("Timeseries must have only two values in points")
         if self.identifiers is not None and len(self.identifiers) != len(feature_config["points"]):
             raise ValueError(
-                f"Number of identifiers ({len(self.identifiers)}) must match "
+                f"Number of labels ({len(self.identifiers)}) must match "
                 f"number of points ({len(feature_config['points'])})"
             )
         if time_axis in request and "range" in feature_config:
