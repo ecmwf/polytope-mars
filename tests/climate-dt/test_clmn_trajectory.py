@@ -10,7 +10,6 @@ from polytope_mars.config import PolytopeMarsConfig
 
 class TestFeatureFactory:
     def setup_method(self):
-
         self.request = {
             "activity": "scenariomip",
             "class": "d1",

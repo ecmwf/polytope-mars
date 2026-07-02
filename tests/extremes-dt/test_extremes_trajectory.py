@@ -12,7 +12,6 @@ from polytope_mars.config import PolytopeMarsConfig
 
 class TestFeatureFactory:
     def setup_method(self):
-
         today = datetime.today()
         yesterday = today - timedelta(days=5)
         self.today = today.strftime("%Y%m%d")

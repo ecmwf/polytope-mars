@@ -92,8 +92,7 @@ class PolytopeMars:
                         else:
                             # Unknown mapper type — return what we can
                             logging.warning(
-                                "Unknown mapper type '%s' in axis_config; "
-                                "grid metadata may be incomplete.",
+                                "Unknown mapper type '%s' in axis_config; " "grid metadata may be incomplete.",
                                 mapper_type,
                             )
                             meta = {"mapperType": mapper_type}
@@ -312,7 +311,6 @@ class PolytopeMars:
                         base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
 
                 elif "by" in split:
-
                     if split[-1] == "1":
                         if k == "date":
                             start = pd.Timestamp(split[0])

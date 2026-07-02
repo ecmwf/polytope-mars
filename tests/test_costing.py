@@ -5,7 +5,6 @@ from polytope_mars.utils.areas import request_cost
 
 class TestCosting:
     def setup_method(self):
-
         self.bbox_request = {
             "class": "od",
             "stream": "enfo",
