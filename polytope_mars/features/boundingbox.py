@@ -3,7 +3,7 @@ import logging
 from polytope_feature import shapes
 
 from ..feature import Feature
-from ..utils.areas import field_area, get_boundingbox_area
+from ..utils.areas import field_area, get_boundingbox_area, normalise_lon
 
 
 class BoundingBox(Feature):
@@ -27,47 +27,57 @@ class BoundingBox(Feature):
         logging.info(f"Area of bounding box: {self.area_bb} km\u00b2")
 
     def get_shapes(self):
-        # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
-        if len(self.points[0]) == 2:
-            return [
-                shapes.Union(
-                    ["latitude", "longitude"],
-                    *[
-                        shapes.Box(
-                            ["latitude", "longitude"],
-                            lower_corner=[
-                                self.points[0][self.axes.index("latitude")],
-                                self.points[0][self.axes.index("longitude")],
-                            ],  # noqa: E501
-                            upper_corner=[
-                                self.points[1][self.axes.index("latitude")],
-                                self.points[1][self.axes.index("longitude")],
-                            ],  # noqa: E501
-                        )
-                    ],
-                )
-            ]
+        # Bounding box is a Union of one or more axis-aligned Boxes.
+        # The longitude axis is cyclic ([0, 360)); a single Box collapses to an
+        # axis-aligned interval [min(lon), max(lon)] and loses sweep direction.
+        # We therefore normalise/split lazily, only when the west edge is
+        # numerically greater than the east edge (see bbox_convention.md):
+        #   * W < E            -> pass through untouched, single Box
+        #   * W > E, W' < E'   -> normalise to signed lons, single Box
+        #   * W > E, W' > E'   -> antimeridian crossing, Union of two Boxes
+        # where W'/E' are the signed-normalised longitudes. This is agnostic to
+        # the number of axes (2D lat/lon or 3D lat/lon/levelist): the split only
+        # touches the longitude component, everything else rides along unchanged.
+        # Preserve the exact shape ordering the previous implementation used so
+        # that non-crossing boxes are byte-for-byte identical to before:
+        #   * 2D: shape axes are always ["latitude", "longitude"], corners
+        #         reordered by name.
+        #   * 3D: shape axes are self.axes, corners taken positionally.
+        # The only new behaviour is the longitude split below.
+        if len(self.axes) == 2:
+            shape_axes = ["latitude", "longitude"]
+            lower = [self.points[0][self.axes.index(a)] for a in shape_axes]
+            upper = [self.points[1][self.axes.index(a)] for a in shape_axes]
         else:
-            return [
-                shapes.Union(
-                    [self.axes[0], self.axes[1], self.axes[2]],
-                    *[
-                        shapes.Box(
-                            [self.axes[0], self.axes[1], self.axes[2]],
-                            lower_corner=[
-                                self.points[0][0],
-                                self.points[0][1],
-                                self.points[0][2],
-                            ],
-                            upper_corner=[
-                                self.points[1][0],
-                                self.points[1][1],
-                                self.points[1][2],
-                            ],
-                        )
-                    ],
-                )
-            ]
+            shape_axes = list(self.axes)
+            lower = list(self.points[0])
+            upper = list(self.points[1])
+
+        lon_idx = shape_axes.index("longitude")
+        w = lower[lon_idx]
+        e = upper[lon_idx]
+
+        def make_box(lon_lower, lon_upper):
+            lc = list(lower)
+            uc = list(upper)
+            lc[lon_idx] = lon_lower
+            uc[lon_idx] = lon_upper
+            return shapes.Box(shape_axes, lower_corner=lc, upper_corner=uc)
+
+        if w < e:
+            # Already sweeping west -> east; the AABB is the intended region.
+            boxes = [make_box(w, e)]
+        else:
+            w_signed = normalise_lon(w)
+            e_signed = normalise_lon(e)
+            if w_signed < e_signed:
+                # Meridian crossing resolved by signed normalisation.
+                boxes = [make_box(w_signed, e_signed)]
+            else:
+                # Antimeridian crossing: split at +/-180 into two Boxes.
+                boxes = [make_box(w_signed, 180), make_box(-180, e_signed)]
+
+        return [shapes.Union(shape_axes, *boxes)]
 
     def incompatible_keys(self):
         return []
@@ -111,6 +121,18 @@ class BoundingBox(Feature):
 
         if len(feature_config["points"]) != 2:
             raise ValueError("Bounding box must have only two points in points")  # noqa: E501
+
+        # Latitude must be ordered south <= north and within [-90, 90].
+        # Longitudes are intentionally not range/order checked here: any value
+        # maps onto the cyclic longitude axis, and west > east is a valid
+        # meridian/antimeridian crossing handled in get_shapes().
+        lat_idx = self.axes.index("latitude")
+        s = self.points[0][lat_idx]
+        n = self.points[1][lat_idx]
+        if not (-90 <= s <= 90) or not (-90 <= n <= 90):
+            raise ValueError(f"Bounding box latitudes must be in [-90, 90] (got south={s}, north={n})")  # noqa: E501
+        if s > n:
+            raise ValueError(f"Bounding box requires south ({s}) <= north ({n})")  # noqa: E501
         if "axis" in feature_config:
             raise ValueError("Bounding box does not have axis in feature, did you mean axes?")  # noqa: E501
         if "axes" not in feature_config:

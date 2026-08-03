@@ -9,6 +9,16 @@ from shapely.ops import split
 from .datetimes import count_steps, days_between_dates, hours_between_times
 
 
+def normalise_lon(lon):
+    """
+    Normalise a longitude to the signed range [-180, 180].
+
+    :param lon: Longitude in degrees (any convention, e.g. [0, 360) or signed).
+    :return: The equivalent longitude in [-180, 180].
+    """
+    return ((lon + 180) % 360) - 180
+
+
 def haversine_distance(lat1, lon1, lat2, lon2):
     """
     Calculate the great-circle distance between two points on the Earth's surface.
