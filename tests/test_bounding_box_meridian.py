@@ -2,7 +2,11 @@ import pytest
 
 from polytope_mars.config import PolytopeMarsConfig
 from polytope_mars.features.boundingbox import BoundingBox
-from polytope_mars.utils.areas import normalise_lon
+from polytope_mars.utils.areas import (
+    bbox_lon_intervals,
+    get_boundingbox_area,
+    normalise_lon,
+)
 
 
 def _client_config():
@@ -160,6 +164,78 @@ class TestBoundingBoxMeridian:
             lev_i = list(b.axes()).index("levelist")
             assert b._lower_corner[lev_i] == 1000
             assert b._upper_corner[lev_i] == 500
+
+    def test_equal_longitudes_is_zero_width_box(self):
+        # W == E -> a single zero-width box on that longitude, NOT a whole-globe
+        # sweep. A grid point that lands exactly on this meridian is returned.
+        boxes, _ = _boxes(_bbox([[0, 10], [1, 10]]))
+        assert len(boxes) == 1
+        assert _lon(boxes[0], ["latitude", "longitude"]) == (10, 10)
+
+    def test_equal_longitudes_at_zero_is_zero_width_box(self):
+        boxes, _ = _boxes(_bbox([[0, 0], [1, 0]]))
+        assert len(boxes) == 1
+        assert _lon(boxes[0], ["latitude", "longitude"]) == (0, 0)
+
+    def test_full_wrap_around_explicit_360(self):
+        # An explicit full sweep is requested as west=W, east=W+360. This must
+        # stay a single box on the cyclic longitude axis (W <= E), not split.
+        boxes, _ = _boxes(_bbox([[0, 10], [1, 370]]))
+        assert len(boxes) == 1
+        assert _lon(boxes[0], ["latitude", "longitude"]) == (10, 370)
+
+    def test_full_wrap_around_from_zero(self):
+        boxes, _ = _boxes(_bbox([[0, 0], [1, 360]]))
+        assert len(boxes) == 1
+        assert _lon(boxes[0], ["latitude", "longitude"]) == (0, 360)
+
+
+class TestBboxLonIntervals:
+    @pytest.mark.parametrize(
+        "west, east, expected",
+        [
+            (10, 20, [(10, 20)]),  # ordinary W < E
+            (10, 10, [(10, 10)]),  # zero-width
+            (10, 370, [(10, 370)]),  # explicit full sweep
+            (170, 190, [(170, 190)]),  # antimeridian inside [0,360), W < E
+            (359.9, 0.1, [(-0.1, 0.1)]),  # wrapped prime-meridian crossing
+            (179.9, -179.9, [(179.9, 180), (-180, -179.9)]),  # antimeridian split
+        ],
+    )
+    def test_intervals(self, west, east, expected):
+        result = bbox_lon_intervals(west, east)
+        assert len(result) == len(expected)
+        for got, exp in zip(result, expected):
+            assert got[0] == pytest.approx(exp[0])
+            assert got[1] == pytest.approx(exp[1])
+
+
+class TestBoundingBoxArea:
+    """The area/cost estimate must be normalisation-aware: signed and wrapped
+    representations of the same physical box yield the same area, and crossing
+    boxes do not spuriously span the globe."""
+
+    def test_signed_and_wrapped_prime_meridian_areas_match(self):
+        signed = get_boundingbox_area([[-1, -0.1], [1, 0.1]])
+        wrapped = get_boundingbox_area([[-1, 359.9], [1, 0.1]])
+        assert signed == pytest.approx(wrapped)
+
+    def test_crossing_box_is_not_whole_globe(self):
+        # A 0.2-degree-wide meridian-crossing box must be tiny, not ~10^7 km^2.
+        small = get_boundingbox_area([[-1, 359.9], [1, 0.1]])
+        reference = get_boundingbox_area([[-1, 0.0], [1, 0.2]])  # same width, no crossing
+        assert small == pytest.approx(reference, rel=1e-6)
+        assert small < 1e5
+
+    def test_antimeridian_split_area_matches_equivalent_non_crossing(self):
+        crossing = get_boundingbox_area([[-1, 179.9], [1, -179.9]])  # 0.2 deg wide
+        reference = get_boundingbox_area([[-1, 179.8], [1, 180.0]])  # same width, W < E
+        assert crossing == pytest.approx(reference, rel=1e-6)
+
+    def test_non_crossing_area_unchanged(self):
+        # Ordinary W < E box area is a positive, finite value.
+        area = get_boundingbox_area([[0, 10], [10, 20]])
+        assert area > 0
 
 
 class TestBoundingBoxValidation:

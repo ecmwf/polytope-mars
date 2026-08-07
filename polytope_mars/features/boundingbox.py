@@ -3,7 +3,7 @@ import logging
 from polytope_feature import shapes
 
 from ..feature import Feature
-from ..utils.areas import field_area, get_boundingbox_area, normalise_lon
+from ..utils.areas import bbox_lon_intervals, field_area, get_boundingbox_area
 
 
 class BoundingBox(Feature):
@@ -32,7 +32,10 @@ class BoundingBox(Feature):
         # axis-aligned interval [min(lon), max(lon)] and loses sweep direction.
         # We therefore normalise/split lazily, only when the west edge is
         # numerically greater than the east edge (see bbox_convention.md):
-        #   * W < E            -> pass through untouched, single Box
+        #   * W <= E           -> pass through untouched, single Box. This
+        #                         includes W == E (a zero-width box on a single
+        #                         longitude) and an explicit full sweep such as
+        #                         west=10, east=370 (west=10, east=10+360).
         #   * W > E, W' < E'   -> normalise to signed lons, single Box
         #   * W > E, W' > E'   -> antimeridian crossing, Union of two Boxes
         # where W'/E' are the signed-normalised longitudes. This is agnostic to
@@ -64,18 +67,10 @@ class BoundingBox(Feature):
             uc[lon_idx] = lon_upper
             return shapes.Box(shape_axes, lower_corner=lc, upper_corner=uc)
 
-        if w < e:
-            # Already sweeping west -> east; the AABB is the intended region.
-            boxes = [make_box(w, e)]
-        else:
-            w_signed = normalise_lon(w)
-            e_signed = normalise_lon(e)
-            if w_signed < e_signed:
-                # Meridian crossing resolved by signed normalisation.
-                boxes = [make_box(w_signed, e_signed)]
-            else:
-                # Antimeridian crossing: split at +/-180 into two Boxes.
-                boxes = [make_box(w_signed, 180), make_box(-180, e_signed)]
+        # bbox_lon_intervals() is the single source of truth for how (west, east)
+        # maps onto the cyclic longitude axis; the same helper backs the area /
+        # cost estimate so the two can never diverge.
+        boxes = [make_box(lw, le) for lw, le in bbox_lon_intervals(w, e)]
 
         return [shapes.Union(shape_axes, *boxes)]
 

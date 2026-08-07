@@ -108,6 +108,12 @@ need to split the request manually:
 * A box crossing the antimeridian, e.g. `[[-1, 179.9], [1, -179.9]]`, is
   handled automatically by splitting internally at ±180.
 
+Equal longitudes define a **zero-width** box on a single meridian rather than a
+full sweep: `[[0, 10], [1, 10]]` selects only longitude `10` (grid points that
+land exactly on that meridian are returned). To request a full wrap-around,
+specify the east edge as the west edge plus 360, e.g. `[[0, 10], [1, 370]]` (or
+`[[0, 0], [1, 360]]`).
+
 Latitude must satisfy `south <= north` and lie within `[-90, 90]`; otherwise
 the request is rejected.
 
