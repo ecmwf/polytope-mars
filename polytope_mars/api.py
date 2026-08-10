@@ -62,6 +62,46 @@ class PolytopeMars:
         self.coverage = {}
         self.split_request = False
 
+    def _get_grid_metadata(self) -> dict:
+        """Extract grid metadata from the mapper transformation in axis_config.
+
+        Reads the ``values`` axis configuration to find the mapper transform,
+        then maps the polytope config grid type to GRIB-compatible metadata.
+
+        Returns:
+            Dict with grid info (e.g. ``{"gridType": "reduced_gg", "N": 1280}``)
+            or empty dict if no mapper transform is configured.
+        """
+        for axis_config in self.conf.options.axis_config:
+            if axis_config.axis_name == "values":
+                for transform in axis_config.transformations:
+                    if hasattr(transform, "name") and transform.name == "mapper":
+                        mapper_type = getattr(transform, "type", None)
+                        resolution = getattr(transform, "resolution", None)
+
+                        if mapper_type == "octahedral":
+                            return {"gridType": "reduced_gg", "N": int(resolution)}
+                        elif mapper_type == "local_regular":
+                            meta = {"gridType": "regular_ll"}
+                            if isinstance(resolution, list) and len(resolution) == 2:
+                                meta["Nj"] = int(resolution[0])
+                                meta["Ni"] = int(resolution[1])
+                            local = getattr(transform, "local", None)
+                            if local and isinstance(local, list) and len(local) == 4:
+                                meta["area"] = [float(v) for v in local]
+                            return meta
+                        else:
+                            # Unknown mapper type — return what we can
+                            logging.warning(
+                                "Unknown mapper type '%s' in axis_config; " "grid metadata may be incomplete.",
+                                mapper_type,
+                            )
+                            meta = {"mapperType": mapper_type}
+                            if resolution is not None:
+                                meta["resolution"] = resolution
+                            return meta
+        return {}
+
     def _has_subhourly_step_transform(self) -> bool:
         """Check if the step axis has a subhourly_step type_change transform configured."""
         for axis_config in self.conf.options.axis_config:
@@ -527,6 +567,8 @@ class PolytopeMars:
             "CoverageCollection", feature_type
         )  # noqa: E501
 
+        grid_metadata = self._get_grid_metadata()
+
         if "dataset" in request:
             if request["dataset"] == "climate-dt":
                 if request.get("stream") == "clmn":
@@ -534,18 +576,18 @@ class PolytopeMars:
                 elif feature_type in ("timeseries", "polygon"):
                     coverage = encoder.from_polytope_step(result)
                 else:
-                    coverage = encoder.from_polytope(result)
+                    coverage = encoder.from_polytope(result, grid_metadata=grid_metadata)
             else:
-                coverage = encoder.from_polytope(result)
+                coverage = encoder.from_polytope(result, grid_metadata=grid_metadata)
         elif request["class"] == "ng":  # noqa: E501
             if feature_type == "timeseries" or feature_type == "polygon":
                 coverage = encoder.from_polytope_step(result)
             else:
-                coverage = encoder.from_polytope(result)
+                coverage = encoder.from_polytope(result, grid_metadata=grid_metadata)
         elif request["class"] == "ce" and request["stream"] == "efcl":
             coverage = encoder.from_polytope_reforecast(result)
         else:
-            coverage = encoder.from_polytope(result)
+            coverage = encoder.from_polytope(result, grid_metadata=grid_metadata)
 
         end = time.time()
         delta = end - start

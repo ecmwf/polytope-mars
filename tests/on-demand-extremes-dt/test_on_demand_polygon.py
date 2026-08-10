@@ -21,7 +21,6 @@ IRELAND_POLYGON = [
 
 class TestFeatureFactory:
     def setup_method(self):
-
         self.request = {
             "class": "d1",
             "dataset": "on-demand-extremes-dt",

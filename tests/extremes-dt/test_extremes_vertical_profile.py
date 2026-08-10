@@ -12,7 +12,6 @@ from polytope_mars.config import PolytopeMarsConfig
 
 class TestFeatureFactory:
     def setup_method(self):
-
         today = datetime.today()
         yesterday = today - timedelta(days=5)
         self.today = today.strftime("%Y%m%d")
@@ -146,7 +145,6 @@ class TestFeatureFactory:
         return config
 
     def change_hash(self, request, config):
-
         # This only holds for climate dt data
         if request.get("dataset", None) == "extremes-dt":
             # all resolution=standard have h128
