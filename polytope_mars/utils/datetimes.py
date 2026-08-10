@@ -83,9 +83,7 @@ def find_step_intervals(step_start: str, step_end: str, step_freq: str):
     step_end_pd_format = format_step_str_to_pd(step_end)
     step_freq_pd_format = format_step_str_to_pd(step_freq)
 
-    step_values = pd.timedelta_range(
-        start=step_start_pd_format, end=step_end_pd_format, freq=step_freq_pd_format
-    )
+    step_values = pd.timedelta_range(start=step_start_pd_format, end=step_end_pd_format, freq=step_freq_pd_format)
     return [format_subhourly_step_to_mars(val) for val in step_values]
 
 
@@ -101,9 +99,7 @@ def from_range_to_list_num(num_range):
         start = int(start)
         end = int(end)
         if start > end:
-            raise ValueError(
-                "Start of range must be less than or equal to end of range."
-            )
+            raise ValueError("Start of range must be less than or equal to end of range.")
         return [str(i) for i in range(start, end + 1)]
     else:
         return num_range

@@ -52,9 +52,7 @@ class PolytopeMars:
 
         # If no config check default locations
         if config is None:
-            self.conf = Conflator(
-                app_name="polytope_mars", model=PolytopeMarsConfig
-            ).load()  # noqa: E501
+            self.conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()  # noqa: E501
             logging.debug(f"{self.id}: Config loaded from file: {self.conf}")  # noqa: E501
         # else initialise with provided config
         else:
@@ -71,10 +69,7 @@ class PolytopeMars:
                 for transform in axis_config.transformations:
                     # Check if it's a type_change transform with type subhourly_step
                     if hasattr(transform, "name") and transform.name == "type_change":
-                        if (
-                            hasattr(transform, "type")
-                            and transform.type == "subhourly_step"
-                        ):
+                        if hasattr(transform, "type") and transform.type == "subhourly_step":
                             return True
         return False
 
@@ -184,21 +179,13 @@ class PolytopeMars:
                             copied_request = request.copy()
                             copied_request["date"] = date
                             copied_request["number"] = number
-                            coverage = self.retrieve_data(
-                                copied_request, feature_type, feature
-                            )  # noqa: E501
-                            self.coverage = merge_coverage_collections(
-                                self.coverage, coverage
-                            )  # noqa: E501
+                            coverage = self.retrieve_data(copied_request, feature_type, feature)  # noqa: E501
+                            self.coverage = merge_coverage_collections(self.coverage, coverage)  # noqa: E501
                     else:
                         copied_request = request.copy()
                         copied_request["date"] = date
-                        coverage = self.retrieve_data(
-                            copied_request, feature_type, feature
-                        )
-                        self.coverage = merge_coverage_collections(
-                            self.coverage, coverage
-                        )
+                        coverage = self.retrieve_data(copied_request, feature_type, feature)
+                        self.coverage = merge_coverage_collections(self.coverage, coverage)
                 else:
                     copied_request = request.copy()
                     copied_request["date"] = date
@@ -217,10 +204,7 @@ class PolytopeMars:
             "dataset" in request
             and request["dataset"] == "climate-dt"  # noqa: W503
             and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
-        ) or (
-            request["class"] == "ng"
-            and (feature_type == "timeseries" or feature_type == "polygon")
-        ):
+        ) or (request["class"] == "ng" and (feature_type == "timeseries" or feature_type == "polygon")):
             for k, v in request.items():
                 split = str(v).split("/")
 
@@ -245,9 +229,7 @@ class PolytopeMars:
 
                     # Range a/to/b -> Span with integer bounds
                     elif len(split) == 3 and split[1] == "to":
-                        base_shapes.append(
-                            shapes.Span(k, lower=int(split[0]), upper=int(split[2]))
-                        )
+                        base_shapes.append(shapes.Span(k, lower=int(split[0]), upper=int(split[2])))
 
                     # Range a/to/b/by/step -> Select of integers
                     elif "by" in split:
@@ -287,9 +269,7 @@ class PolytopeMars:
                         upper = self._format_step_as_subhourly(split[2])
                         base_shapes.append(shapes.Span(k, lower=lower, upper=upper))
                     else:
-                        base_shapes.append(
-                            shapes.Span(k, lower=split[0], upper=split[2])
-                        )  # noqa: E501
+                        base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
 
                 elif "by" in split:
                     if split[-1] == "1":
@@ -307,26 +287,18 @@ class PolytopeMars:
                             upper = self._format_step_as_subhourly(split[2])
                             base_shapes.append(shapes.Span(k, lower=lower, upper=upper))
                         else:
-                            base_shapes.append(
-                                shapes.Span(k, lower=split[0], upper=split[2])
-                            )  # noqa: E501
+                            base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
                     else:
                         if k == "date":
                             start = pd.Timestamp(split[0])
                             end = pd.Timestamp(split[2])
-                            timestamps = pd.date_range(
-                                start=start, end=end, freq=f"{split[-1]}D"
-                            )
+                            timestamps = pd.date_range(start=start, end=end, freq=f"{split[-1]}D")
                             base_shapes.append(shapes.Select(k, timestamps.tolist()))
                         elif k == "time":
                             start = convert_timestamp(split[0])
                             end = convert_timestamp(split[2])
-                            times = pd.date_range(
-                                start=start, end=end, freq=time_step_to_freq(split[-1])
-                            )
-                            base_shapes.append(
-                                shapes.Select(k, times.strftime("%H:%M:%S").tolist())
-                            )
+                            times = pd.date_range(start=start, end=end, freq=time_step_to_freq(split[-1]))
+                            base_shapes.append(shapes.Select(k, times.strftime("%H:%M:%S").tolist()))
                             # base_shapes.append(shapes.Span(k, lower=start, upper=end))
                             # base_shapes.append(shapes.Span(k, lower=start, upper=end))
                         # raise ValueError("Ranges with step-size specified with 'by' keyword is not supported")  # noqa: E501
@@ -358,9 +330,7 @@ class PolytopeMars:
                     start = convert_timestamp(time[0])
                     end = convert_timestamp(time[2])
                     if "by" in time:
-                        times = pd.date_range(
-                            start=start, end=end, freq=time_step_to_freq(time[-1])
-                        )
+                        times = pd.date_range(start=start, end=end, freq=time_step_to_freq(time[-1]))
                     else:
                         times = pd.date_range(start=start, end=end, freq="1h")
                     time = times.strftime("%H:%M:%S").tolist()
@@ -393,9 +363,7 @@ class PolytopeMars:
 
                     # Range a/to/b -> Span with integer bounds
                     elif len(split) == 3 and split[1] == "to":
-                        base_shapes.append(
-                            shapes.Span(k, lower=int(split[0]), upper=int(split[2]))
-                        )
+                        base_shapes.append(shapes.Span(k, lower=int(split[0]), upper=int(split[2])))
 
                     # Range a/to/b/by/step -> Select of integers
                     elif "by" in split:
@@ -413,8 +381,7 @@ class PolytopeMars:
                         if int(split[0]) < 0:
                             split[0] = str(
                                 (
-                                    datetime.datetime.now()
-                                    + datetime.timedelta(days=int(split[0]))
+                                    datetime.datetime.now() + datetime.timedelta(days=int(split[0]))
                                 ).strftime(  # noqa: E501
                                     "%Y%m%d"
                                 )  # noqa: E501
@@ -438,9 +405,7 @@ class PolytopeMars:
                         dates = []
                         for s in pd.date_range(start, end):
                             for t in time:
-                                dates.append(
-                                    pd.Timestamp(s.strftime("%Y%m%d") + "T" + t)
-                                )
+                                dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
                         base_shapes.append(shapes.Select(k, dates))
                     elif k == "step" and self._has_subhourly_step_transform():
                         # Convert step range bounds to subhourly format
@@ -448,9 +413,7 @@ class PolytopeMars:
                         upper = self._format_step_as_subhourly(split[2])
                         base_shapes.append(shapes.Span(k, lower=lower, upper=upper))
                     else:
-                        base_shapes.append(
-                            shapes.Span(k, lower=split[0], upper=split[2])
-                        )  # noqa: E501
+                        base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))  # noqa: E501
 
                 elif "by" in split:
                     if split[-1] == "1":
@@ -460,9 +423,7 @@ class PolytopeMars:
                             dates = []
                             for s in pd.date_range(start, end):
                                 for t in time:
-                                    dates.append(
-                                        pd.Timestamp(s.strftime("%Y%m%d") + "T" + t)
-                                    )
+                                    dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
                             base_shapes.append(shapes.Select(k, dates))
                         elif k == "step" and self._has_subhourly_step_transform():
                             # Convert step range bounds to subhourly format
@@ -470,9 +431,7 @@ class PolytopeMars:
                             upper = self._format_step_as_subhourly(split[2])
                             base_shapes.append(shapes.Span(k, lower=lower, upper=upper))
                         else:
-                            base_shapes.append(
-                                shapes.Span(k, lower=split[0], upper=split[2])
-                            )
+                            base_shapes.append(shapes.Span(k, lower=split[0], upper=split[2]))
                     else:
                         if k == "hdate" or (k == "date" and not has_hdate):
                             start = pd.Timestamp(split[0] + "T" + time[0])
@@ -480,22 +439,16 @@ class PolytopeMars:
                             dates = []
                             for s in pd.date_range(start, end, freq=f"{split[-1]}D"):
                                 for t in time:
-                                    dates.append(
-                                        pd.Timestamp(s.strftime("%Y%m%d") + "T" + t)
-                                    )
+                                    dates.append(pd.Timestamp(s.strftime("%Y%m%d") + "T" + t))
                             base_shapes.append(shapes.Select(k, dates))
                         elif k == "step":
                             steps = find_step_intervals(split[0], split[2], split[-1])
                             # If subhourly_step transform is configured, ensure all steps are in subhourly format
                             if self._has_subhourly_step_transform():
-                                steps = [
-                                    self._format_step_as_subhourly(s) for s in steps
-                                ]
+                                steps = [self._format_step_as_subhourly(s) for s in steps]
                             base_shapes.append(shapes.Select(k, steps))
                         else:
-                            expansion = list(
-                                range(int(split[0]), int(split[2]), int(split[-1]))
-                            )
+                            expansion = list(range(int(split[0]), int(split[2]), int(split[-1])))
                             base_shapes.append(shapes.Select(k, expansion))
 
                 # List of individual values -> Union of Selects
@@ -543,9 +496,7 @@ class PolytopeMars:
         if self.conf.datacube.type == "gribjump":
             fdbdatacube = gj.GribJump()
         else:
-            raise NotImplementedError(
-                f"Datacube type '{self.conf.datacube.type}' not found"
-            )  # noqa: E501
+            raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
 
         logging.debug(f"Send log_context to polytope: {self.log_context}")
         self.api = Polytope(
@@ -559,9 +510,7 @@ class PolytopeMars:
         logging.debug(f"{self.id}: Gribjump/setup time end: {end}")  # noqa: E501
         logging.info(f"{self.id}: Gribjump/setup time taken: {delta}")  # noqa: E501
 
-        logging.debug(
-            f"{self.id}: The request we give polytope from polytope-mars is: {preq}"
-        )  # noqa: E501
+        logging.debug(f"{self.id}: The request we give polytope from polytope-mars is: {preq}")  # noqa: E501
         start = time.time()
         logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
