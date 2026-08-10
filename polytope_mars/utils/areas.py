@@ -9,6 +9,46 @@ from shapely.ops import split
 from .datetimes import count_steps, days_between_dates, hours_between_times
 
 
+def normalise_lon(lon):
+    """
+    Normalise a longitude to the signed range [-180, 180].
+
+    :param lon: Longitude in degrees (any convention, e.g. [0, 360) or signed).
+    :return: The equivalent longitude in [-180, 180].
+    """
+    return ((lon + 180) % 360) - 180
+
+
+def bbox_lon_intervals(west, east):
+    """
+    Longitude interval(s) selected by a bounding box with the given west/east
+    edges, applying the same lazy meridian normalisation/splitting as
+    ``BoundingBox.get_shapes()``. This is the single source of truth for how a
+    (west, east) pair maps onto the cyclic longitude axis, so that the geometry
+    handed to polytope and the area/cost estimate always agree.
+
+      * west <= east          -> single interval ``[west, east]`` (also covers a
+                                 zero-width box, west == east, and an explicit
+                                 full sweep such as west=10, east=370)
+      * west > east, w' < e'  -> single interval ``[w', e']`` (signed-normalised
+                                 meridian crossing)
+      * west > east, w' >= e' -> two intervals split at +/-180 (antimeridian)
+
+    where ``w'``/``e'`` are the signed-normalised longitudes.
+
+    :param west: West edge longitude in degrees (any convention).
+    :param east: East edge longitude in degrees (any convention).
+    :return: A list of ``(lon_lower, lon_upper)`` tuples.
+    """
+    if west <= east:
+        return [(west, east)]
+    w_signed = normalise_lon(west)
+    e_signed = normalise_lon(east)
+    if w_signed < e_signed:
+        return [(w_signed, e_signed)]
+    return [(w_signed, 180), (-180, e_signed)]
+
+
 def haversine_distance(lat1, lon1, lat2, lon2):
     """
     Calculate the great-circle distance between two points on the Earth's surface.
@@ -119,31 +159,45 @@ def get_polygon_area(points):
     return total_area / 1e6  # Convert area from square meters to square kilometers  # noqa: E501
 
 
-def get_boundingbox_area(points):
-    # Convert points to a Shapely Polygon
-    min_lon, min_lat = points[0][:2]
-    max_lon, max_lat = points[1][:2]
-    if min_lon + max_lon == 0:
-        min_lon += 0.1
-
-    # Define the polygon coordinates
+def _lat_lon_rectangle_area(south_lat, north_lat, west_lon, east_lon):
+    """
+    Geodesic area (in square metres) of a single lat/lon rectangle that does not
+    wrap the antimeridian, i.e. ``west_lon <= east_lon``. The rectangle is split
+    at 90-degree meridians and each geodesic piece is summed, matching the
+    original bounding-box area computation.
+    """
+    # Coordinates are (lon, lat) pairs; get_area_piece() reads them as (lon, lat)
     polygon_coords = [
-        (min_lat, min_lon),  # Bottom-left corner
-        (min_lat, max_lon),  # Bottom-right corner
-        (max_lat, max_lon),  # Top-right corner
-        (max_lat, min_lon),  # Top-left corner
-        (
-            min_lat,
-            min_lon,
-        ),  # Closing the polygon by returning to the bottom-left corner
+        (west_lon, south_lat),  # lower-left
+        (east_lon, south_lat),  # lower-right
+        (east_lon, north_lat),  # upper-right
+        (west_lon, north_lat),  # upper-left
+        (west_lon, south_lat),  # close the ring
     ]
     polygon = Polygon(polygon_coords)
     pieces = split_polygon(polygon)
     total_area = 0.0
     for piece in pieces:
-        area = get_area_piece(piece)
-        total_area += area
-    return total_area / 1e6  # Convert area from square meters to square kilometers  # noqa: E501
+        total_area += get_area_piece(piece)
+    return total_area  # square metres
+
+
+def get_boundingbox_area(points):
+    # points are [[south_lat, west_lon], [north_lat, east_lon]].
+    south_lat, west_lon = points[0][:2]
+    north_lat, east_lon = points[1][:2]
+
+    # Degenerate symmetric-latitude nudge preserved from the original impl.
+    if south_lat + north_lat == 0:
+        south_lat += 0.1
+
+    # Sum over the longitude interval(s) actually selected, so that signed and
+    # wrapped representations of the same physical box (and meridian-crossing
+    # boxes) yield the same area rather than spuriously spanning the globe.
+    total_area = 0.0
+    for lon_w, lon_e in bbox_lon_intervals(west_lon, east_lon):
+        total_area += _lat_lon_rectangle_area(south_lat, north_lat, lon_w, lon_e)
+    return total_area / 1e6  # Convert square metres to square kilometres
 
 
 def field_area(request, area):

@@ -86,7 +86,7 @@ Notes:
 
 ## Required Fields
 
-For a vertical profile within the `feature` dictionary three fields are required
+For a vertical profile within the `feature` dictionary two fields are required
 
 * `type`
 * `points`
@@ -138,7 +138,7 @@ request = {
     "number" : "1/to/50",
     "levelist" : "0/to/1000",
     "feature" : {
-        "type" : "timeseries",
+        "type" : "verticalprofile",
         "points": [[-9.10, 38.78]],
         "axes": "levelist",
     },
