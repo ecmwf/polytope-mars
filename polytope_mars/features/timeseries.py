@@ -25,6 +25,7 @@ class TimeSeries(Feature):
             self.axes = ["latitude", "longitude"]
 
         self.points = feature_config.pop("points", [])
+        self.identifiers = feature_config.pop("labels", None)
 
         if "range" in feature_config:
             feature_config.pop("range")
@@ -33,19 +34,30 @@ class TimeSeries(Feature):
 
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
+        if self.identifiers is not None:
+            point_shapes = [
+                shapes.Point(
+                    [self.axes[0], self.axes[1]],
+                    [[p[0], p[1]]],
+                    method="nearest",
+                    tag=identifier,
+                )
+                for p, identifier in zip(self.points, self.identifiers)
+            ]
+        else:
+            point_shapes = [
+                shapes.Point(
+                    [self.axes[0], self.axes[1]],
+                    [[p[0], p[1]]],
+                    method="nearest",
+                )
+                for p in self.points
+            ]
         return [
             shapes.Union(
                 [self.axes[0], self.axes[1]],
-                *[
-                    shapes.Point(
-                        [self.axes[0], self.axes[1]],
-                        [[p[0], p[1]]],
-                        method="nearest",  # noqa: E501
-                    )
-                    for p in self.points
-                ],
+                *point_shapes,
             ),
-            # shapes.Span("step", self.start_step, self.end_step),
         ]
 
     def incompatible_keys(self):
@@ -93,6 +105,11 @@ class TimeSeries(Feature):
 
         if len(feature_config["points"][0]) != 2:
             raise ValueError("Timeseries must have only two values in points")
+        if self.identifiers is not None and len(self.identifiers) != len(feature_config["points"]):
+            raise ValueError(
+                f"Number of labels ({len(self.identifiers)}) must match "
+                f"number of points ({len(feature_config['points'])})"
+            )
         if time_axis in request and "range" in feature_config:
             raise ValueError("Timeseries time_axis is overspecified in request")
         if time_axis not in request and "range" not in feature_config:  # noqa: E501
