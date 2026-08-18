@@ -34,17 +34,11 @@ class TimeSeries(Feature):
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
         return [
-            shapes.Union(
+            shapes.Point(
                 [self.axes[0], self.axes[1]],
-                *[
-                    shapes.Point(
-                        [self.axes[0], self.axes[1]],
-                        [[p[0], p[1]]],
-                        method="nearest",  # noqa: E501
-                    )
-                    for p in self.points
-                ],
-            ),
+                [list(p) for p in self.points],
+                method="nearest",
+            )
             # shapes.Span("step", self.start_step, self.end_step),
         ]
 
