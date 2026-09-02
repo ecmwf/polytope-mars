@@ -448,7 +448,7 @@ class PolytopeMars:
                                 steps = [self._format_step_as_subhourly(s) for s in steps]
                             base_shapes.append(shapes.Select(k, steps))
                         else:
-                            expansion = list(range(int(split[0]), int(split[2]), int(split[-1])))
+                            expansion = list(range(int(split[0]), int(split[2]) + 1, int(split[-1])))
                             base_shapes.append(shapes.Select(k, expansion))
 
                 # List of individual values -> Union of Selects
