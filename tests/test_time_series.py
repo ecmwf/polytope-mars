@@ -311,3 +311,78 @@ class TestHdateRequestConstruction:
         d = self._shapes_to_dict(preq)
 
         assert d["number"] == [2, 4, 6, 8, 10]
+
+
+class TestRequestNotMutated:
+    def setup_method(self):
+        self.request = {
+            "class": "od",
+            "stream": "oper",
+            "type": "fc",
+            "date": "20231205",
+            "time": "0000",
+            "levtype": "sfc",
+            "expver": "0001",
+            "domain": "g",
+            "param": "167",
+            "step": "0/to/6/by/3",
+            "feature": {
+                "type": "timeseries",
+                "points": [[-9.10, 38.78]],
+                "axes": "step",
+            },
+            "format": "covjson",
+        }
+
+        self.options = {
+            "axis_config": [
+                {
+                    "axis_name": "date",
+                    "transformations": [{"name": "merge", "other_axis": "time", "linkers": ["T", "00"]}],
+                },
+                {
+                    "axis_name": "values",
+                    "transformations": [
+                        {
+                            "name": "mapper",
+                            "type": "octahedral",
+                            "resolution": 1280,
+                            "axes": ["latitude", "longitude"],
+                        }
+                    ],
+                },
+                {"axis_name": "step", "transformations": [{"name": "type_change", "type": "int"}]},
+            ],
+            "compressed_axes_config": [
+                "longitude",
+                "latitude",
+                "levtype",
+                "step",
+                "date",
+                "domain",
+                "expver",
+                "param",
+                "class",
+                "stream",
+                "type",
+            ],
+        }
+
+        conf = Conflator(app_name="polytope_mars", model=PolytopeMarsConfig).load()
+        self.cf = conf.model_dump()
+        self.cf["options"] = self.options
+
+    def test_extract_does_not_mutate_dict_request(self, monkeypatch):
+        """extract() must not modify the caller's request dict in place (issue #98)."""
+        # Avoid hitting the FDB/gribjump datacube: the in-place mutation (.pop/del)
+        # all happens before retrieve_data is ever called.
+        monkeypatch.setattr(PolytopeMars, "retrieve_data", lambda self, *a, **k: {})
+
+        original = copy.deepcopy(self.request)
+        PolytopeMars(self.cf).extract(self.request)
+
+        assert self.request == original, "extract() mutated the caller's request dict in place"
+        # spot check the keys that used to get popped/deleted
+        assert "feature" in self.request
+        assert "format" in self.request
+        assert self.request["feature"].get("axes") == "step"
