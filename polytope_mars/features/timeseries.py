@@ -34,17 +34,11 @@ class TimeSeries(Feature):
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
         return [
-            shapes.Union(
+            shapes.Point(
                 [self.axes[0], self.axes[1]],
-                *[
-                    shapes.Point(
-                        [self.axes[0], self.axes[1]],
-                        [[p[0], p[1]]],
-                        method="nearest",  # noqa: E501
-                    )
-                    for p in self.points
-                ],
-            ),
+                [list(p) for p in self.points],
+                method="nearest",
+            )
             # shapes.Span("step", self.start_step, self.end_step),
         ]
 
@@ -63,13 +57,16 @@ class TimeSeries(Feature):
     def required_axes(self):
         return ["latitude", "longitude"]
 
+    def allowed_time_axis(self):
+        return ["step", "date", "month", "year", "hdate"]
+
     def parse(self, request, feature_config):
         logging.debug("Feature config: %s", feature_config)
         # if isinstance(feature_config["time_axis"], list):
         #    if "step" not in feature_config["time_axis"] and "date" not in feature_config["time_axis"]:
         #        raise ValueError("Timeseries axes must be step or date")
-        if feature_config["time_axis"] != "step" and feature_config["time_axis"] != "date":  # noqa: E501
-            raise ValueError("Timeseries axes must be step or date")
+        if feature_config["time_axis"] not in self.allowed_time_axis():  # noqa: E501
+            raise ValueError(f"Timeseries axes must be in {self.allowed_time_axis()}")
 
         area = field_area(request, len(feature_config["points"]))
 
@@ -99,9 +96,8 @@ class TimeSeries(Feature):
             if feature_config["range"]["start"] < 0:
                 raise ValueError("Timeseries range start must be greater than 0")
             if isinstance(feature_config["range"], dict):
-                request[time_axis] = (
-                    f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"  # noqa: E501
-                )
+                time_range = f"{feature_config['range']['start']}/to/{feature_config['range']['end']}"
+                request[time_axis] = time_range  # noqa: E501
                 if "interval" in feature_config["range"]:
                     request[time_axis] += f"/by/{feature_config['range']['interval']}"
         logging.debug("After parse request: %s", request)

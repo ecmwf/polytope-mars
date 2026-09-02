@@ -10,6 +10,7 @@ class Polygons(Feature):
         self.shape = feature_config.pop("shape")
         self.max_area = client_config.polygonrules.max_area
         self.area = 0
+        self.field_area = 0
         if type(self.shape[0][0]) is not list:
             self.area = get_polygon_area(self.shape)
             if len(self.shape) > client_config.polygonrules.max_points:
@@ -45,7 +46,6 @@ class Polygons(Feature):
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
-        # coordinates = get_coords(self.df)
         polygons = []
         for polygon in self.shape:
             points = []
@@ -70,11 +70,13 @@ class Polygons(Feature):
         return ["latitude", "longitude"]
 
     def parse(self, request, feature_config):
+        self.field_area = field_area(request, self.area)
         if "axes" in request:
             if len(request["axes"]) != 2:
                 raise ValueError("Polygon feature must have two axes, latitude and longitude")
-        if field_area(request, self.area) > self.max_area:
-            raise ValueError(
-                f"The total request size is too large, area of request shape {self.area} * total number of fields = {field_area(request, self.area)} km\u00b2, must be below {self.max_area} km\u00b2 for total size request. "  # noqa: E501
-            )
+        # if field_area(request, self.area) > self.max_area:
+        #    raise ValueError(
+        #        f"The total request size is too large, area of request shape {self.area} * total number of fields = {field_area(request, self.area)} km\u00b2, must be below {self.max_area} km\u00b2 for total size request. "  # noqa: E501
+        #    )
+
         return request

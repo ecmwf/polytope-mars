@@ -16,7 +16,7 @@ request = {
     "date" : "20241006",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/to/50",
@@ -37,7 +37,7 @@ result = PolytopeMars().extract(request)
 
 The following will return a timeseries starting on `2024-10-06 00:00:00` with steps from `0` to `360` including all steps available in between, for the parameters `164/167/169` at the point given. This data will be returned for each ensemble number requested.
 
-Notes: 
+Notes:
 * The data has to exist in the data source pointed to in the config.
 * No config is provided via the PolytopeMars interface so a config will be loaded from the default locations. The config can also be passed directly via the interface.
 
@@ -55,7 +55,7 @@ request = {
     "date" : "20241006",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/to/50",
@@ -77,7 +77,7 @@ The following will return a timeseries starting on `2024-10-06 00:00:00` with st
 
 `"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
 
-Notes: 
+Notes:
 * The data has to exist in the fdb on the polytope server.
 * No config is required to be passed when using this method, it is generated on the server side.
 * Further details on the `from_source` method can be found here: https://earthkit-data.readthedocs.io/en/latest/guide/sources.html
@@ -131,7 +131,7 @@ request = {
     "date" : "20241006",
     "time" : "0000",
     "levtype" : "sfc",
-    "expver" : "0079", 
+    "expver" : "0079",
     "domain" : "g",
     "param" : "164/167/169",
     "number" : "1/to/50",
@@ -145,7 +145,7 @@ request = {
 }
 ```
 
-This is equivalent to the first request presented. 
+This is equivalent to the first request presented.
 
 Atleast one of `range` or `step` must be included in the request, but not both. In this case an error will be provided telling the user that `step` is overspecified.
 

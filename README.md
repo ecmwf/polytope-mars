@@ -71,7 +71,7 @@ request = {
     "date" : "20231205",
     "time" : "00:00:00",
     "levtype" : "sfc",
-    "expver" : "0001", 
+    "expver" : "0001",
     "domain" : "g",
     "param" : "228/49/164/165/166/167",
     "number" : "1/to/5",
@@ -92,7 +92,7 @@ If the user provides no arguments to PolytopeMars then a config is loaded from t
 1. System-wide configuration in /etc/polytope_mars/config.json (and yaml)
 2. User configuration in ~/.polytope_mars.json (and yaml)
 
-The user can also pass in a config as a python dictionary to PolytopeMars for a custom config at runtime. 
+The user can also pass in a config as a python dictionary to PolytopeMars for a custom config at runtime.
 
 ```python
 from polytope_mars.api import PolytopeMars
@@ -110,7 +110,7 @@ request = {
     "date" : "20231205",
     "time" : "00:00:00",
     "levtype" : "sfc",
-    "expver" : "0001", 
+    "expver" : "0001",
     "domain" : "g",
     "param" : "228/49/164/165/166/167",
     "number" : "1/to/5",
@@ -132,7 +132,7 @@ Result will be a coverageJSON file with the requested data if it is available, f
 
 ### Config
 
-An example config can be found here [example_config.json](example_config.json). This can be edited to change any of the fields. The config is made up of three main components. 
+An example config can be found here [example_config.json](example_config.json). This can be edited to change any of the fields. The config is made up of three main components.
 
 1. **datacube:** This option is used to set up what type of datacube is being used at the moment, currently only gribjump is supported.
 2. **options** These are the options used by polytope for interpreting the data available.

@@ -13,7 +13,7 @@ with open("requirements.txt") as f:
     requirements = f.read().splitlines()
 
 setup(
-    name="polytope-mars",
+    name="polytope_mars",
     version=__version__,
     description="High level meteorological feature extraction interface to Polytope",  # noqa: E501
     long_description="",

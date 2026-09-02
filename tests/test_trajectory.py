@@ -195,3 +195,10 @@ class TestFeatureFactory:
         del self.request["feature"]["inflation"]
         with pytest.raises(KeyError):
             PolytopeMars(self.cf).extract(self.request)
+
+    def test_trajectory_levelist_multiple(self):
+        self.request["levelist"] = "500/700"
+        result = PolytopeMars(self.cf).extract(self.request)
+        decoder = Covjsonkit().decode(result)
+        decoder.to_xarray()
+        assert True
