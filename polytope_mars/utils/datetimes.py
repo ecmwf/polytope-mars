@@ -34,6 +34,25 @@ def hours_between_times(time1, time2):
     return abs(delta.total_seconds() / 3600)
 
 
+def time_step_to_freq(step):
+    """
+    Convert a MARS time step in HHMM format to a pandas frequency string.
+
+    In MARS, a time step such as ``0100`` means 1 hour, ``0030`` means 30
+    minutes and ``0130`` means 90 minutes.  Passing the raw ``HHMM`` string
+    straight to pandas (e.g. ``"0100H"``) is wrong because pandas would read
+    it as 100 hours.
+
+    :param step: The time step in HHMM format (e.g. "0100")
+    :return: A pandas-compatible frequency string in minutes (e.g. "60min")
+    """
+    step = str(step).zfill(4)
+    hours = int(step[:-2])
+    minutes = int(step[-2:])
+    total_minutes = hours * 60 + minutes
+    return f"{total_minutes}min"
+
+
 def convert_timestamp(timestamp):
     # Ensure the input is a string
     timestamp = str(timestamp)

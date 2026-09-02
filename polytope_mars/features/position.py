@@ -31,18 +31,25 @@ class Position(Feature):
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
+        # return [
+        #     shapes.Union(
+        #         [self.axes[0], self.axes[1]],
+        #         *[
+        #             shapes.Point(
+        #                 [self.axes[0], self.axes[1]],
+        #                 [[p[0], p[1]]],
+        #                 method="nearest",  # noqa: E501
+        #             )
+        #             for p in self.points
+        #         ],
+        #     ),
+        # ]
         return [
-            shapes.Union(
+            shapes.Point(
                 [self.axes[0], self.axes[1]],
-                *[
-                    shapes.Point(
-                        [self.axes[0], self.axes[1]],
-                        [[p[0], p[1]]],
-                        method="nearest",  # noqa: E501
-                    )
-                    for p in self.points
-                ],
-            ),
+                [list(p) for p in self.points],
+                method="nearest",
+            )
         ]
 
     def incompatible_keys(self):
