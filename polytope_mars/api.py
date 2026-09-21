@@ -209,12 +209,12 @@ class PolytopeMars:
                 and request["dataset"] == "climate-dt"  # noqa: W503
                 and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
             )
-            or (request["class"] == "ng" and (feature_type == "timeseries" or feature_type == "polygon"))
-            or (
+            or (request["class"] == "ng" and (feature_type == "timeseries" or feature_type == "polygon"))  # noqa: W503
+            or (  # noqa: W503
                 "stream" in request
-                and request["stream"] == "efcl"
-                and request["class"] == "ce"
-                and (feature_type == "timeseries" or feature_type == "polygon")
+                and request["stream"] == "efcl"  # noqa: W503
+                and request["class"] == "ce"  # noqa: W503
+                and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
             )
         ):  # noqa: W503
             for k, v in request.items():
