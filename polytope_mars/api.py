@@ -204,19 +204,10 @@ class PolytopeMars:
         base_shapes = []
 
         if (
-            (
-                "dataset" in request
-                and request["dataset"] == "climate-dt"  # noqa: W503
-                and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
-            )
-            or (request["class"] == "ng" and (feature_type == "timeseries" or feature_type == "polygon"))  # noqa: W503
-            or (  # noqa: W503
-                "stream" in request
-                and request["stream"] == "efcl"  # noqa: W503
-                and request["class"] == "ce"  # noqa: W503
-                and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
-            )
-        ):  # noqa: W503
+            "dataset" in request
+            and request["dataset"] == "climate-dt"  # noqa: W503
+            and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
+        ) or (request["class"] == "ng" and (feature_type == "timeseries" or feature_type == "polygon")):
             for k, v in request.items():
                 split = str(v).split("/")
 
@@ -331,11 +322,24 @@ class PolytopeMars:
                         split = [self._format_step_as_subhourly(s) for s in split]
                     base_shapes.append(shapes.Select(k, split))
         else:
+            # TODO: when has_hdate, "date" stays a plain string (not cast to pd.Timestamp).
+            # Need to check if polytope can handle that or if we need a type_change config for date.
+            has_hdate = "hdate" in request
+
+            # efas climatology requests (stream=efcl, class=ce) that are *not*
+            # reforecasts (no hdate) keep "time" as an independent axis and turn
+            # date ranges into Spans, instead of the reforecast-style
+            # date/hdate x time cross-product handled below.
+            is_efcl = request.get("stream") == "efcl" and request.get("class") == "ce"
+            efcl_climatology = is_efcl and not has_hdate
+
             # When the time axis is month or year, there is no "date" key in
             # the request – "time" may also be absent.  Only pop "time" when it
-            # is actually present so we don't break month/year requests.
+            # is actually present so we don't break month/year requests.  For
+            # efcl climatology, leave "time" in the request so it is processed as
+            # its own independent axis below.
             time = []
-            if "time" in request:
+            if "time" in request and not efcl_climatology:
                 time = request.pop("time").replace(":", "")
                 time = time.split("/")
                 if "to" in time:
@@ -346,10 +350,6 @@ class PolytopeMars:
                     else:
                         times = pd.date_range(start=start, end=end, freq="1h")
                     time = times.strftime("%H:%M:%S").tolist()
-
-            # TODO: when has_hdate, "date" stays a plain string (not cast to pd.Timestamp).
-            # Need to check if polytope can handle that or if we need a type_change config for date.
-            has_hdate = "hdate" in request
 
             for k, v in request.items():
                 split = str(v).split("/")
@@ -362,6 +362,61 @@ class PolytopeMars:
                         for s in split:
                             new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
                         split = new_split
+
+                # efcl climatology: date ranges -> Span, time -> independent axis
+                # (mirrors the climate-dt date/time handling above).
+                if efcl_climatology and k in ("date", "time"):
+                    if len(split) == 1 and split[0] == "ALL":
+                        base_shapes.append(shapes.All(k))
+                    elif len(split) == 1:
+                        if k == "date":
+                            base_shapes.append(shapes.Select(k, [pd.Timestamp(split[0])]))
+                        else:
+                            base_shapes.append(shapes.Select(k, [convert_timestamp(split[0])]))
+                    elif len(split) == 3 and split[1] == "to":
+                        if k == "date":
+                            base_shapes.append(
+                                shapes.Span(k, lower=pd.Timestamp(split[0]), upper=pd.Timestamp(split[2]))
+                            )
+                        else:
+                            base_shapes.append(
+                                shapes.Span(k, lower=convert_timestamp(split[0]), upper=convert_timestamp(split[2]))
+                            )
+                    elif "by" in split:
+                        if split[-1] == "1":
+                            if k == "date":
+                                base_shapes.append(
+                                    shapes.Span(k, lower=pd.Timestamp(split[0]), upper=pd.Timestamp(split[2]))
+                                )
+                            else:
+                                base_shapes.append(
+                                    shapes.Span(
+                                        k,
+                                        lower=convert_timestamp(split[0]),
+                                        upper=convert_timestamp(split[2]),
+                                    )
+                                )
+                        else:
+                            if k == "date":
+                                timestamps = pd.date_range(
+                                    start=pd.Timestamp(split[0]),
+                                    end=pd.Timestamp(split[2]),
+                                    freq=f"{split[-1]}D",
+                                )
+                                base_shapes.append(shapes.Select(k, timestamps.tolist()))
+                            else:
+                                times = pd.date_range(
+                                    start=convert_timestamp(split[0]),
+                                    end=convert_timestamp(split[2]),
+                                    freq=time_step_to_freq(split[-1]),
+                                )
+                                base_shapes.append(shapes.Select(k, times.strftime("%H:%M:%S").tolist()))
+                    else:
+                        if k == "date":
+                            base_shapes.append(shapes.Select(k, [pd.Timestamp(s) for s in split]))
+                        else:
+                            base_shapes.append(shapes.Select(k, [convert_timestamp(s) for s in split]))
+                    continue
 
                 # ALL -> All
                 if len(split) == 1 and split[0] == "ALL":
