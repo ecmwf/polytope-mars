@@ -204,19 +204,10 @@ class PolytopeMars:
         base_shapes = []
 
         if (
-            (
-                "dataset" in request
-                and request["dataset"] == "climate-dt"  # noqa: W503
-                and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
-            )
-            or (request["class"] == "ng" and (feature_type == "timeseries" or feature_type == "polygon"))  # noqa: W503
-            or (  # noqa: W503
-                "stream" in request
-                and request["stream"] == "efcl"  # noqa: W503
-                and request["class"] == "ce"  # noqa: W503
-                and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
-            )
-        ):  # noqa: W503
+            "dataset" in request
+            and request["dataset"] == "climate-dt"  # noqa: W503
+            and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
+        ) or (request["class"] == "ng" and (feature_type == "timeseries" or feature_type == "polygon")):
             for k, v in request.items():
                 split = str(v).split("/")
 
