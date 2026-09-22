@@ -326,12 +326,14 @@ class PolytopeMars:
             # Need to check if polytope can handle that or if we need a type_change config for date.
             has_hdate = "hdate" in request
 
-            # efas climatology requests (stream=efcl, class=ce) that are *not*
-            # reforecasts (no hdate) keep "time" as an independent axis and turn
-            # date ranges into Spans, instead of the reforecast-style
-            # date/hdate x time cross-product handled below.
-            is_efcl = request.get("stream") == "efcl" and request.get("class") == "ce"
-            efcl_climatology = is_efcl and has_hdate
+            # efcl (efas climatology reforecast) timeseries/polygon requests keep
+            # "date", "hdate" and "time" as independent axes (date/hdate ranges
+            # become Spans, times become their own Select), mirroring the
+            # climate-dt date/time handling. Every other feature type keeps the
+            # reforecast-style date/hdate x time cross-product handled below so
+            # covjsonkit's merged-datetime decoder still works for them.
+            is_efcl = request.get("class") == "ce" and request.get("stream") == "efcl"
+            efcl_climatology = is_efcl and feature_type in ("timeseries", "polygon")
 
             # When the time axis is month or year, there is no "date" key in
             # the request – "time" may also be absent.  Only pop "time" when it
@@ -363,8 +365,9 @@ class PolytopeMars:
                             new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
                         split = new_split
 
-                # efcl climatology: date ranges -> Span, time -> independent axis
-                # (mirrors the climate-dt date/time handling above).
+                # efcl climatology: keep date/hdate/time as independent axes
+                # (date/hdate ranges -> Span, time -> its own Select), mirroring
+                # the climate-dt date/time handling above.
                 if efcl_climatology and k in ("date", "hdate", "time"):
                     if len(split) == 1 and split[0] == "ALL":
                         base_shapes.append(shapes.All(k))
