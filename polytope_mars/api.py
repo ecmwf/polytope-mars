@@ -331,7 +331,7 @@ class PolytopeMars:
             # date ranges into Spans, instead of the reforecast-style
             # date/hdate x time cross-product handled below.
             is_efcl = request.get("stream") == "efcl" and request.get("class") == "ce"
-            efcl_climatology = is_efcl and not has_hdate
+            efcl_climatology = is_efcl and has_hdate
 
             # When the time axis is month or year, there is no "date" key in
             # the request – "time" may also be absent.  Only pop "time" when it
@@ -365,16 +365,16 @@ class PolytopeMars:
 
                 # efcl climatology: date ranges -> Span, time -> independent axis
                 # (mirrors the climate-dt date/time handling above).
-                if efcl_climatology and k in ("date", "time"):
+                if efcl_climatology and k in ("date", "hdate", "time"):
                     if len(split) == 1 and split[0] == "ALL":
                         base_shapes.append(shapes.All(k))
                     elif len(split) == 1:
-                        if k == "date":
+                        if k in ("date", "hdate"):
                             base_shapes.append(shapes.Select(k, [pd.Timestamp(split[0])]))
                         else:
                             base_shapes.append(shapes.Select(k, [convert_timestamp(split[0])]))
                     elif len(split) == 3 and split[1] == "to":
-                        if k == "date":
+                        if k in ("date", "hdate"):
                             base_shapes.append(
                                 shapes.Span(k, lower=pd.Timestamp(split[0]), upper=pd.Timestamp(split[2]))
                             )
@@ -384,7 +384,7 @@ class PolytopeMars:
                             )
                     elif "by" in split:
                         if split[-1] == "1":
-                            if k == "date":
+                            if k in ("date", "hdate"):
                                 base_shapes.append(
                                     shapes.Span(k, lower=pd.Timestamp(split[0]), upper=pd.Timestamp(split[2]))
                                 )
@@ -397,7 +397,7 @@ class PolytopeMars:
                                     )
                                 )
                         else:
-                            if k == "date":
+                            if k in ("date", "hdate"):
                                 timestamps = pd.date_range(
                                     start=pd.Timestamp(split[0]),
                                     end=pd.Timestamp(split[2]),
@@ -412,7 +412,7 @@ class PolytopeMars:
                                 )
                                 base_shapes.append(shapes.Select(k, times.strftime("%H:%M:%S").tolist()))
                     else:
-                        if k == "date":
+                        if k in ("date", "hdate"):
                             base_shapes.append(shapes.Select(k, [pd.Timestamp(s) for s in split]))
                         else:
                             base_shapes.append(shapes.Select(k, [convert_timestamp(s) for s in split]))
