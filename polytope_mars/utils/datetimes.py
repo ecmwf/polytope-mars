@@ -54,14 +54,20 @@ def time_step_to_freq(step):
 
 
 def convert_timestamp(timestamp):
-    # Ensure the input is a string
-    timestamp = str(timestamp)
+    # Ensure the input is a string and strip any existing separators
+    timestamp = str(timestamp).replace(":", "")
 
-    # Pad the timestamp with leading zeros if necessary
-    timestamp = timestamp.zfill(4)
+    # MARS time values are given either as hours (e.g. "6", "12") or as
+    # HHMM (e.g. "0600", "1230").  Values with two or fewer digits are
+    # interpreted as whole hours, so pad them on the right with "00"
+    # minutes.  Longer values are zero padded on the left to HHMM.
+    if len(timestamp) <= 2:
+        timestamp = timestamp.zfill(2) + "00"
+    else:
+        timestamp = timestamp.zfill(4)
 
     # Insert colons to format as HH:MM:SS
-    formatted_timestamp = f"{timestamp[:2]}:{timestamp[2:]}:00"
+    formatted_timestamp = f"{timestamp[:2]}:{timestamp[2:4]}:00"
 
     return formatted_timestamp
 
