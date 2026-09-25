@@ -322,11 +322,24 @@ class PolytopeMars:
                         split = [self._format_step_as_subhourly(s) for s in split]
                     base_shapes.append(shapes.Select(k, split))
         else:
+            # TODO: when has_hdate, "date" stays a plain string (not cast to pd.Timestamp).
+            # Need to check if polytope can handle that or if we need a type_change config for date.
+            has_hdate = "hdate" in request
+
+            # All class=ce (EFAS) data keeps "date", "hdate" and "time" as
+            # independent axes for every feature type (date/hdate ranges become
+            # Spans, times become their own Select), mirroring the climate-dt
+            # date/time handling. Previously the date and time axes were merged
+            # into a single datetime axis; now they are separate.
+            separate_datetime = request.get("class") == "ce"
+
             # When the time axis is month or year, there is no "date" key in
             # the request – "time" may also be absent.  Only pop "time" when it
-            # is actually present so we don't break month/year requests.
+            # is actually present so we don't break month/year requests.  For
+            # separate-datetime (class=ce), leave "time" in the request so it is
+            # processed as its own independent axis below.
             time = []
-            if "time" in request:
+            if "time" in request and not separate_datetime:
                 time = request.pop("time").replace(":", "")
                 time = time.split("/")
                 if "to" in time:
@@ -337,10 +350,6 @@ class PolytopeMars:
                     else:
                         times = pd.date_range(start=start, end=end, freq="1h")
                     time = times.strftime("%H:%M:%S").tolist()
-
-            # TODO: when has_hdate, "date" stays a plain string (not cast to pd.Timestamp).
-            # Need to check if polytope can handle that or if we need a type_change config for date.
-            has_hdate = "hdate" in request
 
             for k, v in request.items():
                 split = str(v).split("/")
@@ -353,6 +362,74 @@ class PolytopeMars:
                         for s in split:
                             new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
                         split = new_split
+
+                # class=ce: keep date/hdate/time as independent axes
+                # (date/hdate ranges -> Span, time -> its own Select), mirroring
+                # the climate-dt date/time handling above.
+                if separate_datetime and k in ("date", "hdate", "time"):
+                    if len(split) == 1 and split[0] == "ALL":
+                        base_shapes.append(shapes.All(k))
+                    elif len(split) == 1:
+                        if k in ("date", "hdate"):
+                            base_shapes.append(shapes.Select(k, [pd.Timestamp(split[0])]))
+                        else:
+                            base_shapes.append(shapes.Select(k, [convert_timestamp(split[0])]))
+                    elif len(split) == 3 and split[1] == "to":
+                        if k in ("date", "hdate"):
+                            base_shapes.append(
+                                shapes.Span(
+                                    k,
+                                    lower=pd.Timestamp(split[0]),
+                                    upper=pd.Timestamp(split[2]),
+                                )
+                            )
+                        else:
+                            base_shapes.append(
+                                shapes.Span(
+                                    k,
+                                    lower=convert_timestamp(split[0]),
+                                    upper=convert_timestamp(split[2]),
+                                )
+                            )
+                    elif "by" in split:
+                        if split[-1] == "1":
+                            if k in ("date", "hdate"):
+                                base_shapes.append(
+                                    shapes.Span(
+                                        k,
+                                        lower=pd.Timestamp(split[0]),
+                                        upper=pd.Timestamp(split[2]),
+                                    )
+                                )
+                            else:
+                                base_shapes.append(
+                                    shapes.Span(
+                                        k,
+                                        lower=convert_timestamp(split[0]),
+                                        upper=convert_timestamp(split[2]),
+                                    )
+                                )
+                        else:
+                            if k in ("date", "hdate"):
+                                timestamps = pd.date_range(
+                                    start=pd.Timestamp(split[0]),
+                                    end=pd.Timestamp(split[2]),
+                                    freq=f"{split[-1]}D",
+                                )
+                                base_shapes.append(shapes.Select(k, timestamps.tolist()))
+                            else:
+                                times = pd.date_range(
+                                    start=convert_timestamp(split[0]),
+                                    end=convert_timestamp(split[2]),
+                                    freq=time_step_to_freq(split[-1]),
+                                )
+                                base_shapes.append(shapes.Select(k, times.strftime("%H:%M:%S").tolist()))
+                    else:
+                        if k in ("date", "hdate"):
+                            base_shapes.append(shapes.Select(k, [pd.Timestamp(s) for s in split]))
+                        else:
+                            base_shapes.append(shapes.Select(k, [convert_timestamp(s) for s in split]))
+                    continue
 
                 # ALL -> All
                 if len(split) == 1 and split[0] == "ALL":
@@ -545,7 +622,7 @@ class PolytopeMars:
                 coverage = encoder.from_polytope_step(result)
             else:
                 coverage = encoder.from_polytope(result)
-        elif request["class"] == "ce" and request["stream"] == "efcl":
+        elif request["class"] == "ce":
             coverage = encoder.from_polytope_reforecast(result)
         else:
             coverage = encoder.from_polytope(result)
