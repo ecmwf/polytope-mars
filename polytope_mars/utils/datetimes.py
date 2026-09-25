@@ -19,34 +19,54 @@ def days_between_dates(date1, date2):
     return abs(delta.days)
 
 
+def mars_time_to_hhmm(value):
+    """
+    Normalise a MARS time value to a 4-digit ``HHMM`` string.
+
+    MARS time values are given either as hours (e.g. "6", "12") or as
+    HHMM (e.g. "0600", "1230"), optionally with separators ("06:00").
+    Values with two or fewer digits are interpreted as whole hours, so they
+    are padded on the right with "00" minutes.  Longer values are zero padded
+    on the left to HHMM.
+
+    :param value: The MARS time value (e.g. "6", "0600", "06:00")
+    :return: The time as an HHMM string (e.g. "0600")
+    """
+    value = str(value).replace(":", "")
+    if len(value) <= 2:
+        return value.zfill(2) + "00"
+    return value.zfill(4)[:4]
+
+
 def hours_between_times(time1, time2):
     """
-    Calculate the number of hours between two times in the format HHMM.
+    Calculate the number of hours between two MARS times.
 
-    :param time1: The first time in the format HHMM
-    :param time2: The second time in the format HHMM
+    :param time1: The first time, as hours ("6") or HHMM ("0600")
+    :param time2: The second time, as hours ("12") or HHMM ("1200")
     :return: The number of hours between the two times
     """
     time_format = "%H%M"
-    t1 = datetime.strptime(time1, time_format)
-    t2 = datetime.strptime(time2, time_format)
+    t1 = datetime.strptime(mars_time_to_hhmm(time1), time_format)
+    t2 = datetime.strptime(mars_time_to_hhmm(time2), time_format)
     delta = t2 - t1
     return abs(delta.total_seconds() / 3600)
 
 
 def time_step_to_freq(step):
     """
-    Convert a MARS time step in HHMM format to a pandas frequency string.
+    Convert a MARS time step to a pandas frequency string.
 
     In MARS, a time step such as ``0100`` means 1 hour, ``0030`` means 30
     minutes and ``0130`` means 90 minutes.  Passing the raw ``HHMM`` string
     straight to pandas (e.g. ``"0100H"``) is wrong because pandas would read
-    it as 100 hours.
+    it as 100 hours.  Steps with two or fewer digits (e.g. ``6``) are whole
+    hours, consistent with :func:`convert_timestamp`.
 
-    :param step: The time step in HHMM format (e.g. "0100")
+    :param step: The time step, as hours ("6") or HHMM ("0100")
     :return: A pandas-compatible frequency string in minutes (e.g. "60min")
     """
-    step = str(step).zfill(4)
+    step = mars_time_to_hhmm(step)
     hours = int(step[:-2])
     minutes = int(step[-2:])
     total_minutes = hours * 60 + minutes
@@ -54,17 +74,7 @@ def time_step_to_freq(step):
 
 
 def convert_timestamp(timestamp):
-    # Ensure the input is a string and strip any existing separators
-    timestamp = str(timestamp).replace(":", "")
-
-    # MARS time values are given either as hours (e.g. "6", "12") or as
-    # HHMM (e.g. "0600", "1230").  Values with two or fewer digits are
-    # interpreted as whole hours, so pad them on the right with "00"
-    # minutes.  Longer values are zero padded on the left to HHMM.
-    if len(timestamp) <= 2:
-        timestamp = timestamp.zfill(2) + "00"
-    else:
-        timestamp = timestamp.zfill(4)
+    timestamp = mars_time_to_hhmm(timestamp)
 
     # Insert colons to format as HH:MM:SS
     formatted_timestamp = f"{timestamp[:2]}:{timestamp[2:4]}:00"
@@ -251,3 +261,58 @@ def _count_range_steps(start_step: str, end_step: str, by_step: str = "1h") -> i
     # Generate the range and count
     step_range = pd.timedelta_range(start=start_td, end=end_td, freq=by_td)
     return len(step_range)
+
+
+def count_times(time_string: str) -> int:
+    """
+    Count the number of times in a MARS time string.
+
+    Mirrors how the request is expanded: times are hours ("6") or HHMM
+    ("0600"), ranges are inclusive and default to an hourly increment.
+
+    Examples:
+        >>> count_times("0000/1200")
+        2
+        >>> count_times("0/to/18/by/6")
+        4
+        >>> count_times("0000/to/0300")
+        4
+    """
+    parts = str(time_string).split("/")
+    if "to" not in parts:
+        return len(parts)
+    to_index = parts.index("to")
+    by_step = parts[parts.index("by") + 1] if "by" in parts else "1"
+    times = pd.date_range(
+        start=convert_timestamp(parts[to_index - 1]),
+        end=convert_timestamp(parts[to_index + 1]),
+        freq=time_step_to_freq(by_step),
+    )
+    return len(times)
+
+
+def count_dates(date_string: str) -> int:
+    """
+    Count the number of dates in a MARS date string.
+
+    Ranges are inclusive and "by" is a number of days.
+
+    Examples:
+        >>> count_dates("20250101/20250102")
+        2
+        >>> count_dates("20250101/to/20250103")
+        3
+        >>> count_dates("20250101/to/20250110/by/3")
+        4
+    """
+    parts = str(date_string).split("/")
+    if "to" not in parts:
+        return len(parts)
+    to_index = parts.index("to")
+    by_days = parts[parts.index("by") + 1] if "by" in parts else "1"
+    dates = pd.date_range(
+        start=pd.Timestamp(parts[to_index - 1]),
+        end=pd.Timestamp(parts[to_index + 1]),
+        freq=f"{by_days}D",
+    )
+    return len(dates)

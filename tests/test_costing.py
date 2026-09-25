@@ -115,3 +115,41 @@ class TestCosting:
         assert math.isclose(
             request_cost_value, 49235 * 2 * 2, abs_tol=tolerance
         ), f"Value {request_cost_value} is not within {tolerance} of {49235 * 2 * 2}"
+
+    def test_timeseries_cost_time_ranges(self):
+        # Base request: 1 param * 4 steps * 1 number * 1 date * 1 time * 1 point = 4
+        self.timeseries_request["time"] = "0/to/18/by/6"
+        assert request_cost(self.timeseries_request) == 4 * 4
+
+        self.timeseries_request["time"] = "0000/to/1800/by/0600"
+        assert request_cost(self.timeseries_request) == 4 * 4
+
+        # No "by" defaults to hourly, inclusive of both ends.
+        self.timeseries_request["time"] = "0000/to/0300"
+        assert request_cost(self.timeseries_request) == 4 * 4
+
+        self.timeseries_request["time"] = "0000/1200"
+        assert request_cost(self.timeseries_request) == 4 * 2
+
+    def test_timeseries_cost_date_ranges(self):
+        # Date ranges are inclusive of both ends.
+        self.timeseries_request["date"] = "20250101/to/20250103"
+        assert request_cost(self.timeseries_request) == 4 * 3
+
+        self.timeseries_request["date"] = "20250101/to/20250110/by/3"
+        assert request_cost(self.timeseries_request) == 4 * 4
+
+    def test_timeseries_cost_hdate(self):
+        self.timeseries_request["hdate"] = "20050114/20060114/20070114"
+        assert request_cost(self.timeseries_request) == 4 * 3
+
+        self.timeseries_request["hdate"] = "20050114/to/20050116"
+        assert request_cost(self.timeseries_request) == 4 * 3
+
+    def test_timeseries_cost_integer_ranges_by(self):
+        self.timeseries_request["number"] = "1/to/10/by/3"
+        assert request_cost(self.timeseries_request) == 4 * 4
+
+        self.timeseries_request["number"] = "1"
+        self.timeseries_request["levelist"] = "100/to/500/by/100"
+        assert request_cost(self.timeseries_request) == 4 * 5
