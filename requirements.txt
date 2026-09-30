@@ -1,5 +1,5 @@
-polytope-python
-covjsonkit
+polytope-python>=2.1.18
+covjsonkit>=0.2.23
 xarray
 shapely
 geopandas

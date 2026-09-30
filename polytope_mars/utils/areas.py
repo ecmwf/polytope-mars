@@ -6,7 +6,20 @@ from geographiclib.polygonarea import PolygonArea
 from shapely.geometry import LineString, Polygon
 from shapely.ops import split
 
-from .datetimes import count_steps, days_between_dates, hours_between_times
+from .datetimes import count_dates, count_steps, count_times
+
+
+def count_values(value) -> int:
+    """
+    Count the number of integer values in a MARS string such as "1/2/3",
+    "1/to/10" or "1/to/10/by/2" (ranges are inclusive).
+    """
+    parts = str(value).split("/")
+    if "to" not in parts:
+        return len(parts)
+    to_index = parts.index("to")
+    by = int(parts[parts.index("by") + 1]) if "by" in parts else 1
+    return len(range(int(parts[to_index - 1]), int(parts[to_index + 1]) + 1, by))
 
 
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -172,63 +185,30 @@ def field_area(request, area):
         step_len = count_steps(request["step"])
 
     if "number" in request:
-        number = str(request["number"]).split("/")
-        if "to" in number:
-            number_len = len(range(int(number[0]), int(number[2]) + 1))
-        else:
-            number_len = len(number)
+        number_len = count_values(request["number"])
 
     if "levelist" in request:
-        levelist = str(request["levelist"]).split("/")
-        if "to" in levelist:
-            levelist_len = len(range(int(levelist[0]), int(levelist[2]) + 1))
-        else:
-            levelist_len = len(levelist)
+        levelist_len = count_values(request["levelist"])
 
     param = request["param"].split("/")
     param_len = len(param)
 
     # date / time lengths — not present when the time axis is month or year
-    if "date" in request:
-        date = request["date"].split("/")
-        if "to" in date:
-            date_len = days_between_dates(date[0], date[2])
-        else:
-            date_len = len(date)
-        if date_len == 0:
-            date_len = 1
-    else:
-        date_len = 1
+    date_len = max(count_dates(request["date"]), 1) if "date" in request else 1
 
-    if "time" in request:
-        time = request["time"].split("/")
-        if "to" in time:
-            time_len = hours_between_times(time[0], time[2])
-        else:
-            time_len = len(time)
-    else:
-        time_len = 1
+    # hdate (reforecast/reanalysis) is an independent date axis alongside date
+    hdate_len = max(count_dates(request["hdate"]), 1) if "hdate" in request else 1
+
+    time_len = max(count_times(request["time"]), 1) if "time" in request else 1
 
     # month / year lengths — contribute to cost when the time axis is month or year
-    month_len = 1
-    if "month" in request:
-        month = str(request["month"]).split("/")
-        if "to" in month:
-            month_len = int(month[2]) - int(month[0]) + 1
-        else:
-            month_len = len(month)
-
-    year_len = 1
-    if "year" in request:
-        year = str(request["year"]).split("/")
-        if "to" in year:
-            year_len = int(year[2]) - int(year[0]) + 1
-        else:
-            year_len = len(year)
+    month_len = count_values(request["month"]) if "month" in request else 1
+    year_len = count_values(request["year"]) if "year" in request else 1
 
     shape_area = area
 
-    return param_len * step_len * number_len * time_len * date_len * month_len * year_len * levelist_len * shape_area
+    lengths = [param_len, step_len, number_len, time_len, date_len, hdate_len, month_len, year_len, levelist_len]
+    return math.prod(lengths) * shape_area
 
 
 def request_cost(request):
