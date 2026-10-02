@@ -33,6 +33,13 @@ class Feature(ABC):
     def required_axes(self):
         pass
 
+    def uncompressed_axes(self) -> List[str]:
+        """
+        Axes to remove from the configured compressed axes when slicing this feature.
+        Subclasses override this when compressing an axis would lose information they need.
+        """
+        return []
+
     def split_request(self):
         """
         Determines if the request should be split based on the feature configuration.

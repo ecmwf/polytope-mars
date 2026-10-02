@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pytest
 from conflator import Conflator
 from polytope_feature import shapes
-from polytope_feature.polytope import Request
+from polytope_feature.polytope import Polytope, Request
 
 from polytope_mars.api import PolytopeMars
 from polytope_mars.config import PolytopeMarsConfig
@@ -173,42 +173,37 @@ class TestLabelsValidation:
 
     # -- Shape construction tests --
 
+    @staticmethod
+    def _point_shapes(preq):
+        """The single-point Point shapes inside the lat/lon Union built by the timeseries feature."""
+        union = next(s for s in preq.shapes if isinstance(s, shapes.Union))
+        return list(union._shapes)
+
+    def _tags(self, preq):
+        return [p.tag for p in self._point_shapes(preq)]
+
     def test_labels_passed_as_tag_to_point_shapes(self):
-        """Each point is tagged with (index, label) on the corresponding shapes.Point."""
+        """Each point is its own nearest-neighbour Point, tagged (index, label)."""
         request = copy.deepcopy(self.request)
         preq, feature = self._build_request_shapes(request)
-
-        # Find the Union shape (it covers latitude/longitude)
-        union_shape = None
-        for shape in preq.shapes:
-            if isinstance(shape, shapes.Union):
-                union_shape = shape
-                break
-
-        assert union_shape is not None, "Expected a Union shape for lat/lon points"
-
-        # The Union's internal shapes should be Points with tags
-        point_shapes = union_shape._shapes
-        assert len(point_shapes) == 2
-
-        tags = [p.tag for p in point_shapes]
-        assert tags == [(0, "Lisbon"), (1, "Dusseldorf")]
+        points = self._point_shapes(preq)
+        assert [p.values for p in points] == [[[-9.10, 38.78]], [[51.5, 6.5]]]
+        assert all(p.method == "nearest" for p in points)
+        assert self._tags(preq) == [(0, "Lisbon"), (1, "Dusseldorf")]
 
     def test_no_labels_tags_with_index_only(self):
         """When labels is not provided, points are still tagged with (index, None)."""
         request = copy.deepcopy(self.request)
         del request["feature"]["labels"]
         preq, feature = self._build_request_shapes(request)
+        assert self._tags(preq) == [(0, None), (1, None)]
 
-        union_shape = None
-        for shape in preq.shapes:
-            if isinstance(shape, shapes.Union):
-                union_shape = shape
-                break
-
-        assert union_shape is not None
-        point_shapes = union_shape._shapes
-        assert [p.tag for p in point_shapes] == [(0, None), (1, None)]
+    def test_single_point_tag(self):
+        request = copy.deepcopy(self.request)
+        request["feature"]["points"] = [[48.0, 11.0]]
+        request["feature"]["labels"] = ["Munich"]
+        preq, feature = self._build_request_shapes(request)
+        assert self._tags(preq) == [(0, "Munich")]
 
     def test_labels_with_swapped_axes(self):
         """Labels work correctly when axes are [longitude, latitude]."""
@@ -217,33 +212,15 @@ class TestLabelsValidation:
         request["feature"]["points"] = [[38.78, -9.10], [6.5, 51.5]]
         request["feature"]["labels"] = ["Lisbon", "Dusseldorf"]
         preq, feature = self._build_request_shapes(request)
-
-        union_shape = None
-        for shape in preq.shapes:
-            if isinstance(shape, shapes.Union):
-                union_shape = shape
-                break
-
-        assert union_shape is not None
-        point_shapes = union_shape._shapes
-        tags = [p.tag for p in point_shapes]
-        assert tags == [(0, "Lisbon"), (1, "Dusseldorf")]
+        assert all(p.axes() == ["longitude", "latitude"] for p in self._point_shapes(preq))
+        assert self._tags(preq) == [(0, "Lisbon"), (1, "Dusseldorf")]
 
     def test_labels_numeric_values(self):
         """Labels can be numeric (e.g. station IDs)."""
         request = copy.deepcopy(self.request)
         request["feature"]["labels"] = [12345, 67890]
         preq, feature = self._build_request_shapes(request)
-
-        union_shape = None
-        for shape in preq.shapes:
-            if isinstance(shape, shapes.Union):
-                union_shape = shape
-                break
-
-        point_shapes = union_shape._shapes
-        tags = [p.tag for p in point_shapes]
-        assert tags == [(0, 12345), (1, 67890)]
+        assert self._tags(preq) == [(0, 12345), (1, 67890)]
 
     def test_labels_not_allowed_without_points(self):
         """If points is empty but labels is provided, validation fails."""
@@ -260,8 +237,33 @@ class TestLabelsValidation:
         request = copy.deepcopy(self.request)
         request["feature"]["labels"] = ["Airport", "Airport"]
         preq, feature = self._build_request_shapes(request)
-        union_shape = next(s for s in preq.shapes if isinstance(s, shapes.Union))
-        assert [p.tag for p in union_shape._shapes] == [(0, "Airport"), (1, "Airport")]
+        assert self._tags(preq) == [(0, "Airport"), (1, "Airport")]
+
+    def test_per_point_tags_reach_result_tree(self):
+        """Every requested point's tag reaches the tree; points snapping to one grid point keep both tags."""
+        gj = pytest.importorskip("pygribjump")
+        request = copy.deepcopy(self.request)
+        request["feature"]["points"] = [[38.78, -9.10], [38.781, -9.101], [51.5, 6.5]]
+        request["feature"]["labels"] = ["Lisbon_A", "Lisbon_B", "Dusseldorf"]
+        preq, _ = self._build_request_shapes(request)
+        try:
+            result = Polytope(datacube=gj.GribJump(), options=self.cf["options"]).retrieve(preq)
+        except Exception as e:
+            if "gribjump" in str(e).lower() or "fdb" in str(e).lower():
+                pytest.skip("GribJump/FDB not available for integration test")
+            raise
+
+        tag_sets = set()
+
+        def walk(node):
+            if node.axis.name == "longitude":
+                tag_sets.add(frozenset(node.tags))
+            for child in node.children:
+                walk(child)
+
+        walk(result)
+        assert frozenset({(0, "Lisbon_A"), (1, "Lisbon_B")}) in tag_sets
+        assert frozenset({(2, "Dusseldorf")}) in tag_sets
 
     def test_labels_must_be_list(self):
         """Raises ValueError when labels is not a list."""

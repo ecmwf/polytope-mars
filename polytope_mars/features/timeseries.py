@@ -1,9 +1,8 @@
 import logging
 
-from polytope_feature import shapes
-
 from ..feature import Feature
 from ..utils.areas import field_area
+from ..utils.labels import tagged_point_union, validate_labels
 
 
 class TimeSeries(Feature):
@@ -33,25 +32,9 @@ class TimeSeries(Feature):
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
-        # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
-        # Each point is tagged with (index, label) so that points snapping to the same
-        # grid point can still be separated downstream, in request order.
-        # A Union of single Points is used because the multi-point shapes.Point only takes one tag.
-        labels = self.labels if self.labels is not None else [None] * len(self.points)
-        return [
-            shapes.Union(
-                [self.axes[0], self.axes[1]],
-                *[
-                    shapes.Point(
-                        [self.axes[0], self.axes[1]],
-                        [list(p)],
-                        method="nearest",
-                        tag=(i, label),
-                    )
-                    for i, (p, label) in enumerate(zip(self.points, labels))
-                ],
-            )
-        ]
+        # Union of tagged single Points until polytope keeps per-point tags on a multi-point Point
+        # (see TIMESERIES_LABELS.md); then tagged_multi_point can be used instead.
+        return [tagged_point_union([self.axes[0], self.axes[1]], self.points, self.labels)]
 
     def incompatible_keys(self):
         return ["levellist"]
@@ -61,6 +44,12 @@ class TimeSeries(Feature):
 
     def name(self):
         return "Time Series"
+
+    def uncompressed_axes(self):
+        # Workaround until polytope keeps tags per value: a compressed longitude node can hold the
+        # cells of several requested points with one combined tag set, so labels can't be assigned
+        # per cell. With longitude uncompressed each cell has its own node and tags.
+        return ["longitude"]
 
     def required_keys(self):
         return ["type", "points", "time_axis"]
@@ -98,17 +87,7 @@ class TimeSeries(Feature):
 
         if len(feature_config["points"][0]) != 2:
             raise ValueError("Timeseries must have only two values in points")
-        if self.labels is not None:
-            if not isinstance(self.labels, list):
-                raise ValueError("Timeseries labels must be a list")
-            if len(self.labels) != len(feature_config["points"]):
-                raise ValueError(
-                    f"Number of labels ({len(self.labels)}) must match "
-                    f"number of points ({len(feature_config['points'])})"
-                )
-            for label in self.labels:
-                if isinstance(label, bool) or not isinstance(label, (str, int)):
-                    raise ValueError(f"Timeseries labels must be strings or integers, got {label!r}")
+        validate_labels(self.labels, len(feature_config["points"]), "Timeseries", "points")
         if time_axis in request and "range" in feature_config:
             raise ValueError("Timeseries time_axis is overspecified in request")
         if time_axis not in request and "range" not in feature_config:  # noqa: E501
