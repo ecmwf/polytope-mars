@@ -1,9 +1,8 @@
 import logging
 
-from polytope_feature import shapes
-
 from ..feature import Feature
 from ..utils.areas import field_area
+from ..utils.labels import tagged_point_union, validate_labels
 
 
 class TimeSeries(Feature):
@@ -25,6 +24,7 @@ class TimeSeries(Feature):
             self.axes = ["latitude", "longitude"]
 
         self.points = feature_config.pop("points", [])
+        self.labels = feature_config.pop("labels", None)
 
         if "range" in feature_config:
             feature_config.pop("range")
@@ -32,15 +32,9 @@ class TimeSeries(Feature):
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
-        # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
-        return [
-            shapes.Point(
-                [self.axes[0], self.axes[1]],
-                [list(p) for p in self.points],
-                method="nearest",
-            )
-            # shapes.Span("step", self.start_step, self.end_step),
-        ]
+        # Union of tagged single Points until polytope keeps per-point tags on a multi-point Point
+        # (see TIMESERIES_LABELS.md); then tagged_multi_point can be used instead.
+        return [tagged_point_union([self.axes[0], self.axes[1]], self.points, self.labels)]
 
     def incompatible_keys(self):
         return ["levellist"]
@@ -50,6 +44,12 @@ class TimeSeries(Feature):
 
     def name(self):
         return "Time Series"
+
+    def uncompressed_axes(self):
+        # Workaround until polytope keeps tags per value: a compressed longitude node can hold the
+        # cells of several requested points with one combined tag set, so labels can't be assigned
+        # per cell. With longitude uncompressed each cell has its own node and tags.
+        return ["longitude"]
 
     def required_keys(self):
         return ["type", "points", "time_axis"]
@@ -87,6 +87,7 @@ class TimeSeries(Feature):
 
         if len(feature_config["points"][0]) != 2:
             raise ValueError("Timeseries must have only two values in points")
+        validate_labels(self.labels, len(feature_config["points"]), "Timeseries", "points")
         if time_axis in request and "range" in feature_config:
             raise ValueError("Timeseries time_axis is overspecified in request")
         if time_axis not in request and "range" not in feature_config:  # noqa: E501

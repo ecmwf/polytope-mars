@@ -1,6 +1,5 @@
-from polytope_feature import shapes
-
 from ..feature import Feature
+from ..utils.labels import tagged_point_union, validate_labels
 
 
 class VerticalProfile(Feature):
@@ -19,6 +18,7 @@ class VerticalProfile(Feature):
             self.axes = ["latitude", "longitude"]
 
         self.points = feature_config.pop("points", [])
+        self.labels = feature_config.pop("labels", None)
 
         if "range" in feature_config:
             feature_config.pop("range")
@@ -26,21 +26,7 @@ class VerticalProfile(Feature):
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
-        # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
-        return [
-            shapes.Union(
-                [self.axes[0], self.axes[1]],
-                *[
-                    shapes.Point(
-                        [self.axes[0], self.axes[1]],
-                        [[p[0], p[1]]],
-                        method="nearest",  # noqa: E501
-                    )
-                    for p in self.points
-                ],
-            ),
-            # shapes.Span("step", self.start_step, self.end_step),
-        ]
+        return [tagged_point_union([self.axes[0], self.axes[1]], self.points, self.labels)]
 
     def incompatible_keys(self):
         return []
@@ -50,6 +36,12 @@ class VerticalProfile(Feature):
 
     def name(self):
         return "Vertical Profile"
+
+    def uncompressed_axes(self):
+        # Workaround until polytope keeps tags per value: a compressed longitude node can hold the
+        # cells of several requested points with one combined tag set, so labels can't be assigned
+        # per cell. With longitude uncompressed each cell has its own node and tags.
+        return ["longitude"]
 
     def required_keys(self):
         return ["type", "points"]
@@ -73,6 +65,7 @@ class VerticalProfile(Feature):
         #    raise ValueError("Vertical profile axes must be levelist")
         if len(feature_config["points"][0]) != 2:
             raise ValueError("Vertical Profile must have only two values in points")  # noqa: E501
+        validate_labels(self.labels, len(feature_config["points"]), "Vertical profile", "points")
         if "axes" in feature_config:
             if level_axis in request and "range" in feature_config:
                 raise ValueError("Vertical profile axes is overspecified in request")  # noqa: E501
