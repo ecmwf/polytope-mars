@@ -13,3 +13,6 @@ Follow the links below to see how to request different types of features.
 - [Polygon](polygon.md)
 - [Bounding Box](boundingbox.md)
 - [Trajectory](trajectory.md)
+- [Circle](circle.md)
+- [Position](position.md)
+- [Shapefile](shapefile.md)

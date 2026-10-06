@@ -46,6 +46,12 @@ class Polygons(Feature):
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
+        # NOTE: Polygons share the cyclic-longitude datacube walker with
+        # BoundingBox and therefore have the same meridian/antimeridian-crossing
+        # failure mode (a shape whose longitudes straddle the 0/360 seam can
+        # over-select). Unlike BoundingBox, this cannot be fixed by a simple
+        # west/east split because it depends on vertex winding; it is
+        # intentionally out of scope here and handled by the caller for now.
         polygons = []
         for polygon in self.shape:
             points = []

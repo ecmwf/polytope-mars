@@ -22,6 +22,7 @@
   <a href="#concept">Concept</a> •
   <a href="#installation">Installation</a> •
   <a href="#example">Example</a> •
+  <a href="#features">Features</a> •
   <a href="#testing">Testing</a>
 </p>
 
@@ -37,6 +38,11 @@ Current features include:
 * [Trajectory](docs/user_guide/trajectory.md)
 * [Polygon](docs/user_guide/polygon.md)
 * [Frame](docs/user_guide/frame.md)
+* [Circle](#circle)
+* [Position](#position)
+* [Shapefile](#shapefile)
+
+See [Features](#features) below for a request example of each.
 
 > \[!IMPORTANT\]
 > This software is **Incubating** and subject to ECMWF's guidelines on [Software Maturity](https://github.com/ecmwf/codex/raw/refs/heads/main/Project%20Maturity).
@@ -138,6 +144,171 @@ An example config can be found here [example_config.json](example_config.json). 
 2. **options** These are the options used by polytope for interpreting the data available.
 3. **coverageconfig** These options are used by convjsonkit to parse the output of polytope into coverageJSON.
 
+
+## Features
+
+Every request contains a `feature` dictionary describing the geometry to
+extract, alongside the usual MARS keywords (`class`, `stream`, `param`, `date`,
+`step`, ...). The examples below show only the `feature` block; drop it into the
+base request shown in the [Example](#example) section above.
+
+By default the coordinate axes are `["latitude", "longitude"]`, so each point is
+given as `[latitude, longitude]`. Many features accept an optional `axes` key to
+add `levelist` and/or `step`.
+
+### Time Series
+
+A single point extracted over a range of steps (or dates). See the
+[Time Series docs](docs/user_guide/timeseries.md).
+
+```python
+"feature": {
+    "type": "timeseries",
+    "points": [[-9.10, 38.78]],   # [latitude, longitude]
+    "axes": "step",
+}
+```
+
+### Vertical Profile
+
+A single point extracted over all levels. Requires an upper-air `levtype`
+(e.g. `pl`). See the [Vertical Profile docs](docs/user_guide/vertical_profile.md).
+
+```python
+"feature": {
+    "type": "verticalprofile",
+    "points": [[-9.10, 38.78]],   # [latitude, longitude]
+    "axes": "levelist",
+}
+```
+
+### Bounding Box
+
+All grid points inside a latitude/longitude rectangle. See the
+[Bounding Box docs](docs/user_guide/boundingbox.md).
+
+```python
+"feature": {
+    "type": "boundingbox",
+    "points": [[-1, -1], [1, 1]],   # [[south, west], [north, east]]
+}
+```
+
+**Point semantics (important):** the two points are the box corners in the fixed
+order `[[south, west], [north, east]]` — the lower-left (south-west) corner
+first, then the upper-right (north-east) corner. This matches the OGC EDR
+lower-left / upper-right corner convention.
+
+* Latitude must satisfy `south <= north` and lie within `[-90, 90]`.
+* Longitudes may be supplied signed (`[-180, 180]`) or wrapped (`[0, 360)`);
+  they are normalised internally, so the same box can be given either way.
+* The box is always the arc swept **eastward** from the west edge to the east
+  edge, so the order of the two longitudes selects the region.
+* Meridian- and antimeridian-crossing boxes are handled automatically — no need
+  to split the request:
+
+```python
+# ordinary box (west < east)
+"points": [[0, 10], [1, 20]]
+# crosses the prime meridian, signed longitudes (west < east)
+"points": [[-1, -0.1], [1, 0.1]]
+# same box using wrapped longitudes (west = 359.9 > east = 0.1, normalised internally)
+"points": [[-1, 359.9], [1, 0.1]]
+# crosses the antimeridian (split internally at ±180)
+"points": [[-1, 179.9], [1, -179.9]]
+```
+
+An optional third axis adds a level range, with corners
+`[[south, west, level_1], [north, east, level_2]]`:
+
+```python
+"feature": {
+    "type": "boundingbox",
+    "points": [[-1, -1, 1000], [1, 1, 500]],
+    "axes": ["latitude", "longitude", "levelist"],
+}
+```
+
+### Trajectory
+
+Points along a path, each inflated by a `Box` (or disk/ellipsoid) of the given
+`inflation`. Points are `[latitude, longitude, levelist, step]` by default. See
+the [Trajectory docs](docs/user_guide/trajectory.md).
+
+```python
+"feature": {
+    "type": "trajectory",
+    "points": [[-1, -1, 1000, 0], [0, 0, 1000, 12], [1, 1, 250, 24]],
+    "inflation": 0.1,
+    "inflate": "box",
+}
+```
+
+### Polygon
+
+All grid points inside one or more polygons. Each vertex is
+`[latitude, longitude]`; the ring should be closed (first vertex repeated). See
+the [Polygon docs](docs/user_guide/polygon.md).
+
+```python
+"feature": {
+    "type": "polygon",
+    "shape": [[-1, 1], [-1, 0], [0, 1], [-1, 1]],
+}
+```
+
+Multiple polygons can be requested by nesting a list of rings:
+
+```python
+"shape": [[[-1, 1], [-1, 0], [0, 1], [-1, 1]], [[-2, 2], [-2, 1], [1, 2], [-2, 2]]]
+```
+
+### Frame
+
+A hollow rectangular band between an inner and an outer box. Each corner is
+`[latitude, longitude]`.
+
+```python
+"feature": {
+    "type": "frame",
+    "outer_box": [[-2, -2], [2, 2]],   # [[south, west], [north, east]]
+    "inner_box": [[-1, -1], [1, 1]],
+}
+```
+
+### Circle
+
+All grid points within a `radius` (in degrees) of a `center` point.
+
+```python
+"feature": {
+    "type": "circle",
+    "center": [[0, 0]],   # [[latitude, longitude]]
+    "radius": 1,
+}
+```
+
+### Position
+
+The nearest grid point to each requested point, returned as a point series.
+
+```python
+"feature": {
+    "type": "position",
+    "points": [[-9.10, 38.78], [51.5, 0.1]],   # [latitude, longitude]
+}
+```
+
+### Shapefile
+
+All grid points inside the geometry of a shapefile on disk.
+
+```python
+"feature": {
+    "type": "shapefile",
+    "file": "path/to/shape.shp",
+}
+```
 
 ## Acknowledgements
 

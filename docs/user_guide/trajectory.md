@@ -23,6 +23,8 @@ request = {
     "feature" : {
         "type" : "trajectory",
         "points" : [[-1, -1, 1000, 0], [0, 0, 1000,  12], [1, 1, 250, 24]],
+        "inflation" : 0.1,
+        "inflate" : "box",
 	},
     "format" : "covjson",
 }
@@ -36,7 +38,7 @@ This request will return a trajectory with forecast date of `20240930T000000` fo
 * `lat: 0, long: 0, pressure level: 1000, step: 12`
 * `lat: 1, long: 1, pressure level: 250, step: 24`
 
-The `trajectory` `feature` also contains another field called `padding` with a default of 1. This is the radius of the circle swept around the trajectory where points within this radius are returned to the user.
+The `trajectory` `feature` also contains a required field called `inflation`. This is the size of the shape (box, disk or ellipsoid) swept around the trajectory; points falling within this shape are returned to the user. `inflation` may be a single value (applied to every axis) or a list with one value per axis. The optional `inflate` field selects the shape used (`"box"` or `"round"`, default `"round"`).
 
 Notes:
 * The data has to exist in the data source pointed to in the config.
@@ -63,6 +65,8 @@ request = {
     "feature" : {
         "type" : "trajectory",
         "points" : [[-1, -1, 1000, 0], [0, 0, 1000,  12], [1, 1, 250, 24]],
+        "inflation" : 0.1,
+        "inflate" : "box",
 	},
     "format" : "covjson",
 }
@@ -76,7 +80,7 @@ This request will return a trajectory with forecast date of `20240930T000000` fo
 * `lat: 0, long: 0, pressure level: 1000, step: 12`
 * `lat: 1, long: 1, pressure level: 250, step: 24`
 
-The `trajectory` `feature` also contains another field called `padding` with a default of 1. This is the radius of the circle swept around the trajectory where points within this radius are returned to the user.
+The `trajectory` `feature` also contains a required field called `inflation`. This is the size of the shape swept around the trajectory; points falling within this shape are returned to the user.
 
 `"polytope"` refers to the underlying service being used to return the data. `"emcwf-mars"` is the dataset we are looking to retrieve from. Setting `stream=False` returns all the requested data to us once it is available. `address` points to the endpoint for the polytope server.
 
@@ -87,36 +91,36 @@ Notes:
 
 ## Required Fields
 
-For a trajectory within the `feature` dictionary two fields are required
+For a trajectory within the `feature` dictionary three fields are required
 
 * `type`
 * `points`
-* `padding`
+* `inflation`
 
 For a trajectory `type` must be `trajectory`.
 
 The values in `points` can change depending on the `axes`. The default for `axes` is:
 
 ```python
-"axes" : ["lat", "long", "level", "step"]
+"axes" : ["latitude", "longitude", "levelist", "step"]
 ```
 
-In this default case a nested list of at least two points with values for `lat`, `long`, `level`, and `step` must be provided.
+In this default case a nested list of at least two points with values for `latitude`, `longitude`, `levelist`, and `step` must be provided.
 
-Another required field that is within the `feature` dictionary is `padding`. This refers to the radius of the circle swept around the trajectory along which points will be included.
+Another required field that is within the `feature` dictionary is `inflation`. This is the size of the shape (box, disk or ellipsoid) swept around the trajectory; points falling within this shape are returned to the user. `inflation` may be a single value (applied to every axis) or a list with one value per axis. The optional `inflate` field selects the shape used (`"box"` or `"round"`, default `"round"`).
 
 
 ## Optional Fields
 
-`axes` refers to the axes on which to generate the trajectory. As stated above the minimum default `axes` contains `lat`, `long`, `level`, and `step` meaning if `axes` is not included these values must be provided per point.
+`axes` refers to the axes on which to generate the trajectory. As stated above the minimum default `axes` contains `latitude`, `longitude`, `levelist`, and `step` meaning if `axes` is not included these values must be provided per point.
 
 However `axes` can also be provided by the user and with less values. The minimum values of `axes` are:
 
 ```python
-"axes" : ["lat", "long"]
+"axes" : ["latitude", "longitude"]
 ```
 
-In this case only `lat` and `long` must be provided in the requested points but a level and time axis must be provided in the main body of the request. These values will be propogated for each set of `lat`, `long` points. For example in the following request:
+In this case only `latitude` and `longitude` must be provided in the requested points but a level and time axis must be provided in the main body of the request. These values will be propogated for each set of `latitude`, `longitude` points. For example in the following request:
 
 ```python
 request = {
@@ -135,7 +139,7 @@ request = {
     "feature" : {
         "type" : "trajectory",
         "points" : [[-1, -1], [0, 0], [-1, -1]],
-        "axis" : ['lat', 'long']
+        "axes" : ['latitude', 'longitude']
 	},
 }
 ```
@@ -151,6 +155,6 @@ The following points would be returned:
 
 The user does not have to give `step` as the time axis. In the case of a climate dataset `datetime` can also be used.
 
-Combinations such as `"axis" : ['lat', 'step']` will return an error.
+Combinations such as `"axes" : ['latitude', 'step']` will return an error.
 
 If `step` is included as an `axis` and also in the main body of teh request. An error that the request is overspecified will also be thrown.
