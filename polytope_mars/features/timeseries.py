@@ -34,12 +34,17 @@ class TimeSeries(Feature):
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
         return [
-            shapes.Point(
+            shapes.Union(
                 [self.axes[0], self.axes[1]],
-                [list(p) for p in self.points],
-                method="nearest",
-            )
-            # shapes.Span("step", self.start_step, self.end_step),
+                *[
+                    shapes.Point(
+                        [self.axes[0], self.axes[1]],
+                        [[p[0], p[1]]],
+                        method="nearest",  # noqa: E501
+                    )
+                    for p in self.points
+                ],
+            ),
         ]
 
     def incompatible_keys(self):
