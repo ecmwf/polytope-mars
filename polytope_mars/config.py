@@ -37,11 +37,14 @@ class EncodersConfig(ConfigModel):
 
 
 class BytesPerPointConfig(ConfigModel):
-    """Peak bytes per extracted value of one ``datacube.get``, per grid mapper family.
+    """Deprecated: use ``limits.bytes_per_value``.
 
-    Seeded from polytope-mars ``MEASUREMENTS.md`` (Phase 0, bare ``datacube.get``: local_regular 48.5,
-    octahedral 57.3, healpix_nested 121.6 B/value), rounded up with headroom for the per-field
-    float64 copies and the encoder's per-block buffers.  Other mapper types use ``default``.
+    Phase 2 sized an extraction unit with one constant per grid mapper family, because HEALPix nested
+    cost ~2.5x more per value than the other grids.  That difference is not a property of the grid but
+    of the number of gribjump index *ranges* a field needs, which the sizing now counts from the
+    prepared tree (:mod:`polytope_mars.sizing`, :mod:`polytope_mars.grid_ranges`).  A config that still
+    sets this key has its ``default`` entry used as ``limits.bytes_per_value``; the per-mapper entries
+    are ignored.
     """
 
     model_config = ConfigDict(extra="allow")
@@ -73,9 +76,34 @@ class LimitsConfig(ConfigModel):
     max_polygon_points: int = 3600
     #: max points per field, estimated before slicing from the grid density and the feature area (None: off)
     max_points_per_field: Optional[int] = None
-    #: memory budget of one extraction unit; None: never band (one unit per field group)
+    #: memory one ``datacube.get`` may cost; None: one field group per call and no banding
     memory_budget_bytes: Optional[int] = None
-    bytes_per_point: BytesPerPointConfig = BytesPerPointConfig()
+    #: measured Python-side peak bytes per extracted value (results on the tree, float64 field copies,
+    #: encoder buffers), the same constant for every grid: see MEASUREMENTS.md and
+    #: ``python tools/measure_memory.py calibrate``
+    bytes_per_value: int = 128
+    #: bytes one gribjump index range costs in an ``ExtractionResult``: two vector headers plus two
+    #: heap allocations, for the values and the bitmap of that range
+    bytes_per_range: int = 96
+    #: multiplier on the estimated gribjump buffer of a unit
+    safety_factor: float = 1.5
+    #: hard cap on the values of one ``datacube.get``, independent of the estimate and of the budget
+    max_values_per_unit: Optional[int] = 8_000_000
+    #: Deprecated alias of ``bytes_per_value`` (its ``default`` entry).
+    bytes_per_point: Optional[BytesPerPointConfig] = None
+
+    @model_validator(mode="after")
+    def _check_limits(self):
+        for name in ("bytes_per_value", "bytes_per_range", "safety_factor"):
+            value = getattr(self, name)
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+                raise ValueError(f"limits.{name} must be positive, got {value!r}")
+        if self.max_values_per_unit is not None and self.max_values_per_unit < 1:
+            raise ValueError(f"limits.max_values_per_unit must be positive or null, got {self.max_values_per_unit!r}")
+        if self.bytes_per_point is not None and "bytes_per_value" not in self.model_fields_set:
+            logging.debug("polytope-mars config: 'limits.bytes_per_point' is deprecated, use 'limits.bytes_per_value'")
+            object.__setattr__(self, "bytes_per_value", self.bytes_per_point.default)
+        return self
 
 
 class PolytopeMarsConfig(ConfigModel):

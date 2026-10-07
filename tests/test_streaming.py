@@ -15,9 +15,8 @@ import pytest
 from polytope_mars.api import PolytopeMars
 from polytope_mars.config import PolytopeMarsConfig
 from polytope_mars.encoders import get_encoder, supported_formats
-from polytope_mars.extract import BlockExtractor, mapper_type
+from polytope_mars.extract import BlockExtractor
 from polytope_mars.param_db import get_params
-from polytope_mars.testing.configs import fake_gribjump_config_dict
 from polytope_mars.testing.fake_gribjump import decode_value
 from polytope_mars.testing.golden import build_fake, load_case, make_polytope_mars
 
@@ -34,10 +33,17 @@ def expected(name):
     return (GOLDEN / folder / f"{name}.covjson").read_bytes()
 
 
+#: Sizing knobs that make one unit's budget exactly ``n_values x BYTES_PER_VALUE`` whatever the grid:
+#: without a safety factor and with a nominal range cost, gribjump's own term (<= ~9 B/value) never
+#: binds, so a test can turn "k groups per call" into a budget without counting index ranges.
+BYTES_PER_VALUE = 64
+SIZING = {"bytes_per_value": BYTES_PER_VALUE, "bytes_per_range": 1, "safety_factor": 1.0}
+
+
 def run(name, budget=None, fake=None, **limits):
     c = case(name)
     fake = build_fake(c) if fake is None else fake
-    update = {"limits": {"memory_budget_bytes": budget, **limits}}
+    update = {"limits": {"memory_budget_bytes": budget, **SIZING, **limits}}
     pm, request = make_polytope_mars(c, fake, update)
     return b"".join(pm.extract_stream(request)), pm, fake
 
@@ -77,14 +83,11 @@ GROUP_GRID = {
 
 
 def group_bytes(name) -> int:
-    """``n_points x n_params x n_levels x bytes_per_point`` of one group of ``name``: one unit's budget."""
-    c = case(name)
-    conf = PolytopeMarsConfig.model_validate(fake_gribjump_config_dict(c["grid"], c["request"]))
-    bpp = conf.limits.bytes_per_point.for_mapper(mapper_type(conf.options))
+    """``n_points x n_params x n_levels x BYTES_PER_VALUE`` of one group of ``name``: one unit's budget."""
     doc = json.loads(expected(name))
     values = doc["coverages"][0]["domain"]["axes"]["composite"]["values"]
     n_levels = len({v[2] for v in values})
-    return (len(values) // n_levels) * len(doc["parameters"]) * n_levels * bpp
+    return (len(values) // n_levels) * len(doc["parameters"]) * n_levels * BYTES_PER_VALUE
 
 
 def predicted_units(extents, max_groups) -> list:
@@ -190,7 +193,7 @@ def test_band_invariance(name):
     levels = {v[2] for v in cov["domain"]["axes"]["composite"]["values"]}
     n_fields *= len(levels)
     n_points = len(cov["domain"]["axes"]["composite"]["values"]) // len(levels)
-    bpp = PolytopeMarsConfig().limits.bytes_per_point.for_mapper(None)  # all grids here use 64 or 160
+    bpp = BYTES_PER_VALUE
 
     # one spatial node per band (a latitude line; a single point on merged lat/lon grids)
     out, pm, fake = run(name, budget=1)
@@ -351,9 +354,17 @@ def test_deprecated_config_keys_map_onto_new_sections():
     assert conf.encoders.covjson.param_db == "ecmwf"  # explicit new section wins
     conf = PolytopeMarsConfig.model_validate({})
     assert conf.limits.max_polygon_points == 3600
-    bpp = conf.limits.bytes_per_point
-    assert bpp.for_mapper("healpix_nested") == 160
-    assert bpp.for_mapper("octahedral") == bpp.for_mapper("regular") == 64
+    assert conf.limits.bytes_per_value == 128 and conf.limits.bytes_per_range == 96
+    assert conf.limits.safety_factor == 1.5 and conf.limits.max_values_per_unit == 8_000_000
+
+
+def test_deprecated_bytes_per_point_becomes_bytes_per_value():
+    """A config written for Phase 2 keeps working: the per-mapper table's ``default`` is the constant."""
+    conf = PolytopeMarsConfig.model_validate({"limits": {"bytes_per_point": {"default": 72, "healpix_nested": 160}}})
+    assert conf.limits.bytes_per_value == 72
+    # an explicit new key wins over the deprecated table
+    conf = PolytopeMarsConfig.model_validate({"limits": {"bytes_per_value": 200, "bytes_per_point": {"default": 72}}})
+    assert conf.limits.bytes_per_value == 200
 
 
 def test_timings_are_reset_per_request():

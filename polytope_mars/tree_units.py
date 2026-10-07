@@ -11,10 +11,11 @@ afterwards (``polytope_mars.extract.collect_field_values``).
 
 Two things bound a unit:
 
-* the memory budget: a unit of ``k`` groups fits when
-  ``n_points x n_params x n_levels x k x bytes_per_point <= limits.memory_budget_bytes``, and
-  ``k <= MAX_GROUPS_PER_UNIT`` keeps one call's request list bounded.  Without a budget
-  (``memory_budget_bytes = None``) every unit is a single group, as in Phase 2;
+* how much memory it costs: :class:`~polytope_mars.sizing.UnitSizing` turns the budget, the hard
+  cap and the group's shape (points, fields, gribjump index ranges) into ``GroupSpec.max_groups``,
+  the number of groups of that shape one ``datacube.get`` may fetch; ``MAX_GROUPS_PER_UNIT`` keeps
+  one call's request list bounded whatever the budget.  Without a budget every unit is a single
+  group, as in Phase 2 (``UnitSizing`` returns 1);
 * what one tree can express: the group-axis values of a unit must form a cartesian product (a
   "rectangle"), because the compressed axes of a request tree expand to the *product* of their values
   (``FDBDatacube._gribjump_requests``).  Groups of one unit must also agree on their point count,
@@ -56,10 +57,32 @@ class GroupSpec:
     key: tuple | None
     #: ``(n_points, params, levels)``; groups of one unit must agree on all three
     shape: tuple
-    #: memory the group's values need: ``n_points x n_params x n_levels x bytes_per_point``
-    nbytes: int
+    #: groups of this shape one ``datacube.get`` may fetch (``UnitSizing.max_unit_groups``); 0 when
+    #: a single group does not fit and has to be fetched in latitude bands
+    max_groups: int = 1
     #: points per spatial node, for the extractor (not used for planning)
     counts: Any = ()
+    #: gribjump index ranges per field, per spatial node (parallel to ``counts``)
+    range_counts: Any = ()
+
+    @property
+    def n_points(self) -> int:
+        return self.shape[0] if self.shape else 0
+
+    @property
+    def n_fields(self) -> int:
+        """Fields of one group: params x levels."""
+        _, params, levels = self.shape
+        return max(1, len(params)) * max(1, len(levels))
+
+    @property
+    def n_values(self) -> int:
+        return self.n_points * self.n_fields
+
+    @property
+    def n_ranges(self) -> int:
+        """gribjump index ranges of one field of the group."""
+        return sum(self.range_counts)
 
 
 def _same(a, b) -> bool:
@@ -71,27 +94,26 @@ def _same(a, b) -> bool:
         return False
 
 
-def plan_units(specs, budget, max_groups: int = MAX_GROUPS_PER_UNIT) -> list:
+def plan_units(specs, max_groups: int = MAX_GROUPS_PER_UNIT) -> list:
     """``[(start, length), ...]`` of the units covering ``specs`` (a list of :class:`GroupSpec`).
 
-    Greedy and in emission order: every unit is the longest run of consecutive groups that fits
-    ``budget`` bytes, is at most ``max_groups`` groups long, has the same shape throughout and whose
-    group-axis values form a cartesian product.  ``budget`` None gives one group per unit.
+    Greedy and in emission order: every unit is the longest run of consecutive groups that its
+    first group's ``max_groups`` allows (what the memory model pays for), is at most ``max_groups``
+    groups long, has the same shape throughout and whose group-axis values form a cartesian product.
     """
     units, start, n = [], 0, len(specs)
     while start < n:
-        k = _unit_length(specs, start, budget, max_groups)
+        k = _unit_length(specs, start, max_groups)
         units.append((start, k))
         start += k
     return units
 
 
-def _unit_length(specs, start: int, budget, max_groups: int) -> int:
+def _unit_length(specs, start: int, max_groups: int) -> int:
     first = specs[start]
-    if budget is None or first.key is None or not first.nbytes or first.nbytes > budget:
+    if first.key is None:
         return 1
-    fits = budget // first.nbytes  # both are ints: nbytes is a byte count, checked non-zero above
-    limit = min(max_groups, len(specs) - start, fits)
+    limit = min(max_groups, len(specs) - start, max(1, first.max_groups))
     if limit < 2:
         return 1
     distinct = [[v] for v in first.key]

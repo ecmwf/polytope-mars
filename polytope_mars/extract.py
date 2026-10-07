@@ -46,6 +46,8 @@ from __future__ import annotations
 import logging
 import math
 import re
+import resource
+import sys
 import time
 from typing import Any, Iterator
 
@@ -67,6 +69,15 @@ from .coverage_plan import (
     make_plan,
     spatial_children,
 )
+from .field_stream import (
+    GroupAssembler,
+    has_per_field_consumption,
+    lazy_unit_fields,
+    unit_field_source,
+    whole_unit_fields,
+)
+from .grid_ranges import RangeCounter
+from .sizing import UnitSizing
 from .tree_units import GroupSpec, plan_units, prune_values, unit_select
 
 __all__ = ["BlockExtractor", "collect_field_values", "is_data_not_found", "mapper_type", "slice_request"]
@@ -95,6 +106,23 @@ def matched_no_field(exc: BaseException) -> bool:
     read the unit is split up as for a partial match.
     """
     return bool(_MATCHED_NONE.search(str(exc)))
+
+
+class _UnitPartiallyMissing(Exception):
+    """gribjump has some but not all fields of a unit: re-fetch it in smaller pieces (DESIGN §2.5)."""
+
+
+def max_rss_bytes() -> int:
+    """Peak resident set size of this process so far, in bytes (``ru_maxrss``).
+
+    Reported in ``timings`` so that production logs can be held against the planner's estimate.
+    Observation only: no decision in polytope-mars reads it (DESIGN §2.7).
+    """
+    try:
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    except (OSError, ValueError, AttributeError):  # pragma: no cover - not on Linux/macOS
+        return 0
+    return peak if sys.platform == "darwin" else peak * 1024
 
 
 def slice_request(api, preq):
@@ -223,6 +251,16 @@ class _Counters:
         self.n_missing_fields = 0
         self.n_fallbacks = 0
         self.get_seconds = 0.0
+        #: gribjump index ranges of one field of the largest group (from the prepared tree)
+        self.n_ranges = 0
+        #: index ranges gribjump was actually asked for, over all calls (observed, for the model)
+        self.n_ranges_requested = 0
+        #: largest unit estimate the planner produced (bytes)
+        self.estimated_unit_bytes_max = 0
+        #: fields of one unit held on the Python heap at once (per-field consumption only)
+        self.buffered_fields_max = 0
+        #: where a unit's fields come from: "get" (whole unit) or "get_iter" (per field)
+        self.unit_source = "get"
 
 
 class BlockExtractor:
@@ -276,9 +314,11 @@ class BlockExtractor:
         extract = gj.extract
         counters = self.counters
 
-        def counted_extract(*args, **kwargs):
+        def counted_extract(requests, *args, **kwargs):
             counters.n_gribjump_calls += 1
-            return extract(*args, **kwargs)
+            requests = list(requests)
+            counters.n_ranges_requested += sum(len(r[1]) for r in requests)
+            return extract(requests, *args, **kwargs)
 
         try:
             gj.extract = counted_extract
@@ -337,10 +377,16 @@ class BlockExtractor:
         timings["n_gribjump_calls"] = c.n_gribjump_calls
         timings["n_missing_fields"] = c.n_missing_fields
         timings["n_fallbacks"] = c.n_fallbacks
+        timings["n_ranges"] = c.n_ranges
+        timings["n_ranges_requested"] = c.n_ranges_requested
+        timings["estimated_unit_bytes_max"] = c.estimated_unit_bytes_max
+        timings["unit_source"] = c.unit_source
+        timings["max_rss_bytes"] = max_rss_bytes()
         n_cov = getattr(self.encoder, "n_coverages", None)
         timings["n_coverages"] = n_cov if n_cov is not None else c.n_groups
         logger.info(
-            "%s: extracted %d groups in %d units (<= %d groups per unit, %d bands, %d gribjump calls);"
+            "%s: extracted %d groups in %d units (<= %d groups per unit, %d bands, %d gribjump calls,"
+            " %d ranges per field via %s); estimated <= %.1f MB per unit, peak RSS %.1f MB;"
             " get %.1f ms, encode %.1f ms",
             self.pm.id,
             c.n_groups,
@@ -348,6 +394,10 @@ class BlockExtractor:
             c.groups_per_unit_max,
             c.n_bands,
             c.n_gribjump_calls,
+            c.n_ranges,
+            c.unit_source,
+            c.estimated_unit_bytes_max / 1e6,
+            timings["max_rss_bytes"] / 1e6,
             timings["get_ms"],
             timings["encode_ms"],
         )
@@ -383,11 +433,14 @@ class BlockExtractor:
 
     # -- MultiPoint: one unit per group, or per (param, level) band ---------------------------------------
 
-    def _budget(self):
-        return self.conf.limits.memory_budget_bytes
+    def _sizing(self, datacube) -> UnitSizing:
+        """The memory model of one unit, and how this datacube delivers a unit's fields.
 
-    def _bytes_per_point(self) -> int:
-        return self.conf.limits.bytes_per_point.for_mapper(mapper_type(self.conf.options))
+        ``per_field_consumption`` is on when the datacube can hand the fields over one at a time
+        (``get_iter``), which keeps the Python side at one group whatever the unit's size; without it
+        (today) one ``get`` returns the whole unit and the Python term covers all of it.
+        """
+        return UnitSizing.from_limits(self.conf.limits, per_field_consumption=has_per_field_consumption(datacube))
 
     def _field_group(self, plan, g: GroupPlan, index, params, n_points, n_bands) -> FieldGroup:
         return FieldGroup(
@@ -401,14 +454,20 @@ class BlockExtractor:
             mars_metadata=g.mars_metadata,
         )
 
-    def _group_specs(self, info, plan, groups, bpp) -> list:
-        """One :class:`~polytope_mars.tree_units.GroupSpec` per planned group, in emission order."""
+    def _group_specs(self, info, plan, groups, sizing: UnitSizing) -> list:
+        """One :class:`~polytope_mars.tree_units.GroupSpec` per planned group, in emission order.
+
+        Points, fields and gribjump index ranges come from the prepared tree; the sizing turns them
+        into the number of groups one ``datacube.get`` may fetch.
+        """
         axes = plan.group_axes()
+        ranges = RangeCounter()
         specs = []
         for g in groups:
             counts = spatial_counts(info, g.branches)
             n_points = int(sum(counts))
             n_fields = len(g.params) * len(g.levels or [None])
+            range_counts = ranges.counts(info, g.branches, counts) if n_points else []
             # A group that does not have a value on every group axis cannot be selected together with
             # its neighbours (branches without that axis would come along whole): it stays its own unit.
             key = tuple(g.key) if axes and all(v is not None for v in g.key) else None
@@ -416,33 +475,49 @@ class BlockExtractor:
                 GroupSpec(
                     key=key,
                     shape=(n_points, tuple(g.params), tuple(g.levels)),
-                    nbytes=n_points * n_fields * bpp,
+                    max_groups=sizing.max_unit_groups(n_points, n_fields, sum(range_counts)),
                     counts=counts,
+                    range_counts=range_counts,
                 )
             )
+        self.counters.n_ranges = max([s.n_ranges for s in specs], default=0)
         return specs
 
     def _multipoint_blocks(self, datacube, tree, info, plan, groups) -> Iterator[Any]:
-        budget = self._budget()
-        bpp = self._bytes_per_point()
+        sizing = self._sizing(datacube)
         axes = plan.group_axes()
-        specs = self._group_specs(info, plan, groups, bpp)
-        for start, length in plan_units(specs, budget):
+        specs = self._group_specs(info, plan, groups, sizing)
+        for start, length in plan_units(specs):
             self.counters.groups_per_unit_max = max(self.counters.groups_per_unit_max, length)
+            spec = specs[start]
             if length > 1:
-                yield from self._multi_group_unit(datacube, tree, info, plan, axes, groups, specs, start, length)
+                self._note_estimate(sizing, length * spec.n_fields, spec)
+                yield from self._multi_group_unit(
+                    datacube, tree, info, plan, axes, groups, specs, start, length, sizing
+                )
                 continue
-            g, spec = groups[start], specs[start]
-            if spec.shape[0] == 0:
+            g = groups[start]
+            if spec.n_points == 0:
                 continue
             index = self.counters.n_groups
-            if budget is None or spec.nbytes <= budget:
+            if spec.max_groups >= 1:
+                self._note_estimate(sizing, spec.n_fields, spec)
                 blocks = self._single_unit(datacube, tree, info, plan, g, index, spec.counts)
             else:
-                n_fields = len(g.params) * len(g.levels or [None])
-                band_points = max(1, budget // (bpp * (n_fields + 1)))
+                ratio = spec.n_ranges / spec.n_points if spec.n_points else 1.0
+                band_points = sizing.band_points(spec.n_fields, ratio)
+                self._note_estimate(sizing, spec.n_fields, spec, n_points=min(band_points, spec.n_points))
                 blocks = self._banded(datacube, tree, info, plan, g, index, spec.counts, band_points)
             yield from self._emit_group(blocks)
+
+    def _note_estimate(self, sizing: UnitSizing, n_fields: int, spec, n_points=None) -> None:
+        """Record what the planner thinks the next ``datacube.get`` costs (observability only)."""
+        points = spec.n_points if n_points is None else n_points
+        ranges = spec.n_ranges
+        if points != spec.n_points and spec.n_points:
+            ranges = max(1, round(spec.n_ranges * points / spec.n_points))
+        estimate = sizing.estimate_bytes(n_fields, points, ranges, group_fields=spec.n_fields)
+        self.counters.estimated_unit_bytes_max = max(self.counters.estimated_unit_bytes_max, estimate)
 
     def _emit_group(self, blocks) -> Iterator[Any]:
         """Pass one group's blocks on and count the group when it produced any."""
@@ -463,21 +538,43 @@ class BlockExtractor:
             return
         yield from self._group_blocks(info, plan, g, index, counts, fields, ())
 
-    def _multi_group_unit(self, datacube, tree, info, plan, axes, groups, specs, start, length) -> Iterator[Any]:
-        """One ``datacube.get`` for ``length`` consecutive groups (DESIGN §2.3).
+    def _multi_group_unit(
+        self, datacube, tree, info, plan, axes, groups, specs, start, length, sizing
+    ) -> Iterator[Any]:
+        """One ``datacube.get`` for ``length`` consecutive groups (DESIGN §2.3), consumed per field.
 
-        The group axes stay compressed over the unit's values, so the call fetches every field of every
-        group in it; ``collect_field_values`` splits the leaf results per (group, param, level) and the
-        groups are emitted in plan order, each exactly as a unit of its own would have emitted it.
+        The group axes stay compressed over the unit, so the call fetches every field of every group
+        in it.  The fields are then taken one at a time and a group's blocks are emitted (and its
+        fields dropped) as soon as all of its (param, level) have arrived, in plan order
+        (:class:`~polytope_mars.field_stream.GroupAssembler`): the Python heap only ever holds the
+        groups still incomplete, not the whole unit.
+
+        Where the fields come from is the seam of :mod:`polytope_mars.field_stream`: today one
+        ``datacube.get`` returns all of them at once (so the unit's size is what the budget has to
+        cover), and ``FDBDatacube.get_iter`` will hand them over as they are decoded.
         """
         select = unit_select(specs, start, length, axes)
         logger.debug("%s: unit of %d groups: %s", self.pm.id, length, select)
         sub = prune_values(tree, select)
-        fields = self._get_fields(datacube, sub, list(axes) + ["param", "levelist"], label=select)
-        del sub  # the values live in `fields` now; drop the pruned tree's nodes
-        if fields is None:
-            # DataNotFound and some fields exist: fetch the unit's groups one at a time, which falls back
-            # to one call per (param, level) for the group that is missing a field.
+        unit_groups = [groups[i] for i in range(start, start + length)]
+        assembler = GroupAssembler(unit_groups)
+        source = self._unit_fields(datacube, sub, list(axes) + ["param", "levelist"], select)
+        emitted = False
+        try:
+            for key, value in source:
+                for i, fields in assembler.feed(key, value):
+                    emitted = True
+                    yield from self._emit_unit_group(info, plan, unit_groups[i], specs[start + i], fields)
+            for i, fields in assembler.flush():
+                emitted = True
+                yield from self._emit_unit_group(info, plan, unit_groups[i], specs[start + i], fields)
+        except _UnitPartiallyMissing:
+            if emitted:
+                # Only reachable on a per-field source that fails mid-unit: blocks of earlier groups
+                # are already on the wire, so the call cannot be retried in smaller pieces.
+                raise
+            # DataNotFound and some fields exist: fetch the unit's groups one at a time, which falls
+            # back to one call per (param, level) for the group that is missing a field.
             self.counters.n_fallbacks += 1
             for i in range(start, start + length):
                 index = self.counters.n_groups
@@ -485,10 +582,44 @@ class BlockExtractor:
                     self._single_unit(datacube, tree, info, plan, groups[i], index, specs[i].counts)
                 )
             return
-        for i in range(start, start + length):
-            g = groups[i]
-            index = self.counters.n_groups
-            yield from self._emit_group(self._group_blocks(info, plan, g, index, specs[i].counts, fields, tuple(g.key)))
+        finally:
+            self.counters.buffered_fields_max = max(self.counters.buffered_fields_max, assembler.max_buffered_fields)
+
+    def _emit_unit_group(self, info, plan, g, spec, fields) -> Iterator[Any]:
+        index = self.counters.n_groups
+        yield from self._emit_group(self._group_blocks(info, plan, g, index, spec.counts, fields, tuple(g.key)))
+
+    def _unit_fields(self, datacube, sub, key_axes, label) -> Iterator:
+        """``(key, (values, missing))`` of a unit's fields, from ``get_iter`` when there is one.
+
+        Raises :class:`_UnitPartiallyMissing` when gribjump reports some (not all) fields of the unit
+        missing; yields nothing when it has none of them.
+        """
+        self.counters.unit_source = unit_field_source(datacube)
+        if has_per_field_consumption(datacube):
+            yield from self._lazy_unit_fields(datacube, sub, key_axes, label)
+            return
+        fields = self._get_fields(datacube, sub, key_axes, label=label)
+        del sub  # the values live in `fields` now; drop the pruned tree's nodes
+        if fields is None:
+            raise _UnitPartiallyMissing(label)
+        yield from whole_unit_fields(fields)
+
+    def _lazy_unit_fields(self, datacube, sub, key_axes, label) -> Iterator:
+        """The per-field seam: ``FDBDatacube.get_iter`` delivers the unit's fields as they arrive."""
+        t0 = time.perf_counter()
+        self.counters.n_units += 1
+        try:
+            for item in lazy_unit_fields(datacube, sub, key_axes, self.pm.log_context):
+                yield item
+        except Exception as exc:
+            if not is_data_not_found(exc):
+                raise
+            logger.debug("%s: DataNotFound for %s: %s", self.pm.id, label, exc)
+            if not matched_no_field(exc):
+                raise _UnitPartiallyMissing(label) from None
+        finally:
+            self.counters.get_seconds += time.perf_counter() - t0
 
     def _group_blocks(self, info, plan, g, index, counts, fields, prefix) -> Iterator[Any]:
         """The blocks of one group whose fields are fetched: one band, params with data only.
@@ -626,9 +757,31 @@ class BlockExtractor:
 
     # -- point features: one get for the whole tree --------------------------------------------------------
 
+    def _note_whole_tree_estimate(self, datacube, info, groups) -> None:
+        """Estimate of the one call a point feature makes (observability; point features are small)."""
+        sizing = self._sizing(datacube)
+        ranges = RangeCounter()
+        n_fields = n_points = n_ranges = 0
+        for g in groups:
+            counts = spatial_counts(info, g.branches)
+            points = sum(counts)
+            if not points:
+                continue
+            fields = len(g.params) * len(g.levels or [None])
+            n_fields += fields
+            n_points += points
+            n_ranges += sum(ranges.counts(info, g.branches, counts))
+        if not n_fields:
+            return
+        # one call, one "group": per-field points and ranges averaged over the tree
+        estimate = sizing.estimate_bytes(n_fields, n_points // n_fields or n_points, n_ranges)
+        self.counters.n_ranges = max(self.counters.n_ranges, n_ranges)
+        self.counters.estimated_unit_bytes_max = max(self.counters.estimated_unit_bytes_max, estimate)
+
     def _whole_tree_blocks(self, datacube, tree, info, plan, groups) -> Iterator[Any]:
         axes = plan.group_axes()
         key_axes = axes + ["param", "levelist"]
+        self._note_whole_tree_estimate(datacube, info, groups)
         try:
             filled = self._get(datacube, tree)
         except Exception as exc:

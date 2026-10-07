@@ -80,56 +80,64 @@ def test_compressed_axes_expand_as_a_product_in_tree_order(monkeypatch):
 # --- planning the units ----------------------------------------------------------------------------------
 
 
-def group_spec(key, n_points=10, params=("1",), levels=(), bytes_per_point=1):
-    n_fields = len(params) * (len(levels) or 1)
+def group_spec(key, max_groups=1, n_points=10, params=("1",), levels=()):
     return GroupSpec(
         key=key,
         shape=(n_points, params, levels),
-        nbytes=n_points * n_fields * bytes_per_point,
+        max_groups=max_groups,
         counts=(n_points,),
+        range_counts=(1,),
     )
 
 
-def units(specs, budget, **kwargs) -> str:
+def units(specs, **kwargs) -> str:
     """The planned units as ``"<start>+<groups> ..."``, e.g. ``"0+3 3+3 6+1"``."""
-    return " ".join(f"{start}+{length}" for start, length in plan_units(specs, budget, **kwargs))
+    return " ".join(f"{start}+{length}" for start, length in plan_units(specs, **kwargs))
 
 
-def test_without_a_budget_every_unit_is_one_group():
-    specs = [group_spec((i,)) for i in range(5)]
-    assert units(specs, None) == "0+1 1+1 2+1 3+1 4+1"
+def run_of(n, **kwargs) -> list:
+    """``n`` consecutive groups on one group axis, all of the same shape."""
+    return [group_spec((i,), **kwargs) for i in range(n)]
 
 
-def test_a_unit_is_the_longest_run_that_fits_the_budget():
-    specs = [group_spec((i,)) for i in range(7)]  # 10 bytes per group
-    assert units(specs, 30) == "0+3 3+3 6+1"
-    assert units(specs, 39) == "0+3 3+3 6+1"
-    assert units(specs, 10**9) == "0+7"
-    assert units(specs, 9) == "0+1 1+1 2+1 3+1 4+1 5+1 6+1"  # not even one group fits
-    assert units(specs, 10**9, max_groups=2) == "0+2 2+2 4+2 6+1"
+def test_groups_that_pay_for_one_call_each_are_their_own_unit():
+    """``GroupSpec.max_groups`` 1 -- what the sizing gives without a budget -- is the Phase 2 pattern."""
+    assert units(run_of(5)) == "0+1 1+1 2+1 3+1 4+1"
+
+
+def test_a_unit_is_the_longest_run_the_memory_model_pays_for():
+    assert units(run_of(7, max_groups=3)) == "0+3 3+3 6+1"
+    assert units(run_of(7, max_groups=10**9)) == "0+7"
+    # a group that does not fit even alone stays its own unit (it is fetched in latitude bands)
+    assert units(run_of(3, max_groups=0)) == "0+1 1+1 2+1"
+    assert units(run_of(7, max_groups=10**9), max_groups=2) == "0+2 2+2 4+2 6+1"
 
 
 def test_a_unit_does_not_cross_a_change_of_points_params_or_levels():
-    points = [group_spec((0,)), group_spec((1,)), group_spec((2,), n_points=20), group_spec((3,), n_points=20)]
-    assert units(points, 10**9) == "0+2 2+2"
-    params = [group_spec((0,)), group_spec((1,), params=("1", "2"))]
-    assert units(params, 10**9) == "0+1 1+1"
-    levels = [group_spec((0,), levels=("500",)), group_spec((1,), levels=("850",))]
-    assert units(levels, 10**9) == "0+1 1+1"
+    big = 10**9
+    points = [group_spec((i,), max_groups=big) for i in (0, 1)]
+    points += [group_spec((i,), max_groups=big, n_points=20) for i in (2, 3)]
+    assert units(points) == "0+2 2+2"
+    params = [group_spec((0,), max_groups=big), group_spec((1,), max_groups=big, params=("1", "2"))]
+    assert units(params) == "0+1 1+1"
+    levels = [group_spec((0,), max_groups=big, levels=("500",)), group_spec((1,), max_groups=big, levels=("850",))]
+    assert units(levels) == "0+1 1+1"
 
 
 def test_a_unit_is_a_cartesian_product_of_its_group_axis_values():
     # 3 numbers x 2 steps, numbers outer: 3 consecutive groups are not a product, 4 are
-    specs = [group_spec((number, step)) for number in (1, 2, 3) for step in (0, 6)]
-    assert units(specs, 20) == "0+2 2+2 4+2"
-    assert units(specs, 30) == "0+2 2+2 4+2"
-    assert units(specs, 50) == "0+4 4+2"
-    assert units(specs, 60) == "0+6"
+    def specs(max_groups):
+        return [group_spec((number, step), max_groups=max_groups) for number in (1, 2, 3) for step in (0, 6)]
+
+    assert units(specs(2)) == "0+2 2+2 4+2"
+    assert units(specs(3)) == "0+2 2+2 4+2"
+    assert units(specs(5)) == "0+4 4+2"
+    assert units(specs(6)) == "0+6"
 
 
 def test_a_group_without_a_value_on_every_group_axis_stays_its_own_unit():
-    specs = [group_spec(None), group_spec((1,)), group_spec((2,))]
-    assert units(specs, 10**9) == "0+1 1+2"
+    specs = [group_spec(None, max_groups=10**9)] + [group_spec((i,), max_groups=10**9) for i in (1, 2)]
+    assert units(specs) == "0+1 1+2"
 
 
 def test_unit_select_lists_the_values_in_plan_order():
