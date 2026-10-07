@@ -488,9 +488,7 @@ class BlockExtractor:
         for i in range(start, start + length):
             g = groups[i]
             index = self.counters.n_groups
-            yield from self._emit_group(
-                self._group_blocks(info, plan, g, index, specs[i].counts, fields, tuple(g.key))
-            )
+            yield from self._emit_group(self._group_blocks(info, plan, g, index, specs[i].counts, fields, tuple(g.key)))
 
     def _group_blocks(self, info, plan, g, index, counts, fields, prefix) -> Iterator[Any]:
         """The blocks of one group whose fields are fetched: one band, params with data only.
