@@ -2,9 +2,12 @@ import copy
 import json
 
 import numpy as np
+import pygribjump
+import pytest
 
 import polytope_mars.api
 from polytope_mars.api import PolytopeMars
+from polytope_mars.extract import is_data_not_found
 from polytope_mars.testing import (
     FakeGribJump,
     decode_value,
@@ -44,7 +47,7 @@ def test_axes_are_sorted_and_narrowed_by_partial_request():
 
 
 def test_extract_values_missing_and_nan():
-    fake = FakeGribJump({"param": ["1", "2"]}, missing=[{"param": "2"}], nan_indices=[11])
+    fake = FakeGribJump({"param": ["1", "2"]}, missing=[{"param": "2"}], nan_indices=[11], missing_mode="empty")
     present, missing = fake.extract([({"param": "1"}, [(10, 13), (20, 21)], "h"), ({"param": "2"}, [(0, 5)], "h")])
     assert missing.values == []
     assert [v.dtype for v in present.values] == [np.float64, np.float64]
@@ -55,6 +58,30 @@ def test_extract_values_missing_and_nan():
     assert index == 12
     assert fake.n_requests == 2
     assert fake.n_values == 4  # missing fields deliver no values
+
+
+def test_extract_raises_data_not_found_like_the_remote_gribjump_by_default():
+    fake = FakeGribJump({"param": ["1", "2"]}, missing=[{"param": "2", "step": "1"}])
+    assert fake.missing_mode == "raise"
+    requests = [
+        ({"class": "od", "param": "1", "step": "1"}, [(0, 3)], "h"),
+        ({"class": "od", "param": "2", "step": "1"}, [(0, 3)], "h"),
+    ]
+    with pytest.raises(pygribjump.GribJumpException) as err:
+        fake.extract(requests)
+    assert str(err.value) == (
+        "Error in function 'gribjump_extract': GribJumpException: DataNotFound. "
+        "Matched 1 fields but 2 were requested.\n"
+        "Union request: retrieve,class=od,param=1/2,step=1"
+    )
+    assert is_data_not_found(err.value)
+    with pytest.raises(pygribjump.GribJumpException, match="Matched 0 fields but 1 were requested"):
+        fake.extract(requests[1:])
+    assert fake.n_extract_calls == fake.n_data_not_found == 2 and fake.n_values == 0
+    (present,) = fake.extract(requests[:1])  # a call without missing fields is unaffected
+    assert len(present.values) == 1 and fake.n_values == 3
+    with pytest.raises(ValueError, match="missing_mode"):
+        FakeGribJump({}, missing_mode="none")
 
 
 def test_datacube_factory_and_timings():

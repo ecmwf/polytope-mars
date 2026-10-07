@@ -9,6 +9,10 @@ streaming API (``b"".join(PolytopeMars.extract_stream(request))``), and compared
 * otherwise ``expected/<name>.covjson``, the legacy oracle (polytope-python 2.1.20 + covjsonkit 0.2.26),
   which is never rewritten by this test.
 
+The fake gribjump raises ``DataNotFound`` for a call that includes a missing field, like the remote
+gribjump; ``test_golden_with_empty_results_for_missing_fields`` runs every case again with the fake
+returning empty results instead (``missing_mode="empty"``): the bytes must be the same in both modes.
+
 Cases with ``expect_error`` assert the exception instead.  After a deliberate output change of a fixed
 case: ``pytest tests/golden --golden-regen`` (or ``GOLDEN_REGEN=1``) rewrites ``expected_fixed/`` only.
 """
@@ -19,7 +23,12 @@ from pathlib import Path
 
 import pytest
 
-from polytope_mars.testing.golden import load_case, run_case, run_case_stream
+from polytope_mars.testing.golden import (
+    build_fake,
+    load_case,
+    run_case,
+    run_case_stream,
+)
 
 HERE = Path(__file__).parent
 CASES = sorted((HERE / "cases").glob("*.yaml"))
@@ -63,6 +72,15 @@ def test_golden(case_path, mode, golden_regen):
         return
     assert path.exists(), f"missing {path}" + ("; run with --golden-regen to create it" if case.get("fixes") else "")
     expected = path.read_bytes()
+    assert actual == expected, _first_difference(actual, expected)
+
+
+@pytest.mark.parametrize("case_path", [p for p in CASES if "expect_error" not in load_case(p)], ids=lambda p: p.stem)
+def test_golden_with_empty_results_for_missing_fields(case_path):
+    """The DataNotFound fallbacks reproduce exactly what empty gribjump results give."""
+    case = load_case(case_path)
+    actual = run_case_stream(case, build_fake(case, missing_mode="empty"))
+    expected = expected_path(case_path, case).read_bytes()
     assert actual == expected, _first_difference(actual, expected)
 
 

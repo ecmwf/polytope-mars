@@ -102,6 +102,7 @@ def test_band_invariance(name):
     assert fake.n_extract_calls == n_fields * pm.timings["n_bands"]
 
 
+@pytest.mark.parametrize("missing_mode", ["raise", "empty"])
 @pytest.mark.parametrize("budget", [None, 1, 2000])
 @pytest.mark.parametrize(
     "name",
@@ -114,8 +115,8 @@ def test_band_invariance(name):
         "efas_bbox_nan_points",
     ],
 )
-def test_missing_fields_and_points_through_both_unit_paths(name, budget):
-    out, pm, fake = run(name, budget=budget)
+def test_missing_fields_and_points_through_both_unit_paths(name, budget, missing_mode):
+    out, pm, fake = run(name, budget=budget, fake=build_fake(case(name), missing_mode=missing_mode))
     assert out == expected(name)
     assert b"NaN" not in out
 

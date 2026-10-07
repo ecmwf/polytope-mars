@@ -10,9 +10,13 @@ It drives the real ``polytope_feature`` ``FDBDatacube`` (and therefore the whole
   to the partial request's values and merged.
 * ``extract(requests)`` takes the list of ``(path, ranges, grid_hash)`` tuples
   built by ``FDBDatacube.get`` and returns, per request, an object with
-  ``.values`` = one float64 ``np.ndarray`` per ``(start, end)`` range, or
-  ``.values == []`` for a path declared missing (that is how gribjump reports a
-  MARS path with no GRIB message).
+  ``.values`` = one float64 ``np.ndarray`` per ``(start, end)`` range.
+  When a path declared missing is part of the call, the default
+  (``missing_mode="raise"``) does what the real (remote) gribjump does: the
+  whole call raises ``pygribjump.GribJumpException`` with a ``DataNotFound.
+  Matched <n> fields but <m> were requested.`` message.  With
+  ``missing_mode="empty"`` the missing path's result has ``.values == []``
+  instead (the other pygribjump reporting of a MARS path with no GRIB message).
 
 Values are a deterministic function of the path and the absolute grid index
 (:func:`expected_values`: ``field_id(path) * 1e5 + 1e-3 * index``), so a value
@@ -28,7 +32,38 @@ from typing import Callable, Iterable, Mapping, Sequence
 
 import numpy as np
 
-__all__ = ["FakeExtractResult", "FakeGribJump", "base_value", "decode_value", "expected_values", "field_id"]
+__all__ = [
+    "FakeExtractResult",
+    "FakeGribJump",
+    "GribJumpException",
+    "base_value",
+    "decode_value",
+    "expected_values",
+    "field_id",
+]
+
+
+class _StandInGribJumpException(RuntimeError):
+    """Stand-in for ``pygribjump.GribJumpException`` when pygribjump cannot be imported."""
+
+
+_StandInGribJumpException.__name__ = _StandInGribJumpException.__qualname__ = "GribJumpException"
+
+
+def _gribjump_exception_class() -> type:
+    try:
+        import pygribjump
+
+        return pygribjump.GribJumpException
+    except Exception:  # pragma: no cover - pygribjump or its C library not installed
+        return _StandInGribJumpException
+
+
+#: ``pygribjump.GribJumpException``, or a stand-in of the same name and base class.
+GribJumpException: type = _gribjump_exception_class()
+
+#: Values of ``FakeGribJump(missing_mode=...)``.
+MISSING_MODES = ("raise", "empty")
 
 #: Spacing between the value of consecutive grid indices of one field.
 INDEX_SCALE = 1e-3
@@ -80,8 +115,11 @@ class FakeGribJump:
     :param axes_table: ``{axis: [str values]}`` or a list of those (sub-cubes).
     :param data: optional ``callable(path: dict, indices: np.ndarray) -> np.ndarray`` overriding
         :func:`expected_values`.
-    :param missing: partial MARS paths (dicts); any extracted path matching one of them returns
-        ``.values == []`` (field missing).
+    :param missing: partial MARS paths (dicts); any extracted path matching one of them is a
+        missing field (no GRIB message).
+    :param missing_mode: ``"raise"`` (default, like the remote gribjump): an ``extract`` call
+        that includes a missing field raises :class:`GribJumpException` (``DataNotFound``) and
+        returns nothing; ``"empty"``: the missing field's result has ``.values == []``.
     :param nan_indices: absolute grid indices that are bitmap-missing (NaN) in every field, or a
         callable ``(path: dict, indices: np.ndarray) -> bool mask`` for per-field bitmaps.
 
@@ -95,11 +133,15 @@ class FakeGribJump:
         data: Callable | None = None,
         missing: Iterable[Mapping] | None = None,
         nan_indices: Iterable[int] | Callable | None = None,
+        missing_mode: str = "raise",
     ):
+        if missing_mode not in MISSING_MODES:
+            raise ValueError(f"missing_mode must be one of {MISSING_MODES}, got {missing_mode!r}")
         cubes = [axes_table] if isinstance(axes_table, Mapping) else list(axes_table)
         self.cubes = [{k: [str(v) for v in vals] for k, vals in cube.items()} for cube in cubes]
         self.data = data or expected_values
         self.missing = [dict(m) for m in (missing or [])]
+        self.missing_mode = missing_mode
         if nan_indices is None or callable(nan_indices):
             self._nan = nan_indices
         else:
@@ -107,6 +149,8 @@ class FakeGribJump:
         # Counters, cheap enough to keep on for measurements.
         self.n_axes_calls = 0
         self.n_extract_calls = 0
+        #: extract calls that raised DataNotFound (missing_mode="raise")
+        self.n_data_not_found = 0
         self.n_requests = 0
         self.n_values = 0
         #: field_id -> MARS path of every field extracted (missing ones included).
@@ -140,12 +184,15 @@ class FakeGribJump:
 
     def extract(self, requests: Sequence, ctx=None) -> list[FakeExtractResult]:
         self.n_extract_calls += 1
+        requests = list(requests)
+        if self.missing_mode == "raise":
+            self._raise_if_missing(requests)
         out = []
         for request in requests:
             path, ranges = request[0], request[1]
             self.n_requests += 1
             self.fields[field_id(path)] = dict(path)
-            if any(_matches(path, m) for m in self.missing):
+            if self._is_missing(path):
                 out.append(FakeExtractResult([]))
                 continue
             values = []
@@ -160,6 +207,46 @@ class FakeGribJump:
                 self.n_values += int(end - start)
             out.append(FakeExtractResult(values))
         return out
+
+    # -- missing fields -------------------------------------------------------------------------------
+
+    def _is_missing(self, path: Mapping) -> bool:
+        return any(_matches(path, m) for m in self.missing)
+
+    def _raise_if_missing(self, requests: list) -> None:
+        """Raise like gribjump's ``gribjump_extract`` when the union of ``requests`` lacks fields.
+
+        The server takes the union of all requested paths, matches it against its index and raises
+        when it finds fewer fields than requested; nothing of the call is returned.
+        """
+        requested, matched = set(), set()
+        for request in requests:
+            path = request[0]
+            key = _path_key(path)
+            requested.add(key)
+            self.fields[field_id(path)] = dict(path)
+            if not self._is_missing(path):
+                matched.add(key)
+        if len(matched) == len(requested):
+            return
+        self.n_requests += len(requests)
+        self.n_data_not_found += 1
+        raise GribJumpException(
+            "Error in function 'gribjump_extract': GribJumpException: DataNotFound. "
+            f"Matched {len(matched)} fields but {len(requested)} were requested.\n"
+            f"Union request: {union_request([r[0] for r in requests])}"
+        )
+
+
+def union_request(paths: Iterable[Mapping]) -> str:
+    """``retrieve,key=v1/v2,...`` of the union of ``paths`` (keys sorted, values in first-seen order)."""
+    union: dict[str, list[str]] = {}
+    for path in paths:
+        for k, v in path.items():
+            vals = union.setdefault(str(k), [])
+            if str(v) not in vals:
+                vals.append(str(v))
+    return ",".join(["retrieve"] + [f"{k}={'/'.join(union[k])}" for k in sorted(union)])
 
 
 FakeGribJump.__name__ = "GribJump"

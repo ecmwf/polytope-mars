@@ -11,7 +11,8 @@ A case file (YAML or JSON) has the keys:
     ``axes_update``: ``{axis: [values]}`` applied to every default sub-cube that has that axis;
     ``missing``: list of partial MARS paths whose fields are missing;
     ``nan_indices``: absolute grid indices that are NaN in every field;
-    ``nan_every``: ``n`` -> every grid index divisible by ``n`` is NaN in every field.
+    ``nan_every``: ``n`` -> every grid index divisible by ``n`` is NaN in every field;
+    ``missing_mode``: ``raise`` (default, like the remote gribjump) or ``empty`` (see ``FakeGribJump``).
 ``description`` (optional)
     free text.
 ``fixes`` (optional)
@@ -49,7 +50,8 @@ def load_case(path) -> dict:
     return json.loads(text)
 
 
-def build_fake(case: dict) -> FakeGribJump:
+def build_fake(case: dict, missing_mode: str | None = None) -> FakeGribJump:
+    """The fake datacube of ``case``; ``missing_mode`` overrides the case's ``fake.missing_mode``."""
     grid = case["grid"]
     fake_opts = case.get("fake") or {}
     axes = copy.deepcopy(fake_opts["axes"]) if "axes" in fake_opts else default_axes(grid)
@@ -64,7 +66,12 @@ def build_fake(case: dict) -> FakeGribJump:
         nan = _nan_every(fake_opts["nan_every"])
     else:
         nan = None
-    return FakeGribJump(cubes, missing=fake_opts.get("missing"), nan_indices=nan)
+    return FakeGribJump(
+        cubes,
+        missing=fake_opts.get("missing"),
+        nan_indices=nan,
+        missing_mode=missing_mode or fake_opts.get("missing_mode", "raise"),
+    )
 
 
 def _nan_every(every):
