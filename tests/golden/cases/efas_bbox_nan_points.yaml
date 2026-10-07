@@ -1,0 +1,20 @@
+description: EFAS bounding box where every grid index divisible by 3 is bitmap-missing (NaN).
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efas
+  type: fc
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: "20240101"
+  time: "0000"
+  step: 6/12
+  param: "240023"
+  feature:
+    type: boundingbox
+    points: [[47.0, 8.0], [46.95, 8.05]]
+fake:
+  nan_every: 3

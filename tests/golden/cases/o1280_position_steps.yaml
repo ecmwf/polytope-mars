@@ -1,0 +1,16 @@
+description: O1280 position, one point, three steps.
+grid: octahedral_1280
+request:
+  class: od
+  type: fc
+  expver: "0001"
+  domain: g
+  stream: oper
+  levtype: sfc
+  date: "20240101"
+  time: "1200"
+  step: 0/6/12
+  param: "167"
+  feature:
+    type: position
+    points: [[51.5, 0.1]]

@@ -1,0 +1,22 @@
+description: climate-dt monthly means (clmn) timeseries along month, two years x 12 months (from_polytope_month).
+grid: healpix_1024
+request:
+  activity: projections
+  class: d1
+  dataset: climate-dt
+  experiment: ssp3-7.0
+  expver: "0001"
+  generation: "1"
+  model: ifs-nemo
+  realization: "1"
+  resolution: high
+  type: fc
+  stream: clmn
+  levtype: sfc
+  year: 2020/2021
+  month: 1/to/12
+  param: "167"
+  feature:
+    type: timeseries
+    points: [[40.0, -105.0]]
+    time_axis: month

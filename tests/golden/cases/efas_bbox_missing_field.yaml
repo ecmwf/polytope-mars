@@ -1,0 +1,23 @@
+description: >
+  EFAS bounding box, two params x two dates x two steps, where param 240024 at step 12 of 20240102 has no GRIB
+  message (gribjump returns an empty result for that path).
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efas
+  type: fc
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: 20240101/20240102
+  time: "0000"
+  step: 6/12
+  param: 240023/240024
+  feature:
+    type: boundingbox
+    points: [[47.0, 8.0], [46.95, 8.05]]
+fake:
+  missing:
+    - {param: "240024", step: "12", date: "20240102"}

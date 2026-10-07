@@ -1,0 +1,24 @@
+description: >
+  EFAS local_regular frame (MultiPoint ring between outer and inner box), one step. Legacy raises:
+  features.frame.Frame does not implement the abstract required_keys/required_axes.
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efas
+  type: fc
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: "20240101"
+  time: "0000"
+  step: "6"
+  param: "240023"
+  feature:
+    type: frame
+    outer_box: [[46.8, 7.8], [47.1, 8.2]]
+    inner_box: [[46.9, 7.9], [47.0, 8.1]]
+expect_error:
+  type: TypeError
+  match: "Can't instantiate abstract class Frame"

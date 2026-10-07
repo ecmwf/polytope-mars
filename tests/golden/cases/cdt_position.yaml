@@ -1,0 +1,26 @@
+description: >
+  climate-dt HEALPix 1024 position (PointSeries via Position.from_polytope), two points, three hours.
+  Legacy raises: Position.from_polytope requires a step axis, climate-dt has none.
+grid: healpix_1024
+request:
+  activity: projections
+  class: d1
+  dataset: climate-dt
+  experiment: ssp3-7.0
+  expver: "0001"
+  generation: "1"
+  model: ifs-nemo
+  realization: "1"
+  resolution: high
+  type: fc
+  stream: clte
+  levtype: sfc
+  date: "20200101"
+  time: 0000/0600/1200
+  param: "167"
+  feature:
+    type: position
+    points: [[40.0, -105.0], [51.5, 0.1]]
+expect_error:
+  type: TypeError
+  match: "object of type 'int' has no len"

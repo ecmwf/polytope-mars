@@ -1,0 +1,17 @@
+description: on-demand-extremes-dt Lambert conformal (quadtree) bounding box, subhourly step range 0 to 1h by 30m.
+grid: on_demand_extremes_dt
+request:
+  class: d1
+  dataset: on-demand-extremes-dt
+  stream: oper
+  type: fc
+  date: "20250926"
+  time: "0000"
+  levtype: sfc
+  expver: "0099"
+  param: "167"
+  georef: gcgkrb
+  step: 0/to/1h/by/30m
+  feature:
+    type: boundingbox
+    points: [[53.55, 356.0], [53.5, 356.1]]
