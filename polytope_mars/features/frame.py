@@ -46,6 +46,12 @@ class Frame(Feature):
     def coverage_type(self):
         return "MultiPoint"
 
+    def required_keys(self):
+        return ["type", "outer_box", "inner_box"]
+
+    def required_axes(self):
+        return ["latitude", "longitude"]
+
     def name(self):
         return "Frame"
 

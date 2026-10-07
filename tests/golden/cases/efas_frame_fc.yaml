@@ -19,6 +19,7 @@ request:
     type: frame
     outer_box: [[46.8, 7.8], [47.1, 8.2]]
     inner_box: [[46.9, 7.9], [47.0, 8.1]]
-expect_error:
+legacy_error:  # oracle (legacy) raised; fixed by this branch
   type: TypeError
   match: "Can't instantiate abstract class Frame"
+fixes: [5]
