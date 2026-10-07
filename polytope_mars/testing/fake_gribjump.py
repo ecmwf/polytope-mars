@@ -157,7 +157,7 @@ class FakeGribJump:
                 elif self._nan is not None and self._nan.size:
                     arr[np.isin(idx, self._nan)] = np.nan
                 values.append(arr)
-                self.n_values += end - start
+                self.n_values += int(end - start)
             out.append(FakeExtractResult(values))
         return out
 
