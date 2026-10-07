@@ -23,5 +23,6 @@ setup(
     packages=find_packages(),
     zip_safe=False,
     include_package_data=True,
+    package_data={"polytope_mars": ["data/ecmwf/*.json", "data/dwd/*.json"]},
     install_requires=requirements,
 )

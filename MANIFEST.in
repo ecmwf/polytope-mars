@@ -1,2 +1,4 @@
 exclude tests/data/*
 include requirements.txt
+include polytope_mars/data/ecmwf/*.json
+include polytope_mars/data/dwd/*.json
