@@ -1,0 +1,27 @@
+description: >
+  climate-dt HEALPix 1024 bounding box, two params x two hours (from_polytope), where param 165 at 1200 is
+  missing. HEALPix nested leaves span several index ranges, and legacy FDBDatacube fills len(leaf) Nones once
+  per range, so the 1200 coverage gets 36 values for 21 points and the 2t range is shifted/null-polluted.
+grid: healpix_1024
+request:
+  activity: projections
+  class: d1
+  dataset: climate-dt
+  experiment: ssp3-7.0
+  expver: "0001"
+  generation: "1"
+  model: ifs-nemo
+  realization: "1"
+  resolution: high
+  type: fc
+  stream: clte
+  levtype: sfc
+  date: "20200101"
+  time: 0000/1200
+  param: 167/165
+  feature:
+    type: boundingbox
+    points: [[40.0, -105.0], [40.3, -104.7]]
+fake:
+  missing:
+    - {param: "165", time: "1200"}
