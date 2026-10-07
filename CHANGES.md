@@ -157,3 +157,62 @@ the oracle (`tests/golden/expected/`, now tracked in git; regenerate only from t
   request are ordered (point, date, number, level) instead of (point, date, level, number).
 - Layouts not covered by the corpus (vertical profile / trajectory on clmn or class=ce, 3-D/4-D trajectories,
   position on class=ce) follow the legacy encoders' rules as read from the code, unverified against bytes.
+
+# Phase 2b: missing fields reported as `DataNotFound`
+
+## What the real gribjump does
+
+Checked on the Bologna dev deployment against the remote gribjump (`fdbprod:9123`): gribjump does **not**
+return an empty result for a field it does not have. The whole `extract` call raises, through pygribjump,
+
+```
+GribJumpException: Error in function 'gribjump_extract': GribJumpException: DataNotFound. Matched 1 fields but 2 were requested.
+Union request: retrieve,class=od,date=20261006,...,param=121/167,step=1,...
+```
+
+(`Matched 0 fields but 1 were requested.` for a single missing field). polytope-feature's `FDBDatacube.get`
+re-raises it unchanged, so the `values == []` handling of Phase 2 never ran in production and one missing
+field failed the whole request (as it did in legacy, which made one call per request).
+
+## Behaviour changes
+
+- **Detection** (`polytope_mars.extract.is_data_not_found`): an exception whose class, or one of its bases, is
+  named `GribJumpException` (matched by name, pygribjump need not be importable) and whose message contains
+  `DataNotFound`. Everything else (grid-hash mismatch, missing JumpInfo, connection errors, a `DataNotFound`
+  text in another exception class) propagates and fails the job as before. When the message says
+  `Matched 0 fields` (`matched_no_field`), every field of the call is missing and nothing is re-fetched; an
+  unreadable message is treated as a partial match.
+- **Fallbacks** reproduce the empty-result semantics of DESIGN §2.5 (omit missing params' ranges, no coverage
+  for a group without data, `null` for a missing level of a present param):
+  - whole-group unit (param/levelist compressed): on a partial match the group is re-fetched per
+    (param, level) in one band through the banded path, whose band-0 peek keeps the fields that exist;
+  - band 0 of a (param, level) (the peek): `DataNotFound` = the field is missing. A later band of a field
+    whose band 0 was found re-raises (the field existed a moment ago). Missing levels of a present param
+    are no longer fetched after the peek (both reporting modes; their `null`s are written directly);
+  - point features (one `get` for the whole tree): per param, then, for a param that is only partly
+    missing, per (group, param), then per level of a multi-level group. Output layout and order of the
+    present fields are those of the all-present case.
+- **Call-count cost, only when data is missing** (nothing changes when everything is present):
+  - MultiPoint group, one param missing: 1 failed call + 1 call per (param, level) instead of 1 call;
+    all fields of the group missing, or a one-field group: just the failed call;
+  - banded groups: unchanged (the peek already fetched per field); a missing field costs 1 failed call;
+  - point features, a param missing everywhere: 1 failed call + 1 call per param; a param missing at some
+    instants only: additionally 1 call per group (instant) of that param, plus 1 per level for multi-level
+    groups that still fail.
+- **`timings`**: `n_missing_fields` (fields found missing, either reporting) and `n_fallbacks` (units re-fetched
+  in smaller pieces after `DataNotFound`). `n_units` / `n_gribjump_calls` include the failed calls. One DEBUG
+  line per missing field, none at INFO.
+- **Fake gribjump**: `FakeGribJump(missing_mode="raise")` is the new default and mirrors the remote server:
+  an `extract` call whose (distinct) request paths include a missing field raises
+  `pygribjump.GribJumpException` (a stand-in class of the same name when pygribjump cannot be imported) with
+  the message above, `Union request:` built from the call's paths (keys sorted, values `/`-joined in first-seen
+  order) and counts `n_data_not_found`. `missing_mode="empty"` keeps the Phase 2 behaviour (`.values == []`);
+  golden cases may set `fake.missing_mode`, and `build_fake(case, missing_mode=...)` overrides it.
+
+## Verification
+
+Every golden case (including the `*missing*` ones in `expected_fixed/`) is byte-identical under both fake
+modes (`tests/golden/test_golden.py::test_golden_with_empty_results_for_missing_fields`; the raising mode is
+the default for `test_golden`). `tests/test_missing_fields.py` covers the fallbacks, their call counts, the
+later-band re-raise, the propagation of other errors, and point features (timeseries, position, vertical
+profile, trajectory, class=ce timeseries) against the empty-result bytes.
