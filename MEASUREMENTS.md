@@ -77,3 +77,31 @@ peak B/value = (peak RSS - RSS before extract) / values. `PolytopeMars.timings` 
 
 All scenarios ran at the requested size; none needed scaling down. The global H1024 slice is the slowest
 (2.3 min). A global H1024 *polygon* was not attempted (projected ~15 GB from (b)).
+
+# Phase 2 measurements (streaming pipeline)
+
+`python tools/measure_memory.py stream` (one subprocess per run, `.venv` with the Phase 1/1c polytope-feature
+branch at `50018d5a`, same machine and fake gribjump as above). Request: EFAS Danube bbox
+`[[50.25,8.15],[42.08,29.73]]`, class=ce stream=efas, steps 6 to 60 by 6, one param: 634,550 points x 10 steps =
+**6,345,500 values**, 10 coverages, 337 MiB of CovJSON. The output is consumed chunk by chunk and discarded (as
+the fe-worker will stream it). Growth = peak RSS (`VmHWM`, reset at the start) minus RSS before `extract_stream`
+(~176 MiB after imports).
+
+| run | memory_budget_bytes | units (gets) | bands | largest chunk MiB | wall s | RSS growth MB | B/value |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| streaming | 200,000,000 | 10 | 10 | 23.5 | 7.8 | **163** | 25.6 |
+| streaming | 20,000,000 | 50 | 50 | 5.8 | 7.1 | **123** | 19.5 |
+| streaming, no budget | None | 10 | 10 | 23.5 | 7.6 | 163 | 25.7 |
+| new `extract()` + `json.dumps` (fe-worker today) | None | 10 | 10 | - | 18.4 | 2,050 | 323 |
+| legacy `extract()` + `json.dumps` (Phase 0 code, `.venv-legacy`) | - | 1 | - | - | 56.6 | **5,242** | 826 |
+
+- Every field group here fits a 200 MB budget (634,550 points x 1 field x 64 B = 41 MB), so the 200 MB and
+  no-budget runs are the same call pattern: one get per step. At 20 MB each step is cut into 5 latitude bands.
+- The floor of ~120 MB is the sliced/prepared tree (~30 MB for 634k points) plus slicing transients; it does
+  not grow with the number of steps. The remaining ~40 MB at 200 MB is one coverage's unit (get result, float64
+  field copy, the formatted coordinate block of 23.5 MiB).
+- `tests/test_stream_memory.py` asserts growth < 2 x max(budget, 100 MB) for the 200 MB and 20 MB runs.
+- Phase timings of the 200 MB run (ms): slice 3,335, prepare 283, get 2,847, encode 1,164, first byte after
+  20 ms (before slicing).
+- The buffered `extract()` is kept for compatibility only (the fe-worker still calls it until Phase 3); it holds
+  the whole document as Python objects (`json.loads`), 2.5x less than legacy but still ~320 B/value.

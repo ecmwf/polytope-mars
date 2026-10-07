@@ -67,3 +67,93 @@ several index ranges") plus that checkout's uncommitted changes, via the shared 
 
 - `cdt_bbox_missing_field`: the 1200 coverage now has 21 values per range, `10u` all `null` and `2t`
   intact (fixes item 4). All other 26 cases are byte-identical to the oracle.
+
+# Phase 2: block IR, extraction loop, encoder registry
+
+## Behaviour changes
+
+- **Streaming API.** `PolytopeMars.extract_stream(request) -> Iterator[bytes]` yields the encoded document in
+  pieces. The request is parsed/validated when `extract_stream` is called (errors raise before any byte); the
+  first piece (the collection opening) is produced before the datacube is created and sliced. `extract(request)`
+  is kept and returns `json.loads(b"".join(extract_stream(request)))`; `json.dumps(extract(r)).encode()` equals
+  the streamed bytes for every golden case (`tests/golden`, both modes). After `extract_stream`,
+  `pm.content_type` / `pm.file_extension` name the encoder's output.
+- **`format`** (top-level request key) selects the encoder through `polytope_mars.encoders.get_encoder`;
+  default `covjson`; any other value raises `ValueError("Unsupported output format 'x'; supported formats:
+  covjson")` before any datacube work.
+- **Extraction units** (DESIGN §2.3). The tree is sliced once and `FDBDatacube.prepare`d. Per MultiPoint field
+  group (= one coverage) one `datacube.get(tree, select=<group>)` with param/levelist compressed when
+  `n_points x n_params x n_levels x bytes_per_point <= limits.memory_budget_bytes` (always when the budget is
+  `None`), otherwise per (param, level) in latitude bands of `budget // (bytes_per_point x (n_fields + 1))`
+  points (at least one latitude line / merged point per band). **Call pattern change:** legacy made one
+  gribjump `extract` call per request; now it is one per field group (budget `None`) or per (field, band).
+  Point features (timeseries, position, vertical profile, trajectory) still make one call for the whole
+  request.
+- **Band-0 peek / missing fields** (DESIGN §2.5): the first band of every field is fetched before the group is
+  emitted; a param whose fields gribjump does not have is left out of the coverage, a group without any data
+  emits no coverage, bitmap-missing points are `null`. A present param with one missing level gets `null`s for
+  that level.
+- **Polygons and paths** are sliced with `Polytope._merge_union_rows = True` (one longitude leaf per latitude
+  line, ~8 B/point instead of ~1.4 KB/point); bytes unchanged (tested for every polygon golden case).
+- **`param_db` lives in polytope-mars** (`polytope_mars.param_db`, `polytope_mars/data/{ecmwf,dwd}`); nothing is
+  imported from `covjsonkit.param_db` any more.
+- **Config.** `encoders: {covjson: {param_db: ecmwf}}` replaces `coverageconfig` and
+  `limits: {max_polygon_points: 3600, max_points_per_field: None, memory_budget_bytes: None,
+  bytes_per_point: {default: 64, local_regular: 64, octahedral: 64, healpix_nested: 160}}` replaces
+  `polygonrules`. Deprecated keys are still accepted: `coverageconfig.param_db` fills `encoders.covjson` and
+  `polygonrules.max_points` fills `limits.max_polygon_points` unless the new sections set them;
+  `polygonrules.max_area` is ignored. Default polygon vertex limit: 1000 -> 3600 (the deployed value).
+- **Removed:** `Feature.split_request`, the date/number split loop of `extract`, `merge_coverage_collections`,
+  `PolytopeMars.retrieve_data`, the `max_area` checks of circle/position/timeseries (a circle larger than
+  `max_area` no longer raises). `limits.max_points_per_field` (off by default) rejects, before slicing, requests
+  whose feature area x grid density (`polytope_mars.limits`) exceeds it.
+- **`timings`** (reset per request): `first_byte_ms`, `datacube_init_ms`, `slice_ms`, `prepare_ms`, `get_ms`,
+  `retrieve_ms` (= slice + prepare + get), `encode_ms`, `n_groups`, `n_units` (datacube gets), `n_bands`,
+  `n_gribjump_calls`, `n_coverages`.
+- **Logging:** one DEBUG line per group, one INFO summary per request. (polytope-feature still logs two INFO
+  lines per `datacube.get`, i.e. per band; that is outside this repo.)
+- `features.frame.Frame` implements `required_keys`/`required_axes`: frame requests work (defect 5).
+
+## Legacy defects fixed (golden cases with `fixes:`, bytes in `tests/golden/expected_fixed/`)
+
+| defect | case | change against the oracle |
+| --- | --- | --- |
+| 1 `NaN` | `efas_bbox_nan_points`, `o1280_bbox_nan_points` | bare `NaN` tokens become `null`; nothing else changes |
+| 2 missing last date | `o1280_bbox_missing_last_date` | `"coverages": []` becomes one coverage (20240101, 8 points, all values); 20240102 (all missing) has no coverage |
+| 3 missing param | `o1280_bbox_missing_field` | the 20240102 step-6 coverage loses its all-`null` `tp` range; the other 3 coverages are unchanged |
+| 3 + 4 | `cdt_bbox_missing_field` | the 1200 coverage has only `2t` (21 correct values) instead of 36-value `10u`/`2t` ranges with shifted/`null` values |
+| 5 frame | `efas_frame_fc` | was `TypeError`; now one coverage with 360 points (outer box minus inner box) |
+| 6 climate-dt position | `cdt_position` | was `TypeError`; now one PointSeries coverage per (point, date-time), `t` = that date-time, as `Position.from_polytope` does for grids with steps |
+
+`tools/audit_golden.py` finds no misplaced value in any case. Every case without `fixes:` is byte-identical to
+the oracle (`tests/golden/expected/`, now tracked in git; regenerate only from the Phase 0 code, see
+`tests/golden/README.md`).
+
+## Preserved legacy quirks (candidates for a later spec-compliance release)
+
+- 7: space-separated datetimes (`"2020-01-01 00:00:00Z"`) in `t` and `Forecast date` on the `_step` path
+  (climate-dt / ng polygon and timeseries); the timeseries `Forecast date` is the request's last date.
+- 8: `referencing` coordinates per legacy encoder: `latitude/longitude/levelist` (bbox, circle, reforecast,
+  timeseries, position, vertical profile), `x/y/z` (polygon, shapefile, frame, `_step`, clmn except circle,
+  position on clmn), `t/x/y/z` for trajectories with the step as the composite tuple's first element.
+- 9: int `realization` (and other type-changed axes) in `mars:metadata` while other keys are strings;
+  unrounded Lambert-conformal coordinates; no `Forecast date` on efcl coverages; raw levelist values in
+  composite tuples (`"500"` on climate-dt, ints where levelist has an int type change).
+- `mars:metadata` key order and values follow the legacy tree walks (`polytope_mars/legacy_format.py`,
+  `coverage_plan.py`), e.g. `Forecast date` sits where the date node is, `number`/`step` are appended when the
+  tree has no such axis.
+
+## Deliberate differences outside the corpus
+
+- The collection's `parameters` lists every requested param (request order, sorted as strings like the tree
+  sorts them), also params that turn out to be missing everywhere; legacy listed the tree's params
+  (`from_polytope*`) or only params with data (reforecast).
+- A request where every field is missing yields an empty collection (legacy `from_polytope_reforecast`
+  raised `ValueError("No data was returned.")`).
+- Reforecast (class=ce) MultiPoint coverages with several levels list composite tuples levels-outer like
+  every other MultiPoint coverage (legacy interleaved levels per latitude line). EFAS has no levels.
+- Point features: an instant (date/step...) whose params are all missing is left out of the series; a param
+  missing at some instants of a series gets `null` there. Position coverages of a multi-level, multi-number
+  request are ordered (point, date, number, level) instead of (point, date, level, number).
+- Layouts not covered by the corpus (vertical profile / trajectory on clmn or class=ce, 3-D/4-D trajectories,
+  position on class=ce) follow the legacy encoders' rules as read from the code, unverified against bytes.
