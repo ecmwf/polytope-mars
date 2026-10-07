@@ -480,11 +480,8 @@ class BlockExtractor:
             levels = g.levels or [None]
 
             group_fields = {(p, lev): fields.get(tuple(g.key) + (p, lev)) for p in g.params for lev in levels}
-            params = [
-                p
-                for p in g.params
-                if any(group_fields[(p, lev)] is not None and not group_fields[(p, lev)][1] for lev in levels)
-            ]
+            found = {k for k, v in group_fields.items() if v is not None and not v[1]}
+            params = [p for p in g.params if any((p, lev) in found for lev in levels)]
             if not params:
                 continue
             fg = self._field_group(plan, g, index, params, n_points, 1)
