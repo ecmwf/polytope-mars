@@ -12,7 +12,10 @@ Groups:
 * ``slice``: RSS/wall-time of ``Polytope.slice`` alone (one field), tree size and bytes per point.
 * ``get``: RSS of a bare ``datacube.get`` (gribjump result assignment onto the tree, no encoding)
   per extracted value, per mapper family.
-* ``e2e``: peak RSS of legacy ``PolytopeMars.extract`` + ``json.dumps(...).encode()`` per value.
+* ``e2e``: peak RSS of ``PolytopeMars.extract`` + ``json.dumps(...).encode()`` per value (the
+  fe-worker's buffered path; with the Phase 0 code this measured the legacy pipeline).
+* ``stream``: peak RSS growth of ``PolytopeMars.extract_stream`` with the output discarded, for
+  several ``limits.memory_budget_bytes``.  ``--budget N`` (bytes, or ``none``) overrides the budget.
 """
 
 import copy
@@ -114,7 +117,7 @@ SCENARIOS = {
             "feature": bbox([[72, -25], [34, 45]]),
         },
     ),
-    # -- e2e: legacy extract + json.dumps + encode ---------------------------------------------
+    # -- e2e: extract + json.dumps + encode ---------------------------------------------
     "e2e_efas_switzerland_40steps": (
         "e2e",
         "efas_local_regular",
@@ -125,6 +128,14 @@ SCENARIOS = {
         "healpix_1024",
         {**CDT, "date": "20200101", "time": "0000/to/2300", "param": "167", "feature": bbox([[50, 0], [39.5, 10.5]])},
     ),
+}
+
+DANUBE_10_STEPS = {**EFAS, "step": "6/to/60/by/6", "param": "240023", "feature": bbox([[50.25, 8.15], [42.08, 29.73]])}
+# -- stream: extract_stream, output discarded; (kind, grid, request, memory_budget_bytes)
+STREAM_SCENARIOS = {
+    "stream_efas_danube_10steps_budget200MB": ("stream", "efas_local_regular", DANUBE_10_STEPS, 200_000_000),
+    "stream_efas_danube_10steps_budget20MB": ("stream", "efas_local_regular", DANUBE_10_STEPS, 20_000_000),
+    "stream_efas_danube_10steps_nobudget": ("stream", "efas_local_regular", DANUBE_10_STEPS, None),
 }
 
 
@@ -251,7 +262,49 @@ def run_e2e(grid, request):
     }
 
 
-def run_one(name):
+def run_stream(grid, request, budget):
+    from polytope_mars.api import PolytopeMars
+    from polytope_mars.testing import fake_gribjump_config_dict, make_fake_gribjump
+
+    fake = make_fake_gribjump(grid)
+    config = fake_gribjump_config_dict(grid, request)
+    config["limits"] = {"memory_budget_bytes": budget}
+    pm = PolytopeMars(config, datacube_factory=lambda: fake)
+    rss0 = rss()
+    peak0 = peak_rss()
+    t0 = time.perf_counter()
+    n_bytes = n_chunks = 0
+    max_chunk = 0
+    for chunk in pm.extract_stream(copy.deepcopy(request)):
+        n_bytes += len(chunk)
+        n_chunks += 1
+        max_chunk = max(max_chunk, len(chunk))
+    t_stream = time.perf_counter() - t0
+    peak = peak_rss()
+    n_vals = fake.n_values
+    return {
+        "budget_mb": None if budget is None else round(budget / 1e6),
+        "values": n_vals,
+        "n_groups": pm.timings["n_groups"],
+        "n_units": pm.timings["n_units"],
+        "n_bands": pm.timings["n_bands"],
+        "output_mib": round(n_bytes / MiB, 1),
+        "chunks": n_chunks,
+        "max_chunk_mib": round(max_chunk / MiB, 1),
+        "stream_s": round(t_stream, 1),
+        "timings_ms": {k: round(v) for k, v in pm.timings.items() if k.endswith("_ms")},
+        "rss_before_mib": round(rss0 / MiB, 1),
+        "peak0_mib": round(peak0 / MiB, 1),
+        "peak_rss_mib": round(peak / MiB, 1),
+        "rss_growth_mb": round((peak - rss0) / 1e6, 1),
+        "peak_bytes_per_value": round((peak - rss0) / max(n_vals, 1), 1),
+    }
+
+
+def run_one(name, budget="default"):
+    if name in STREAM_SCENARIOS:
+        kind, grid, request, default_budget = STREAM_SCENARIOS[name]
+        return run_stream(grid, request, default_budget if budget == "default" else budget)
     kind, grid, request = SCENARIOS[name]
     if kind == "e2e":
         return run_e2e(grid, request)
@@ -290,6 +343,21 @@ TABLE_COLUMNS = {
         "peak_bytes_per_value",
         "timings_ms",
     ],
+    "stream": [
+        "budget_mb",
+        "values",
+        "n_groups",
+        "n_units",
+        "n_bands",
+        "output_mib",
+        "max_chunk_mib",
+        "stream_s",
+        "rss_before_mib",
+        "peak_rss_mib",
+        "rss_growth_mb",
+        "peak_bytes_per_value",
+        "timings_ms",
+    ],
 }
 
 
@@ -312,12 +380,17 @@ def _table(rows, cols):
 
 def main(argv):
     if argv[:1] == ["--run"]:
-        print(json.dumps(run_one(argv[1])), flush=True)
+        budget = "default"
+        if "--budget" in argv:
+            value = argv[argv.index("--budget") + 1]
+            budget = None if value == "none" else int(value)
+        print(json.dumps(run_one(argv[1], budget)), flush=True)
         # Skip interpreter teardown: the pygribjump/eckit libraries can segfault at exit.
         os._exit(0)
-    groups = argv or ["slice", "get", "e2e"]
+    groups = argv or ["slice", "get", "e2e", "stream"]
+    kinds = {name: spec[0] for name, spec in {**SCENARIOS, **STREAM_SCENARIOS}.items()}
     results = {}
-    for name, (kind, _, _) in SCENARIOS.items():
+    for name, kind in kinds.items():
         if kind not in groups:
             continue
         t0 = time.perf_counter()
@@ -327,7 +400,7 @@ def main(argv):
         results[name] = _parse_result(proc)
         results[name]["wall_s"] = round(time.perf_counter() - t0, 1)
         print(f"{name}: {results[name]}", file=sys.stderr, flush=True)
-    by_kind = {k: [(n, results[n]) for n in results if SCENARIOS[n][0] == k] for k in ("slice", "get", "e2e")}
+    by_kind = {k: [(n, results[n]) for n in results if kinds[n] == k] for k in ("slice", "get", "e2e", "stream")}
     for kind, rows in by_kind.items():
         if rows:
             print(_table(rows, TABLE_COLUMNS[kind]) + "\n")
