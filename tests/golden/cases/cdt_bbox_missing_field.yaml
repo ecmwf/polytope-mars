@@ -25,3 +25,4 @@ request:
 fake:
   missing:
     - {param: "165", time: "1200"}
+fixes: [3, 4]

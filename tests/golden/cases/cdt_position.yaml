@@ -21,6 +21,7 @@ request:
   feature:
     type: position
     points: [[40.0, -105.0], [51.5, 0.1]]
-expect_error:
+legacy_error:  # oracle (legacy) raised; fixed by this branch
   type: TypeError
   match: "object of type 'int' has no len"
+fixes: [6]

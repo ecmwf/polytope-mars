@@ -62,11 +62,14 @@ def test_datacube_factory_and_timings():
     pm = PolytopeMars(fake_gribjump_config_dict("octahedral_1280", REQUEST), datacube_factory=lambda: fake)
     result = pm.extract(copy.deepcopy(REQUEST))
     assert len(result["coverages"]) == 2
-    assert fake.n_extract_calls == 1
-    assert pm.timings["n_coverages"] == 2
-    for key in ("datacube_init_ms", "retrieve_ms", "slice_ms", "get_ms", "encode_ms"):
-        assert pm.timings[key] >= 0
-    assert abs(pm.timings["slice_ms"] + pm.timings["get_ms"] - pm.timings["retrieve_ms"]) < 0.01
+    # one extraction unit (one gribjump call) per field group (= coverage) when there is no memory budget
+    assert fake.n_extract_calls == 2
+    t = pm.timings
+    assert t["n_coverages"] == t["n_groups"] == 2
+    assert t["n_units"] == t["n_gribjump_calls"] == t["n_bands"] == 2
+    for key in ("datacube_init_ms", "retrieve_ms", "slice_ms", "prepare_ms", "get_ms", "encode_ms", "first_byte_ms"):
+        assert t[key] >= 0
+    assert abs(t["slice_ms"] + t["prepare_ms"] + t["get_ms"] - t["retrieve_ms"]) < 0.01
 
 
 def test_monkeypatched_gribjump_class_still_used(monkeypatch):
@@ -79,4 +82,4 @@ def test_monkeypatched_gribjump_class_still_used(monkeypatch):
         datacube_factory=lambda: make_fake_gribjump("octahedral_1280"),
     )
     assert via_patch == json.dumps(pm2.extract(copy.deepcopy(REQUEST)))
-    assert fake.n_extract_calls == 1
+    assert fake.n_extract_calls == 2  # one per field group

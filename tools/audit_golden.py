@@ -25,7 +25,7 @@ import pandas as pd
 
 warnings.filterwarnings("ignore")
 
-from covjsonkit.param_db import get_params  # noqa: E402
+from polytope_mars.param_db import get_params  # noqa: E402
 
 from polytope_mars.testing.fake_gribjump import decode_value  # noqa: E402
 from polytope_mars.testing.golden import (  # noqa: E402

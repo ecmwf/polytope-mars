@@ -10,6 +10,7 @@ from polytope_feature.polytope import Request
 
 from polytope_mars.api import PolytopeMars
 from polytope_mars.config import PolytopeMarsConfig
+from polytope_mars.extract import BlockExtractor
 
 # If using a local FDB need to set GRIBJUMP_CONFIG_FILE and DYLD_LIBRARY_PATH
 
@@ -375,8 +376,8 @@ class TestRequestNotMutated:
     def test_extract_does_not_mutate_dict_request(self, monkeypatch):
         """extract() must not modify the caller's request dict in place (issue #98)."""
         # Avoid hitting the FDB/gribjump datacube: the in-place mutation (.pop/del)
-        # all happens before retrieve_data is ever called.
-        monkeypatch.setattr(PolytopeMars, "retrieve_data", lambda self, *a, **k: {})
+        # all happens while the request is parsed, before any extraction.
+        monkeypatch.setattr(BlockExtractor, "stream", lambda self, t_start: iter([b"{}"]))
 
         original = copy.deepcopy(self.request)
         PolytopeMars(self.cf).extract(self.request)

@@ -15,7 +15,6 @@ class BoundingBox(Feature):
         if "axes" not in feature_config:
             feature_config["axes"] = ["latitude", "longitude"]
         self.axes = feature_config.pop("axes", [])
-        self.max_area = client_config.polygonrules.max_area
         self.field_area = 0
 
         if "axes" in feature_config:

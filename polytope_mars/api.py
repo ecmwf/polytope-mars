@@ -3,18 +3,18 @@ import datetime
 import json
 import logging
 import time
-from typing import List
+from typing import Iterator, List
 
 import pandas as pd
 import pygribjump as gj
 from conflator import Conflator
-from covjsonkit.api import Covjsonkit
-from covjsonkit.param_db import get_param_ids
-from covjsonkit.utils import merge_coverage_collections
 from polytope_feature import shapes
-from polytope_feature.polytope import Polytope, Request
 
+from .blocks import RequestHeader
 from .config import PolytopeMarsConfig
+from .coverage_plan import TimeSeriesReforecastPlan, plan_class, time_axis_role
+from .encoders import get_encoder
+from .extract import BlockExtractor, build_parameters
 from .features.boundingbox import BoundingBox
 from .features.circle import Circle
 from .features.frame import Frame
@@ -24,13 +24,9 @@ from .features.position import Position
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
-from .utils.datetimes import (
-    convert_timestamp,
-    find_step_intervals,
-    from_range_to_list_date,
-    from_range_to_list_num,
-    time_step_to_freq,
-)
+from .limits import estimate_points_per_field
+from .param_db import get_param_ids
+from .utils.datetimes import convert_timestamp, find_step_intervals, time_step_to_freq
 
 features = {
     "timeseries": TimeSeries,
@@ -67,9 +63,10 @@ class PolytopeMars:
             self.conf = PolytopeMarsConfig.model_validate(config)
             logging.debug(f"{self.id}: Config loaded from dictionary: {self.conf}")  # noqa: E501
 
-        self.coverage = {}
-        self.split_request = False
         self.datacube_factory = datacube_factory
+        #: MIME type / file extension of the last extract_stream's encoder
+        self.content_type = None
+        self.file_extension = None
         # Per-extract phase timings (ms) and counts, filled by retrieve_data.
         self.timings = {}
 
@@ -109,7 +106,29 @@ class PolytopeMars:
         return f"{hours}h{minutes}m"
 
     def extract(self, request):
+        """Extract ``request`` and return the full output document as a dict (CovJSON).
+
+        Buffered compatibility API over :meth:`extract_stream`:
+        ``json.dumps(extract(r)).encode() == b"".join(extract_stream(r))``.
+        """
+        return json.loads(b"".join(self.extract_stream(request)))
+
+    def extract_stream(self, request) -> Iterator[bytes]:
+        """Extract ``request`` and yield the encoded output document in pieces.
+
+        The request is parsed and validated before the first piece is produced (errors raise
+        immediately); the encoder's opening bytes are yielded before the datacube is touched.
+        The top-level ``format`` key selects the encoder (default ``covjson``, see
+        :func:`polytope_mars.encoders.get_encoder`).  ``self.timings`` is reset and filled.
+        """
+        t_start = time.perf_counter()
         self.timings = {}
+        extractor = self._prepare_extraction(request)
+        self.content_type = extractor.encoder.content_type
+        self.file_extension = extractor.encoder.file_extension
+        return extractor.stream(t_start)
+
+    def _prepare_extraction(self, request) -> BlockExtractor:
         # request expected in JSON or dict
         if not isinstance(request, dict):
             try:
@@ -126,12 +145,7 @@ class PolytopeMars:
         except KeyError:
             raise KeyError("Request does not contain a 'feature' keyword")
 
-        try:
-            format = request.pop("format")
-            if format != "covjson":
-                raise ValueError("Only covjson format is currently supported")
-        except KeyError:
-            pass
+        output_format = request.pop("format", "covjson")
 
         # get feature type
         try:
@@ -177,40 +191,58 @@ class PolytopeMars:
 
         request = feature.parse(request, feature_config_copy)
 
-        self.split_request = feature.split_request()
+        role = time_axis_role(request, feature_type)
+        header = self._build_header(request, feature_type, feature, role)
+        encoder = get_encoder(output_format, self.conf)
+        self._check_points_per_field(request, feature)
+        return BlockExtractor(self, request, feature_type, feature, role, header, encoder)
 
-        logging.debug("Self split: %s", self.split_request)
-        logging.debug("Parsed request: %s", request)
+    def _build_header(self, request, feature_type, feature, role) -> RequestHeader:
+        """RequestHeader from the parsed request alone (no datacube access)."""
+        param_db = self.conf.encoders.covjson.param_db
+        ids = []
+        for p in str(request.get("param", "")).split("/"):
+            if not p:
+                continue
+            try:
+                int(p)
+            except ValueError:
+                p = get_param_ids(param_db)[p]
+            if str(p) not in ids:
+                ids.append(str(p))
+        # Legacy emitted parameters in the tree's param order: FDB axis values sorted as strings.
+        ids.sort()
+        domain_type = feature.coverage_type()
+        if domain_type == "shapefile":
+            domain_type = "MultiPoint"
+        mars_metadata = {k: str(v) for k, v in request.items() if "/" not in str(v)}
+        probe = plan_class(feature_type, domain_type, role)
+        extra = {}
+        if probe is TimeSeriesReforecastPlan and request.get("stream") == "efas":
+            extra["pointseries_order"] = "series_major"
+        return RequestHeader(
+            feature_type=feature_type,
+            domain_type=domain_type,
+            time_axis=role,
+            parameters=build_parameters(ids, param_db),
+            mars_metadata=mars_metadata,
+            extra=extra,
+        )
 
-        if self.split_request:
-            # If the request is split, we need to handle it differently
-            dates = from_range_to_list_date(request["date"])
-            for date in dates.split("/"):
-                if "number" in request:
-                    numbers = from_range_to_list_num(request["number"])
-                    if len(numbers) > 10:
-                        for number in from_range_to_list_num(request["number"]):
-                            copied_request = request.copy()
-                            copied_request["date"] = date
-                            copied_request["number"] = number
-                            coverage = self.retrieve_data(copied_request, feature_type, feature)  # noqa: E501
-                            self.coverage = merge_coverage_collections(self.coverage, coverage)  # noqa: E501
-                    else:
-                        copied_request = request.copy()
-                        copied_request["date"] = date
-                        coverage = self.retrieve_data(copied_request, feature_type, feature)
-                        self.coverage = merge_coverage_collections(self.coverage, coverage)
-                else:
-                    copied_request = request.copy()
-                    copied_request["date"] = date
-                    coverage = self.retrieve_data(copied_request, feature_type, feature)
-                    self.coverage = merge_coverage_collections(self.coverage, coverage)
+    def _check_points_per_field(self, request, feature):
+        limit = self.conf.limits.max_points_per_field
+        if limit is None:
+            return
+        estimate = estimate_points_per_field(feature, self.conf.options)
+        if estimate is not None and estimate > limit:
+            raise ValueError(
+                f"The requested {feature.name()} covers about {int(estimate)} grid points per field, more than the "
+                f"limit of {limit}; request a smaller area"
+            )
 
-        else:
-            self.coverage = self.retrieve_data(request, feature_type, feature)  # noqa: E501
-
-        self.timings["n_coverages"] = len(self.coverage.get("coverages", []))
-        return self.coverage
+    @staticmethod
+    def _default_gribjump():
+        return gj.GribJump()
 
     def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
         base_shapes = []
@@ -229,7 +261,7 @@ class PolytopeMars:
                     except:  # noqa: E722
                         new_split = []
                         for s in split:
-                            new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
+                            new_split.append(get_param_ids(self.conf.encoders.covjson.param_db)[s])  # noqa: E501
                         split = new_split
 
                 # ALL -> All
@@ -372,7 +404,7 @@ class PolytopeMars:
                     except:  # noqa: E722
                         new_split = []
                         for s in split:
-                            new_split.append(get_param_ids(self.conf.coverageconfig)[s])  # noqa: E501
+                            new_split.append(get_param_ids(self.conf.encoders.covjson.param_db)[s])  # noqa: E501
                         split = new_split
 
                 # class=ce: keep date/hdate/time as independent axes
@@ -565,115 +597,6 @@ class PolytopeMars:
         else:
             raise NotImplementedError(f"Feature '{feature_name}' not found")
 
-    def retrieve_data(self, request, feature_type, feature):
-        """
-        Retrieves data from the Polytope engine based on the request and feature type.
-        This method sets up the Polytope engine, prepares the request, and encodes the
-        result into a Covjson format.
-
-        :param request: The request dictionary containing parameters for data retrieval.
-        :param feature_type: The type of feature being requested (e.g., 'timeseries', 'polygon').
-        :param feature: The feature object that contains the logic for data retrieval.
-        :return: The coverage data in Covjson format.
-        """
-        shapes = self._create_base_shapes(request, feature_type)
-
-        shapes.extend(feature.get_shapes())
-
-        preq = Request(*shapes)
-
-        start = time.time()
-        logging.info(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
-
-        if self.conf.datacube.type == "gribjump":
-            fdbdatacube = self.datacube_factory() if self.datacube_factory is not None else gj.GribJump()
-        else:
-            raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
-
-        logging.debug(f"Send log_context to polytope: {self.log_context}")
-        self.api = Polytope(
-            datacube=fdbdatacube,
-            options=self.conf.options.model_dump(),
-            context=self.log_context,
-        )
-
-        end = time.time()
-        delta = end - start
-        self._add_timing("datacube_init_ms", delta)
-        logging.debug(f"{self.id}: Gribjump/setup time end: {end}")  # noqa: E501
-        logging.info(f"{self.id}: Gribjump/setup time taken: {delta}")  # noqa: E501
-
-        logging.debug(f"{self.id}: The request we give polytope from polytope-mars is: {preq}")  # noqa: E501
-        start = time.time()
-        logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
-
-        result, get_seconds = self._retrieve_timed(preq)
-
-        end = time.time()
-        delta = end - start
-        self._add_timing("retrieve_ms", delta)
-        self._add_timing("get_ms", get_seconds)
-        self._add_timing("slice_ms", delta - get_seconds)
-        logging.debug(f"{self.id}: Polytope time end: {end}")  # noqa: E501
-        logging.info(f"{self.id}: Polytope time taken: {delta}")  # noqa: E501
-        start = time.time()
-        logging.info(f"{self.id}: Covjson time start: {start}")  # noqa: E501
-        encoder = Covjsonkit(self.conf.coverageconfig.model_dump()).encode(
-            "CoverageCollection", feature_type
-        )  # noqa: E501
-
-        if "dataset" in request:
-            if request["dataset"] == "climate-dt":
-                if request.get("stream") == "clmn":
-                    coverage = encoder.from_polytope_month(result)
-                elif feature_type in ("timeseries", "polygon"):
-                    coverage = encoder.from_polytope_step(result)
-                else:
-                    coverage = encoder.from_polytope(result)
-            else:
-                coverage = encoder.from_polytope(result)
-        elif request["class"] == "ng":  # noqa: E501
-            if feature_type == "timeseries" or feature_type == "polygon":
-                coverage = encoder.from_polytope_step(result)
-            else:
-                coverage = encoder.from_polytope(result)
-        elif request["class"] == "ce":
-            coverage = encoder.from_polytope_reforecast(result)
-        else:
-            coverage = encoder.from_polytope(result)
-
-        end = time.time()
-        delta = end - start
-        self._add_timing("encode_ms", delta)
-        logging.debug(f"{self.id}: Covjsonkit time end: {end}")  # noqa: E501
-        logging.info(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
-
-        return coverage
-
     def _add_timing(self, key, seconds):
         # Accumulates, so split requests (several retrieve_data calls) report totals.
         self.timings[key] = self.timings.get(key, 0.0) + round(seconds * 1000, 3)
-
-    def _retrieve_timed(self, preq):
-        """Run ``self.api.retrieve`` and also return the seconds spent in ``datacube.get``.
-
-        ``Polytope.retrieve`` is slice + ``datacube.get``; the get is timed by wrapping the
-        datacube instance's method for the duration of the call.
-        """
-        datacube = self.api.datacube
-        untimed_get = datacube.get
-        get_seconds = [0.0]
-
-        def timed_get(*args, **kwargs):
-            t0 = time.perf_counter()
-            try:
-                return untimed_get(*args, **kwargs)
-            finally:
-                get_seconds[0] += time.perf_counter() - t0
-
-        datacube.get = timed_get
-        try:
-            result = self.api.retrieve(preq)
-        finally:
-            del datacube.get
-        return result, get_seconds[0]

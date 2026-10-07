@@ -16,3 +16,4 @@ request:
     points: [[51.6, 0.0], [51.3, 0.3]]
 fake:
   nan_every: 4
+fixes: [1]
