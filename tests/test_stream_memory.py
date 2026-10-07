@@ -26,7 +26,10 @@ def measure(budget):
     )
     lines = proc.stdout.strip().splitlines()
     assert lines, proc.stderr[-2000:]
-    return json.loads(lines[-1])
+    try:
+        return json.loads(lines[-1])
+    except json.JSONDecodeError as exc:
+        pytest.fail(f"measurement did not print a JSON line ({exc}): {lines[-1]!r}\n{proc.stderr[-2000:]}")
 
 
 @pytest.mark.parametrize("budget", [200_000_000, 20_000_000])
@@ -34,8 +37,10 @@ def test_rss_growth_stays_below_twice_the_budget(budget):
     res = measure(budget)
     assert res["values"] >= 5_000_000
     assert res["n_groups"] == 10
+    # the peak baseline must be this process's, not the forking parent's
+    assert res["peak0_mib"] < res["rss_before_mib"] + 50, json.dumps(res)
     # growth includes the sliced tree (~30 MB) and slicing transients
-    assert res["rss_growth_mb"] * 1e6 < 2 * max(budget, 100_000_000), res
+    assert res["rss_growth_mb"] * 1e6 < 2 * max(budget, 100_000_000), json.dumps(res)
     if budget < 50_000_000:
         assert res["n_bands"] > res["n_groups"], "a 20 MB budget must band the 40 MB fields"
     assert res["max_chunk_mib"] < 64

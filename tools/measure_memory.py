@@ -147,7 +147,28 @@ def rss():
 
 
 def peak_rss():
+    """Peak RSS of this process (``VmHWM``; ``ru_maxrss`` as a fallback).
+
+    ``ru_maxrss`` of a child starts at the RSS its parent had when it forked (a pytest parent can be
+    at 1 GB), so prefer ``VmHWM``, which :func:`reset_peak_rss` can reset.
+    """
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmHWM:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+
+
+def reset_peak_rss():
+    """Reset ``VmHWM`` to the current RSS (Linux >= 4.0); no-op where unsupported."""
+    try:
+        with open("/proc/self/clear_refs", "w") as f:
+            f.write("5")
+    except OSError:
+        pass
 
 
 def tree_stats(tree):
@@ -271,6 +292,7 @@ def run_stream(grid, request, budget):
     config["limits"] = {"memory_budget_bytes": budget}
     pm = PolytopeMars(config, datacube_factory=lambda: fake)
     rss0 = rss()
+    reset_peak_rss()
     peak0 = peak_rss()
     t0 = time.perf_counter()
     n_bytes = n_chunks = 0
