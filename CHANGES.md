@@ -216,3 +216,94 @@ modes (`tests/golden/test_golden.py::test_golden_with_empty_results_for_missing_
 the default for `test_golden`). `tests/test_missing_fields.py` covers the fallbacks, their call counts, the
 later-band re-raise, the propagation of other errors, and point features (timeseries, position, vertical
 profile, trajectory, class=ce timeseries) against the empty-result bytes.
+
+# Phase 2c: several field groups per gribjump call
+
+## Why
+
+Measured on the Bologna dev deployment against the remote gribjump (`fdbprod:9123`): one `datacube.get`
+costs ~**480 ms** before it reads a value (TCP round trip, request parsing, an FDB catalogue/TOC scan per
+single-field request) plus ~1.3 us per value. Legacy made one call per *request* and paid only the
+per-field work inside gribjump (~100 ms/field), so the Phase 2 pattern of one call per field group adds
+~15-20 minutes and 3000 TOC scans for a 3000-field ensemble (50 members x 60 steps) whose data is a few
+seconds. Large single groups are not the problem (one Danube bbox step is already ~40 MB of result);
+many small ones are.
+
+## Behaviour changes
+
+- **Extraction units can cover several field groups** (DESIGN §2.3, `polytope_mars.tree_units`). For
+  MultiPoint domains a unit is the longest run of *consecutive* groups (plan order) that satisfies all of:
+
+  - it fits the budget: `n_points x n_params x n_levels x k x bytes_per_point <= limits.memory_budget_bytes`,
+    i.e. `k = budget // (n_points x n_params x n_levels x bytes_per_point)`;
+  - `k <= 1024` (`tree_units.MAX_GROUPS_PER_UNIT`), so one call's request list and the pruned tree stay
+    bounded however large the budget is;
+  - the groups agree on their point count, params and levels (a run never crosses a change of spatial
+    sub-tree shape, of `param` or of `levelist`);
+  - the group-axis values of the run are exactly a cartesian product. One `select` leaves the group axes
+    (`step`, `number`, `date`, `hdate`, `month`, ...) *compressed*, and compressed axes expand to the
+    product of their values, so e.g. 3 numbers x 2 steps with room for 3 groups gives units of 2, not 3.
+
+  `limits.memory_budget_bytes = None` keeps one group per call (unchanged, and still the default). When a
+  single group does not fit, that group goes through the per-(param, level) banded path as before.
+- **One call per unit.** The unit's sub-tree is pruned from the sliced tree with the group axes carrying
+  the unit's values (`tree_units.prune_values`; `TensorIndexTree.prune` only selects one value per axis),
+  `param`/`levelist` compressed as in Phase 2. `collect_field_values` splits the leaf results per
+  (group, param, level); a group's blocks are emitted only once all of the unit's results are in, groups in
+  plan order, each group one band. Output bytes are unchanged for every unit size.
+- **Missing fields.** `DataNotFound` on a multi-group unit means some field in it is missing: the unit is
+  re-fetched one group at a time (which falls back to per (param, level) for the group that is actually
+  missing a field), so present groups keep all their params and a group without any data emits no coverage
+  (DESIGN §2.5). `Matched 0 fields` still means every field of the unit is missing and nothing is
+  re-fetched. Cost of a 10-group unit with one group missing: 1 failed call + 10 calls (+2 when only one
+  param of that group is missing) instead of 10.
+- **`timings`**: `groups_per_unit_max` (most groups fetched by one `datacube.get`; 1 without a budget).
+  The INFO summary reports it as `<= n groups per unit`.
+- Point features (timeseries, position, vertical profile, trajectory) are unchanged: one call for the whole
+  request.
+
+## The order the per-(group, param, level) split relies on
+
+`FDBDatacube._gribjump_requests` (`polytope_feature/datacube/backends/fdb.py:237-259`) expands each
+branch's compressed axes with `product(*compressed_request[0].values())` over the leaf path's keys, which
+`get_fdb_requests` inserts while it descends the tree (root to leaf), and `assign_fdb_output_to_nodes`
+appends each request's ranges to the leaf in call order. A leaf's `result` is therefore its points once
+per field of the branch, the fields in C-order over the branch's compressed axes in tree order -- what
+`collect_field_values` splits by (`np.ndindex` over `Branch.path`). Pinned by
+`tests/test_tree_units.py::test_compressed_axes_expand_as_a_product_in_tree_order` on real `FDBDatacube`
+output, not assumed.
+
+Two properties of the request trees make this work without a polytope-feature change: a merged `date`/`time`
+axis is sliced into one branch per datetime (never compressed), so the `date`/`time` key pair the merger
+unmaps never multiplies out; and axes that are compressed (`step`, `number`, `levelist`, `param`, `month`)
+unmap to one key each.
+
+## Verification
+
+- `tests/test_streaming.py::test_unit_invariance_over_consecutive_groups`: every MultiPoint golden case with
+  budgets forcing 1, 3 and all groups per unit is byte-identical to the corpus, and `fake.n_extract_calls`
+  equals the number of units predicted independently from the case's group grid (brute force over the group
+  keys), with `groups_per_unit_max` the largest unit.
+- `test_unit_runs_stop_at_a_non_rectangular_group_set` (3 numbers x 2 steps, room for 3) and
+  `test_multi_group_unit_assigns_every_field_to_its_own_group` (every range of a 4-group unit carries
+  exactly its own field, decoded from the fake's values) cover the two rules the split depends on.
+- `tests/test_tree_units.py`: the planner (budget, cap, shape changes, product rule, groups without group-axis
+  values) and `prune_values` (selected values only, whole branches on the merged date axis, parent tree
+  untouched, errors).
+- `tests/test_missing_fields.py::test_multi_group_unit_falls_back_per_group` and
+  `test_multi_group_unit_fallback_keeps_the_params_that_exist`: a step missing inside a 10-group unit, both
+  reporting modes, same bytes as one unit per group.
+- EFAS Danube bbox x 10 steps (6.3M values, `tools/measure_memory.py`): with a 200 MB budget 3 units
+  (4 + 4 + 2 groups) instead of 10 calls, peak RSS growth 204 MB (163 MB at one group per call), output
+  byte count unchanged.
+
+Predicted calls for the requests that motivated this (budget / `bytes_per_point` as deployed):
+
+| request | groups | per group | k | calls (was) |
+| --- | --- | --- | --- | --- |
+| Switzerland ensemble 18.8k points x 50 numbers x 60 steps, 1 param, 1 GiB, 64 B | 3000 | 1.20 MB | 892 -> 840 (14 numbers x 60 steps) | **4** (3000) |
+| EFAS Danube bbox 633k points x 40 steps, 1 param, 1 GiB, 64 B | 40 | 40.5 MB | 26 | **2** (40); 10 with the deployed 200 MB budget |
+| climate-dt month box 24.7k points x 744 datetimes, 1 param, 1.5 GiB, 160 B | 744 | 3.95 MB | 407 | **2** (744) |
+
+The Switzerland unit is cut from 892 to 840 groups by the product rule (units must be whole numbers x all
+steps); at ~480 ms per call the fixed cost drops from ~24 min to ~2 s.
