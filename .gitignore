@@ -22,3 +22,5 @@ top_level.txt
 *.req
 *.shp
 *.pdf
+!tests/golden/expected/*.covjson
+!tests/golden/expected_fixed/*.covjson
