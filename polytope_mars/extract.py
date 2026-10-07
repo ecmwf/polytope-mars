@@ -16,6 +16,20 @@ Per request (:meth:`BlockExtractor.stream`):
    prepared tree is fetched with one ``datacube.get`` and cut into groups afterwards;
 5. ``CoordsBlock`` per band, ``ValuesBlock`` per (param, level, band), ``GroupEnd``.
 
+Missing fields (DESIGN §2.5).  gribjump reports a field it has no GRIB message for in one of two ways:
+an empty result for that path, or (the remote gribjump, i.e. production) a ``GribJumpException`` whose
+message contains ``DataNotFound`` for the whole ``extract`` call (:func:`is_data_not_found`).  The first is
+read from the filled tree; on the second the unit that raised is re-fetched in smaller pieces so that the
+fields that exist are kept and the missing ones omitted exactly as with empty results:
+
+* whole-group unit -> per (param, level), one band (the banded path with its band-0 peek);
+* band 0 of a (param, level) -> that field is missing; a later band of a field whose band 0 was found
+  re-raises (the field existed a moment ago);
+* whole tree of a point feature -> per param, then per (group, param), then per level.
+
+The re-fetches only happen when data is missing; ``timings`` counts them (``n_fallbacks``) and the fields
+found missing (``n_missing_fields``).  Any other exception propagates unchanged.
+
 ``RequestHeader.extra`` (read by the CovJSON encoder):
 
 * ``"pointseries_order": "series_major"`` (only for class=ce stream=efas timeseries): legacy ordered those
@@ -30,6 +44,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import time
 from typing import Any, Iterator
 
@@ -52,9 +67,32 @@ from .coverage_plan import (
     spatial_children,
 )
 
-__all__ = ["BlockExtractor", "collect_field_values", "mapper_type", "slice_request"]
+__all__ = ["BlockExtractor", "collect_field_values", "is_data_not_found", "mapper_type", "slice_request"]
 
 logger = logging.getLogger(__name__)
+
+
+def is_data_not_found(exc: BaseException) -> bool:
+    """True for gribjump's "fields missing" error: a ``GribJumpException`` whose message has ``DataNotFound``.
+
+    The class is matched by name over the exception's MRO, so neither pygribjump nor its C library has to be
+    importable here.  The remote gribjump raises it for the whole ``extract`` call, e.g.
+    ``DataNotFound. Matched 1 fields but 2 were requested.``, when the union of the call's requests matches
+    fewer fields than were requested.
+    """
+    return any(cls.__name__ == "GribJumpException" for cls in type(exc).__mro__) and "DataNotFound" in str(exc)
+
+
+_MATCHED_NONE = re.compile(r"\bMatched 0 fields\b")
+
+
+def matched_no_field(exc: BaseException) -> bool:
+    """True when a DataNotFound error says that no field of the call exists (``Matched 0 fields but ...``).
+
+    Then every field of the unit is missing and nothing needs to be re-fetched; when the message cannot be
+    read the unit is split up as for a partial match.
+    """
+    return bool(_MATCHED_NONE.search(str(exc)))
 
 
 def slice_request(api, preq):
@@ -179,6 +217,8 @@ class _Counters:
         self.n_units = 0
         self.n_bands = 0
         self.n_gribjump_calls = 0
+        self.n_missing_fields = 0
+        self.n_fallbacks = 0
         self.get_seconds = 0.0
 
 
@@ -205,6 +245,25 @@ class BlockExtractor:
         finally:
             self.counters.get_seconds += time.perf_counter() - t0
             self.counters.n_units += 1
+
+    def _get_fields(self, datacube, tree, key_axes, **kwargs):
+        """``collect_field_values`` of ``datacube.get(tree, **kwargs)``.
+
+        On DataNotFound: ``{}`` (no field) when gribjump matched none of the fields, else None (some fields
+        exist: the caller re-fetches in smaller pieces).  Other exceptions propagate.
+        """
+        try:
+            filled = self._get(datacube, tree, **kwargs)
+        except Exception as exc:
+            if not is_data_not_found(exc):
+                raise
+            logger.debug("%s: DataNotFound for %s: %s", self.pm.id, kwargs, exc)
+            return {} if matched_no_field(exc) else None
+        return collect_field_values(filled, key_axes)
+
+    def _note_missing(self, select, param, level) -> None:
+        self.counters.n_missing_fields += 1
+        logger.debug("%s: field missing: %s param=%s levelist=%s", self.pm.id, select, param, level)
 
     def _count_extract_calls(self, datacube):
         gj = getattr(datacube, "gj", None)
@@ -271,6 +330,8 @@ class BlockExtractor:
         timings["n_units"] = c.n_units
         timings["n_bands"] = c.n_bands
         timings["n_gribjump_calls"] = c.n_gribjump_calls
+        timings["n_missing_fields"] = c.n_missing_fields
+        timings["n_fallbacks"] = c.n_fallbacks
         n_cov = getattr(self.encoder, "n_coverages", None)
         timings["n_coverages"] = n_cov if n_cov is not None else c.n_groups
         logger.info(
@@ -345,7 +406,7 @@ class BlockExtractor:
             levels = g.levels or [None]
             n_fields = len(g.params) * len(levels)
             if budget is None or n_points * n_fields * bpp <= budget:
-                blocks = self._single_unit(datacube, tree, info, plan, g, index, n_points)
+                blocks = self._single_unit(datacube, tree, info, plan, g, index, counts)
             else:
                 band_points = max(1, budget // (bpp * (n_fields + 1)))
                 blocks = self._banded(datacube, tree, info, plan, g, index, counts, band_points)
@@ -357,10 +418,16 @@ class BlockExtractor:
                 index += 1
                 self.counters.n_groups += 1
 
-    def _single_unit(self, datacube, tree, info, plan, g, index, n_points):
-        filled = self._get(datacube, tree, select=dict(g.select))
-        fields = collect_field_values(filled, ["param", "levelist"])
+    def _single_unit(self, datacube, tree, info, plan, g, index, counts):
+        n_points = int(sum(counts))
         has_levels = bool(g.levels)
+        fields = self._get_fields(datacube, tree, ["param", "levelist"], select=dict(g.select))
+        if fields is None:
+            # DataNotFound and some fields exist: re-fetch per (param, level) in one band; the band-0 peek
+            # keeps the fields that exist (only costs extra calls when data is missing).
+            self.counters.n_fallbacks += 1
+            yield from self._banded(datacube, tree, info, plan, g, index, counts, n_points)
+            return
         params = []
         for p in g.params:
             present = False
@@ -368,6 +435,8 @@ class BlockExtractor:
                 vals = fields.get((p, lev if has_levels else None))
                 if vals is not None and not vals[1]:
                     present = True
+                else:
+                    self._note_missing(g.select, p, lev)
             if present:
                 params.append(p)
         if not params:
@@ -413,10 +482,17 @@ class BlockExtractor:
             if has_levels:
                 sel["levelist"] = lev
             lo, hi = bands[band]
-            filled = self._get(datacube, tree, select=sel, latitude_range=(lo, hi))
+            expected = offsets[band + 1] - offsets[band]
+            try:
+                filled = self._get(datacube, tree, select=sel, latitude_range=(lo, hi))
+            except Exception as exc:
+                # DataNotFound on band 0 (the peek) = the field is missing.  On a later band the field was
+                # found a moment ago: that is an error, re-raised.
+                if band != 0 or not is_data_not_found(exc):
+                    raise
+                return np.full(expected, np.nan), True
             fields = collect_field_values(filled, [])
             vals = fields.get(())
-            expected = offsets[band + 1] - offsets[band]
             if vals is None:
                 return np.full(expected, np.nan), True
             if len(vals[0]) != expected:
@@ -425,6 +501,7 @@ class BlockExtractor:
 
         # Band-0 peek: the first unit of every field, before anything of the group is emitted.
         band0 = {}
+        missing_fields = set()
         params = []
         for p in g.params:
             present = False
@@ -432,6 +509,9 @@ class BlockExtractor:
                 arr, missing = fetch(p, lev, 0)
                 if not missing:
                     present = True
+                else:
+                    missing_fields.add((p, lev))
+                    self._note_missing(g.select, p, lev)
                 band0[(p, lev)] = arr
             if present:
                 params.append(p)
@@ -460,7 +540,12 @@ class BlockExtractor:
             for lev in g.levels or [None]:
                 out_level = plan.level_out(lev) if has_levels else None
                 for b in range(len(bands)):
-                    arr = band0.pop((p, lev)) if b == 0 else fetch(p, lev, b)[0]
+                    if b == 0:
+                        arr = band0.pop((p, lev))
+                    elif (p, lev) in missing_fields:  # a missing level of a present param: never re-fetched
+                        arr = np.full(offsets[b + 1] - offsets[b], np.nan)
+                    else:
+                        arr = fetch(p, lev, b)[0]
                     yield ValuesBlock(fg, str(p), out_level, b, offsets[b], arr)
         yield GroupEnd(fg)
 
@@ -468,9 +553,20 @@ class BlockExtractor:
 
     def _whole_tree_blocks(self, datacube, tree, info, plan, groups) -> Iterator[Any]:
         axes = plan.group_axes()
-        filled = self._get(datacube, tree)
-        info = analyse_tree(filled)
-        fields = collect_field_values(filled, axes + ["param", "levelist"])
+        key_axes = axes + ["param", "levelist"]
+        try:
+            filled = self._get(datacube, tree)
+        except Exception as exc:
+            if not is_data_not_found(exc):
+                raise
+            logger.debug("%s: DataNotFound for the whole tree: %s", self.pm.id, exc)
+            if matched_no_field(exc):
+                fields = {}
+            else:
+                fields = self._point_fields_fallback(datacube, tree, info, groups, key_axes)
+        else:
+            info = analyse_tree(filled)
+            fields = collect_field_values(filled, key_axes)
         index = 0
         for g in groups:
             counts = spatial_counts(info, g.branches)
@@ -481,6 +577,9 @@ class BlockExtractor:
 
             group_fields = {(p, lev): fields.get(tuple(g.key) + (p, lev)) for p in g.params for lev in levels}
             found = {k for k, v in group_fields.items() if v is not None and not v[1]}
+            for p, lev in group_fields:
+                if (p, lev) not in found:
+                    self._note_missing(g.select, p, lev)
             params = [p for p in g.params if any((p, lev) in found for lev in levels)]
             if not params:
                 continue
@@ -496,6 +595,43 @@ class BlockExtractor:
             yield GroupEnd(fg)
             index += 1
             self.counters.n_groups += 1
+
+    def _point_fields_fallback(self, datacube, tree, info, groups, key_axes) -> dict:
+        """The fields of ``tree`` fetched piecewise after the whole-tree get raised DataNotFound.
+
+        Per param first (the usual case: one param missing everywhere costs one failed call), then, for a
+        param that raised with some of its fields found, per (group, param) and per level.  Missing fields
+        are absent from the result, which the caller treats like the all-``None`` fields of an empty
+        gribjump result.
+        """
+        self.counters.n_fallbacks += 1
+        params = list(info.values.get("param", ()))
+        if not params:
+            raise RuntimeError("DataNotFound for a tree without a param axis")
+        fields: dict = {}
+        for p in params:
+            got = self._get_fields(datacube, tree, key_axes, select={"param": p})
+            if got is not None:
+                fields.update(got)
+                continue
+            self.counters.n_fallbacks += 1
+            for g in groups:
+                if p not in g.params:
+                    continue
+                sel = {**g.select, "param": p}
+                if g.select:
+                    got = self._get_fields(datacube, tree, key_axes, select=sel)
+                    if got is not None:
+                        fields.update(got)
+                        continue
+                if "levelist" in g.select or len(g.levels) < 2:
+                    continue  # a single field: missing
+                self.counters.n_fallbacks += 1
+                for lev in g.levels:
+                    got = self._get_fields(datacube, tree, key_axes, select={**sel, "levelist": lev})
+                    if got is not None:
+                        fields.update(got)
+        return fields
 
 
 def build_parameters(param_ids, param_db) -> tuple:
