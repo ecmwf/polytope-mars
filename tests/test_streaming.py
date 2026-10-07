@@ -6,6 +6,7 @@ must not depend on how the request was cut into extraction units and bands.
 
 import copy
 import json
+from itertools import product
 from pathlib import Path
 
 import numpy as np
@@ -14,7 +15,10 @@ import pytest
 from polytope_mars.api import PolytopeMars
 from polytope_mars.config import PolytopeMarsConfig
 from polytope_mars.encoders import get_encoder, supported_formats
-from polytope_mars.extract import BlockExtractor
+from polytope_mars.extract import BlockExtractor, mapper_type
+from polytope_mars.param_db import get_params
+from polytope_mars.testing.configs import fake_gribjump_config_dict
+from polytope_mars.testing.fake_gribjump import decode_value
 from polytope_mars.testing.golden import build_fake, load_case, make_polytope_mars
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -57,6 +61,55 @@ MULTIPOINT = [
 ]
 
 
+#: Group structure of the MultiPoint cases: (number of groups, extents of the group axes in plan order).
+#: ``cdt_*`` requests have their date and time merged into one group axis, so their groups vary on one axis.
+GROUP_GRID = {
+    "efas_bbox_multiparam": (4, (2, 2)),  # 2 dates x 2 steps
+    "o1280_bbox_ensemble": (6, (3, 2)),  # 3 numbers x 2 steps
+    "cdt_bbox_levelist": (1, ()),  # a single group (2 params x 2 levels)
+    "cdt_bbox_sfc": (4, (4,)),  # 2 dates x 2 times on the merged date axis
+    "efas_polygon_fc": (2, (2,)),  # 2 steps
+    "cdt_polygon_sfc": (3, (3,)),  # 3 times
+    "clmn_bbox": (3, (3,)),  # 3 months
+    "efcl_bbox_hdate": (4, (2, 2)),  # 2 hdates x 2 steps
+    "ode_bbox_subhourly": (3, (3,)),  # 3 subhourly steps
+}
+
+
+def group_bytes(name) -> int:
+    """``n_points x n_params x n_levels x bytes_per_point`` of one group of ``name``: one unit's budget."""
+    c = case(name)
+    conf = PolytopeMarsConfig.model_validate(fake_gribjump_config_dict(c["grid"], c["request"]))
+    bpp = conf.limits.bytes_per_point.for_mapper(mapper_type(conf.options))
+    doc = json.loads(expected(name))
+    values = doc["coverages"][0]["domain"]["axes"]["composite"]["values"]
+    n_levels = len({v[2] for v in values})
+    return (len(values) // n_levels) * len(doc["parameters"]) * n_levels * bpp
+
+
+def predicted_units(extents, max_groups) -> list:
+    """Unit sizes for groups laid out over ``extents``, by brute force over the group keys.
+
+    Groups run lexicographically over the group axes; a unit is the longest run of at most
+    ``max_groups`` consecutive groups whose keys are exactly the cartesian product of the values they
+    use (anything else cannot be expressed by one compressed ``select``).
+    """
+    keys = list(product(*[range(n) for n in extents])) or [()]
+    units, start = [], 0
+    while start < len(keys):
+        best = 1
+        for k in range(2, min(max_groups, len(keys) - start) + 1):
+            run = keys[start : start + k]  # noqa: E203
+            size = 1
+            for axis in range(len(extents)):
+                size *= len({key[axis] for key in run})
+            if size == k:
+                best = k
+        units.append(best)
+        start += best
+    return units
+
+
 @pytest.mark.parametrize("name", MULTIPOINT)
 def test_one_unit_per_group_without_budget(name):
     out, pm, fake = run(name)
@@ -64,13 +117,66 @@ def test_one_unit_per_group_without_budget(name):
     t = pm.timings
     assert fake.n_extract_calls == t["n_units"] == t["n_groups"] == t["n_coverages"] == t["n_gribjump_calls"]
     assert t["n_bands"] == t["n_groups"]
+    assert t["groups_per_unit_max"] == 1
 
 
 @pytest.mark.parametrize("name", MULTIPOINT)
-def test_large_budget_is_one_unit_per_group(name):
+def test_large_budget_is_one_unit_for_all_groups(name):
     out, pm, fake = run(name, budget=10**12)
     assert out == expected(name)
-    assert fake.n_extract_calls == pm.timings["n_groups"]
+    t = pm.timings
+    assert fake.n_extract_calls == t["n_units"] == t["n_gribjump_calls"] == 1
+    assert t["groups_per_unit_max"] == t["n_groups"] == t["n_coverages"] == GROUP_GRID[name][0]
+    assert t["n_bands"] == t["n_groups"]
+
+
+@pytest.mark.parametrize("name", MULTIPOINT)
+@pytest.mark.parametrize("max_groups", [1, 3, "all"])
+def test_unit_invariance_over_consecutive_groups(name, max_groups):
+    """One, three and all groups per ``datacube.get`` give the same bytes and the predicted call count."""
+    n_groups, extents = GROUP_GRID[name]
+    k = n_groups if max_groups == "all" else max_groups
+    out, pm, fake = run(name, budget=k * group_bytes(name))
+    assert out == expected(name)
+    units = predicted_units(extents, k)
+    t = pm.timings
+    assert fake.n_extract_calls == t["n_units"] == t["n_gribjump_calls"] == len(units)
+    assert t["groups_per_unit_max"] == max(units)
+    assert t["n_groups"] == t["n_bands"] == n_groups
+
+
+def test_unit_runs_stop_at_a_non_rectangular_group_set():
+    """3 numbers x 2 steps with room for 3 groups: units of 2, because 3 of them are not a product."""
+    out, pm, fake = run("o1280_bbox_ensemble", budget=3 * group_bytes("o1280_bbox_ensemble"))
+    assert out == expected("o1280_bbox_ensemble")
+    assert fake.n_extract_calls == 3 and pm.timings["groups_per_unit_max"] == 2
+
+
+def test_multi_group_unit_assigns_every_field_to_its_own_group():
+    """The values of a unit are split per (group, param, level): each range holds exactly its own field.
+
+    The fake encodes (field path, grid index) in every value, so a range built from the wrong stride of
+    the compressed-axes product would carry another group's or param's field id.
+    """
+    out, pm, fake = run("efas_bbox_multiparam", budget=10**12)
+    assert out == expected("efas_bbox_multiparam")
+    assert fake.n_extract_calls == 1 and pm.timings["groups_per_unit_max"] == 4
+    doc = json.loads(out)
+    params = get_params("ecmwf")
+    shortnames = {params[pid]["shortname"]: pid for pid in case("efas_bbox_multiparam")["request"]["param"].split("/")}
+    seen = set()
+    for cov in doc["coverages"]:
+        meta = cov["mars:metadata"]
+        date = str(meta["Forecast date"])[:10].replace("-", "")
+        for name, rng in cov["ranges"].items():
+            ids = {decode_value(v)[0] for v in rng["values"]}
+            assert len(ids) == 1, f"{name} of {meta} mixes {len(ids)} fields"
+            path = fake.fields[ids.pop()]
+            assert str(path["param"]) == shortnames[name]
+            assert str(path["step"]) == str(meta["step"])
+            assert str(path["date"]) == date
+            seen.add((path["date"], path["step"], path["param"]))
+    assert len(seen) == 8  # 2 dates x 2 steps x 2 params, each used by exactly one range
 
 
 @pytest.mark.parametrize("name", MULTIPOINT)
@@ -187,7 +293,7 @@ def test_format_default_explicit_and_unknown():
 
 
 def test_get_encoder_registry():
-    assert supported_formats() == ("covjson",)
+    assert list(supported_formats()) == ["covjson"]
     enc = get_encoder("covjson", PolytopeMarsConfig())
     assert enc.content_type == "application/prs.coverage+json"
     with pytest.raises(ValueError, match="Unsupported output format 'netcdf'"):
