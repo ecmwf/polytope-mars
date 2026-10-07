@@ -115,6 +115,43 @@ def test_single_field_group_missing_costs_one_call():
     assert pm.timings["n_fallbacks"] == 0 and pm.timings["n_missing_fields"] == 1
 
 
+def ten_group_case(missing):
+    """EFAS bbox, one date x 10 steps x 2 params (10 field groups), with ``missing`` fields."""
+    c = copy.deepcopy(case("efas_bbox_multiparam"))
+    c["request"]["date"] = "20240101"
+    c["request"]["step"] = "/".join(str(6 * i) for i in range(1, 11))
+    c.setdefault("fake", {})["missing"] = missing
+    return c
+
+
+def test_multi_group_unit_falls_back_per_group():
+    # all fields of step 24 are missing: the unit of 10 groups is re-fetched one group at a time
+    c = ten_group_case([{"step": "24"}])
+    (out, pm, fake), _ = both_modes(c, budget=10**12)
+    doc = json.loads(out)
+    assert [cov["mars:metadata"]["step"] for cov in doc["coverages"]] == [6, 12, 18, 30, 36, 42, 48, 54, 60]
+    assert all(sorted(cov["ranges"]) == ["dis06", "dis24"] for cov in doc["coverages"])
+    assert out == run(c, "raise")[0]  # same bytes as one unit per group
+    # the unit's failed call, then one call per group; step 24 says "Matched 0 fields" and is not split
+    assert fake.n_extract_calls == 1 + 10 and fake.n_data_not_found == 2
+    assert pm.timings["n_fallbacks"] == 1 and pm.timings["n_missing_fields"] == 2
+    assert pm.timings["n_groups"] == 9 and pm.timings["groups_per_unit_max"] == 10
+
+
+def test_multi_group_unit_fallback_keeps_the_params_that_exist():
+    # only dis24 is missing at step 24: that group keeps dis06, the other nine keep both params
+    c = ten_group_case([{"step": "24", "param": "240024"}])
+    (out, pm, fake), _ = both_modes(c, budget=10**12)
+    doc = json.loads(out)
+    ranges = {cov["mars:metadata"]["step"]: sorted(cov["ranges"]) for cov in doc["coverages"]}
+    assert ranges[24] == ["dis06"]
+    assert all(r == ["dis06", "dis24"] for step, r in ranges.items() if step != 24)
+    assert out == run(c, "raise")[0]
+    # unit + 9 groups + the failing group (1 call) + its two per-param band-0 peeks
+    assert fake.n_extract_calls == 1 + 9 + 1 + 2 and fake.n_data_not_found == 3
+    assert pm.timings["n_fallbacks"] == 2 and pm.timings["n_missing_fields"] == 1
+
+
 def lowest_level_missing(name):
     """``case(name)`` with its first level (string order) missing for every param and group."""
     first = json.loads(expected(name))["coverages"][0]["domain"]["axes"]["composite"]["values"]
