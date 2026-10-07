@@ -46,7 +46,14 @@ features = {
 
 
 class PolytopeMars:
-    def __init__(self, config=None, log_context=None):
+    def __init__(self, config=None, log_context=None, datacube_factory=None):
+        """
+        :param config: PolytopeMarsConfig (or dict); default locations are searched when None.
+        :param log_context: dict with at least an ``id`` key, forwarded to polytope/gribjump.
+        :param datacube_factory: zero-argument callable returning the gribjump handle given to
+            polytope. Defaults to ``pygribjump.GribJump()`` (looked up at call time, so
+            monkeypatching ``polytope_mars.api.gj.GribJump`` keeps working).
+        """
         # Initialise polytope-mars configuration
         self.log_context = log_context
         self.id = log_context["id"] if log_context else "-1"
@@ -62,6 +69,9 @@ class PolytopeMars:
 
         self.coverage = {}
         self.split_request = False
+        self.datacube_factory = datacube_factory
+        # Per-extract phase timings (ms) and counts, filled by retrieve_data.
+        self.timings = {}
 
     def _has_subhourly_step_transform(self) -> bool:
         """Check if the step axis has a subhourly_step type_change transform configured."""
@@ -99,6 +109,7 @@ class PolytopeMars:
         return f"{hours}h{minutes}m"
 
     def extract(self, request):
+        self.timings = {}
         # request expected in JSON or dict
         if not isinstance(request, dict):
             try:
@@ -198,6 +209,7 @@ class PolytopeMars:
         else:
             self.coverage = self.retrieve_data(request, feature_type, feature)  # noqa: E501
 
+        self.timings["n_coverages"] = len(self.coverage.get("coverages", []))
         return self.coverage
 
     def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
@@ -574,7 +586,7 @@ class PolytopeMars:
         logging.info(f"{self.id}: Gribjump/setup time start: {start}")  # noqa: E501
 
         if self.conf.datacube.type == "gribjump":
-            fdbdatacube = gj.GribJump()
+            fdbdatacube = self.datacube_factory() if self.datacube_factory is not None else gj.GribJump()
         else:
             raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
 
@@ -587,6 +599,7 @@ class PolytopeMars:
 
         end = time.time()
         delta = end - start
+        self._add_timing("datacube_init_ms", delta)
         logging.debug(f"{self.id}: Gribjump/setup time end: {end}")  # noqa: E501
         logging.info(f"{self.id}: Gribjump/setup time taken: {delta}")  # noqa: E501
 
@@ -594,11 +607,13 @@ class PolytopeMars:
         start = time.time()
         logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
-        result = self.api.retrieve(preq)
-        print(result.pprint())
+        result, get_seconds = self._retrieve_timed(preq)
 
         end = time.time()
         delta = end - start
+        self._add_timing("retrieve_ms", delta)
+        self._add_timing("get_ms", get_seconds)
+        self._add_timing("slice_ms", delta - get_seconds)
         logging.debug(f"{self.id}: Polytope time end: {end}")  # noqa: E501
         logging.info(f"{self.id}: Polytope time taken: {delta}")  # noqa: E501
         start = time.time()
@@ -629,7 +644,36 @@ class PolytopeMars:
 
         end = time.time()
         delta = end - start
+        self._add_timing("encode_ms", delta)
         logging.debug(f"{self.id}: Covjsonkit time end: {end}")  # noqa: E501
         logging.info(f"{self.id}: Covjsonkit time taken: {delta}")  # noqa: E501
 
         return coverage
+
+    def _add_timing(self, key, seconds):
+        # Accumulates, so split requests (several retrieve_data calls) report totals.
+        self.timings[key] = self.timings.get(key, 0.0) + round(seconds * 1000, 3)
+
+    def _retrieve_timed(self, preq):
+        """Run ``self.api.retrieve`` and also return the seconds spent in ``datacube.get``.
+
+        ``Polytope.retrieve`` is slice + ``datacube.get``; the get is timed by wrapping the
+        datacube instance's method for the duration of the call.
+        """
+        datacube = self.api.datacube
+        untimed_get = datacube.get
+        get_seconds = [0.0]
+
+        def timed_get(*args, **kwargs):
+            t0 = time.perf_counter()
+            try:
+                return untimed_get(*args, **kwargs)
+            finally:
+                get_seconds[0] += time.perf_counter() - t0
+
+        datacube.get = timed_get
+        try:
+            result = self.api.retrieve(preq)
+        finally:
+            del datacube.get
+        return result, get_seconds[0]
