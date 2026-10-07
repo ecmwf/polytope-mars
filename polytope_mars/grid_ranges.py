@@ -31,7 +31,7 @@ from typing import Iterator, List
 import numpy as np
 from polytope_feature.datacube.tensor_index_tree import MergedTensorIndexNode
 
-__all__ = ["RangeCounter", "spatial_range_counts"]
+__all__ = ["RangeCounter", "branch_ranges", "spatial_range_counts"]
 
 logger = logging.getLogger(__name__)
 
@@ -92,11 +92,17 @@ def _drop_duplicates(per_leaf: List[np.ndarray]) -> List[np.ndarray]:
     return out
 
 
-def spatial_range_counts(branch_node) -> List[int]:
-    """Request ranges of one field, per spatial child of ``branch_node`` (latitude nodes in order).
+def branch_ranges(branch_node) -> tuple:
+    """``(ranges per spatial child, duplicate points across spatial nodes)`` of one field of a branch.
 
-    Falls back to one range per point (the most expensive case) when the indices cannot be
-    computed, so that an unknown grid never breaks the extraction, only makes it more careful.
+    The flag matters for latitude bands: ``get`` drops a grid index that two leaves ask for, keeping
+    the first.  Duplicates inside one latitude node (a box that meets itself at the longitude seam)
+    are dropped whatever the bands are, because a band holds whole latitude nodes; duplicates
+    *between* latitude nodes are only seen by a call that holds both, i.e. not when the tree is
+    prepared band by band (:meth:`polytope_mars.extract.BlockExtractor._multipoint_source`).
+
+    Falls back to one range per point (the most expensive case) when the indices cannot be computed,
+    so that an unknown grid never breaks the extraction, only makes it more careful.
     """
     children = [c for c in branch_node.children if isinstance(c, MergedTensorIndexNode) or c.axis.name == "latitude"]
     per_child: List[List[np.ndarray]] = []
@@ -108,13 +114,33 @@ def spatial_range_counts(branch_node) -> List[int]:
                 per_child.append(list(_leaf_indices(child)))
     except Exception as exc:  # pragma: no cover - exotic mappers / tree shapes
         logger.debug("Cannot count gribjump index ranges (%s); assuming one range per point", exc)
-        return [_points(child) for child in children]
+        return [_points(child) for child in children], True
     flat = _drop_duplicates([a for leaves in per_child for a in leaves])
     counts, at = [], 0
     for leaves in per_child:
         counts.append(sum(_count_ranges(flat[at + k]) for k in range(len(leaves))))
         at += len(leaves)
-    return counts
+    return counts, _duplicates_across_nodes(per_child)
+
+
+def spatial_range_counts(branch_node) -> List[int]:
+    """Request ranges of one field, per spatial child of ``branch_node`` (latitude nodes in order)."""
+    return branch_ranges(branch_node)[0]
+
+
+def _duplicates_across_nodes(per_child: List[List[np.ndarray]]) -> bool:
+    """True when two different spatial nodes ask for the same grid index."""
+    flat = [a for leaves in per_child for a in leaves]
+    if not flat:
+        return False
+    stacked = np.concatenate(flat) if len(flat) > 1 else flat[0]
+    if np.unique(stacked).size == stacked.size:
+        return False  # the usual case: no index is asked for twice at all
+    per_node = 0
+    for leaves in per_child:
+        own = np.concatenate(leaves) if len(leaves) > 1 else leaves[0]
+        per_node += np.unique(own).size
+    return per_node > np.unique(stacked).size
 
 
 def _points(spatial_child) -> int:
@@ -130,6 +156,8 @@ class RangeCounter:
         self._cache: dict = {}
         #: spatial sub-trees actually walked (the rest are cache hits)
         self.n_counted = 0
+        #: any counted branch asks for the same grid index from two different latitude nodes
+        self.cross_node_duplicates = False
 
     def counts(self, info, branches, point_counts) -> List[int]:
         """Ranges per spatial node of a group, parallel to ``extract.spatial_counts``."""
@@ -139,7 +167,9 @@ class RangeCounter:
             return cached
         counts: List[int] = []
         for b in branches:
-            counts.extend(spatial_range_counts(info.branches[b].node))
+            branch_counts, duplicates = branch_ranges(info.branches[b].node)
+            counts.extend(branch_counts)
+            self.cross_node_duplicates = self.cross_node_duplicates or duplicates
         self.n_counted += 1
         self._cache[key] = counts
         return counts

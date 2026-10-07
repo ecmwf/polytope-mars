@@ -82,12 +82,21 @@ GROUP_GRID = {
 }
 
 
-def group_bytes(name) -> int:
-    """``n_points x n_params x n_levels x BYTES_PER_VALUE`` of one group of ``name``: one unit's budget."""
+def group_values(name) -> int:
+    """``n_points x n_params x n_levels`` of one group of ``name`` (its values, from the output)."""
     doc = json.loads(expected(name))
     values = doc["coverages"][0]["domain"]["axes"]["composite"]["values"]
     n_levels = len({v[2] for v in values})
-    return (len(values) // n_levels) * len(doc["parameters"]) * n_levels * BYTES_PER_VALUE
+    return (len(values) // n_levels) * len(doc["parameters"]) * n_levels
+
+
+def run_with_groups_per_unit(name, k):
+    """Run ``name`` with room for exactly ``k`` groups per ``datacube.get``.
+
+    The hard cap on values is what makes "exactly k" exact: a byte budget also has to pay for
+    gribjump's own buffer, which depends on the grid's index ranges.
+    """
+    return run(name, budget=10**12, max_values_per_unit=k * group_values(name))
 
 
 def predicted_units(extents, max_groups) -> list:
@@ -139,7 +148,7 @@ def test_unit_invariance_over_consecutive_groups(name, max_groups):
     """One, three and all groups per ``datacube.get`` give the same bytes and the predicted call count."""
     n_groups, extents = GROUP_GRID[name]
     k = n_groups if max_groups == "all" else max_groups
-    out, pm, fake = run(name, budget=k * group_bytes(name))
+    out, pm, fake = run_with_groups_per_unit(name, k)
     assert out == expected(name)
     units = predicted_units(extents, k)
     t = pm.timings
@@ -150,7 +159,7 @@ def test_unit_invariance_over_consecutive_groups(name, max_groups):
 
 def test_unit_runs_stop_at_a_non_rectangular_group_set():
     """3 numbers x 2 steps with room for 3 groups: units of 2, because 3 of them are not a product."""
-    out, pm, fake = run("o1280_bbox_ensemble", budget=3 * group_bytes("o1280_bbox_ensemble"))
+    out, pm, fake = run_with_groups_per_unit("o1280_bbox_ensemble", 3)
     assert out == expected("o1280_bbox_ensemble")
     assert fake.n_extract_calls == 3 and pm.timings["groups_per_unit_max"] == 2
 
@@ -258,7 +267,7 @@ def test_bitmap_nan_points_are_null():
 @pytest.mark.parametrize("name", ["efas_polygon_fc", "cdt_polygon_sfc", "cdt_polygon_single_param"])
 def test_polygons_use_merged_rows_and_stay_identical(name, monkeypatch):
     leaf_sizes = []
-    original = BlockExtractor._slice_and_prepare
+    original = BlockExtractor._slice
 
     def spy(self):
         api, tree = original(self)
@@ -266,7 +275,7 @@ def test_polygons_use_merged_rows_and_stay_identical(name, monkeypatch):
         leaf_sizes.extend(len(leaf.values) for leaf in tree.leaves)
         return api, tree
 
-    monkeypatch.setattr(BlockExtractor, "_slice_and_prepare", spy)
+    monkeypatch.setattr(BlockExtractor, "_slice", spy)
     out, _, _ = run(name)
     assert out == expected(name)
     assert max(leaf_sizes) > 1, "polygon rows were not merged into multi-point leaves"

@@ -35,13 +35,14 @@ def prepared(name, monkeypatch, **request_update):
     fake = build_fake(c)
     pm, request = make_polytope_mars(c, fake)
     holder = {}
-    original = BlockExtractor._slice_and_prepare
+    original = BlockExtractor._slice
 
     def spy(self):
-        holder["api"], holder["tree"] = original(self)
+        api, tree = original(self)
+        holder["api"], holder["tree"] = api, self._prepare(api.datacube, tree)
         raise _Sliced
 
-    monkeypatch.setattr(BlockExtractor, "_slice_and_prepare", spy)
+    monkeypatch.setattr(BlockExtractor, "_slice", spy)
     with pytest.raises(_Sliced):
         b"".join(pm.extract_stream(request))
     return holder["api"].datacube, holder["tree"], fake

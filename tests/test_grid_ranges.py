@@ -29,18 +29,19 @@ def prepared_tree(name):
     c = copy.deepcopy(load_case(GOLDEN / "cases" / f"{name}.yaml"))
     pm, request = make_polytope_mars(c, build_fake(c))
     holder = {}
-    original = BlockExtractor._slice_and_prepare
+    original = BlockExtractor._slice
 
     def spy(self):
-        holder["api"], holder["tree"] = original(self)
+        api, tree = original(self)
+        holder["tree"] = self._prepare(api.datacube, tree)
         raise _Sliced
 
-    BlockExtractor._slice_and_prepare = spy
+    BlockExtractor._slice = spy
     try:
         with pytest.raises(_Sliced):
             b"".join(pm.extract_stream(request))
     finally:
-        BlockExtractor._slice_and_prepare = original
+        BlockExtractor._slice = original
     return holder["tree"]
 
 

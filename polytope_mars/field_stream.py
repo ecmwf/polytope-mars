@@ -7,40 +7,37 @@ still incomplete (:class:`GroupAssembler`), not the whole unit.
 
 Where the fields come from is the seam between polytope-mars and polytope-feature:
 
-* :func:`whole_unit_fields` -- **the path in use today**: one ``FDBDatacube.get`` fills the pruned
+* :func:`whole_unit_fields` -- **the default path**: one ``FDBDatacube.get`` fills the pruned
   sub-tree and :func:`~polytope_mars.extract.collect_field_values` splits the leaf results per
   (group, param, level).  Every field of the call is on the Python heap before the first block is
   emitted, so the unit's size is what the budget has to cover
   (:class:`~polytope_mars.sizing.UnitSizing` with ``per_field_consumption=False``).
-* :func:`lazy_unit_fields` -- used as soon as the datacube offers ``get_iter`` (polytope-feature
-  work in progress): the fields arrive one at a time in compressed-axes product order and are
-  handed on as they come, so the Python peak is one group whatever the unit's size.  The gribjump
-  buffer still holds the whole call (the deployed gribjump decodes the reply before returning),
-  which is what the 8 B/value term of the sizing covers.
+* :func:`lazy_unit_fields` -- ``FDBDatacube.get_iter``, used when the datacube has it *and*
+  ``limits.per_field_consumption`` is on: the fields arrive one at a time and are handed on as they
+  come, so the Python peak is one group whatever the unit's size.  gribjump's own buffer still holds
+  the whole call (the deployed gribjump decodes the reply before returning), which is what the
+  8 B/value term of the sizing covers.
 
-:func:`unit_field_source` picks the second when the datacube has ``get_iter`` and the first
-otherwise, so a polytope-feature release switches the path over without a polytope-mars change.
-
-The expected ``get_iter`` contract, which :func:`lazy_unit_fields` adapts (and
-``tests/test_field_stream.py`` pins with a stub datacube):
-
-    ``datacube.get_iter(tree, context=None, select=None, latitude_range=None)`` yields one item per
-    field in compressed-axes product order (outermost axis first), each either a
-    ``(path: Mapping, values)`` pair or an object with ``.path`` and ``.values``; ``path`` holds the
-    field's axis values (``param``, ``levelist``, the group axes), ``values`` its points in tree
-    order (a sequence of per-range arrays is concatenated).  A field gribjump does not have yields
-    ``None`` values, or an empty sequence, like an empty result does today.
+``get_iter`` yields ``(field_path, leaf_values)``: ``field_path`` the MARS keys of one field as
+strings, ``leaf_values`` ``[(leaf, float64 values), ...]`` per longitude leaf in tree order, or
+``None`` for a field gribjump has no message for.  Which (group, param, level) an item belongs to is
+*not* read off ``field_path`` -- its values are MARS strings while the tree (and the plan) carry
+typed axis values -- but from the item's position: ``get_iter`` yields one item per (branch, field)
+in tree order, the fields of a branch in the cartesian-product order of its compressed axes,
+exactly the layout ``collect_field_values`` splits a filled leaf's ``result`` into.
+:func:`lazy_unit_fields` rebuilds that key sequence from the pruned tree and zips it with the items.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterator, Mapping, Optional
+from typing import Iterator
 
 import numpy as np
 
 __all__ = [
     "GroupAssembler",
+    "field_key_sequence",
     "has_per_field_consumption",
     "lazy_unit_fields",
     "unit_field_source",
@@ -104,9 +101,10 @@ class GroupAssembler:
             return []
         for i in owners:
             parts = self._parts[i].setdefault(key, [])
-            if len(parts) == 0:
-                self._missing[i] -= 1
             parts.append(value)
+            if len(parts) == self._parts_per_key[i]:
+                # every branch of the group has delivered this field
+                self._missing[i] -= 1
             self.n_buffered_fields += 1
         self.max_buffered_fields = max(self.max_buffered_fields, self.n_buffered_fields)
         return self._release()
@@ -149,50 +147,54 @@ def whole_unit_fields(fields: dict) -> Iterator:
 # -- the per-field seam (polytope-feature ``get_iter``) ----------------------------------------------
 
 
-def _field_path_and_values(item) -> tuple:
-    path = getattr(item, "path", None)
-    values = getattr(item, "values", None)
-    if path is None and isinstance(item, tuple) and len(item) == 2:
-        path, values = item
-    if not isinstance(path, Mapping):
-        raise TypeError(
-            "datacube.get_iter must yield (path mapping, values) pairs or objects with .path/.values, "
-            f"got {type(item).__name__}"
-        )
-    return path, values
+def field_key_sequence(info, key_axes) -> list:
+    """The key of every item ``get_iter`` yields for a tree, in order.
+
+    One item per (branch, field): the branches in tree order, a branch's fields in the cartesian
+    product of its compressed axes (outermost axis first) -- the layout
+    :func:`~polytope_mars.extract.collect_field_values` splits a filled leaf's ``result`` into.
+    """
+    keys = []
+    for branch in info.branches:
+        axes = [a for a, _ in branch.path]
+        combos = list(np.ndindex(*[len(v) for _, v in branch.path])) if branch.path else [()]
+        for combo in combos:
+            values = {a: branch.path[i][1][j] for i, (a, j) in enumerate(zip(axes, combo))}
+            keys.append(tuple(values.get(a) for a in key_axes))
+    return keys
 
 
-def _field_values(values) -> tuple:
-    """``(float64 array, missing)`` of one field's values, as ``collect_field_values`` returns them."""
-    if values is None:
+def _field_values(leaf_values) -> tuple:
+    """``(float64 array, missing)`` of one item, as ``collect_field_values`` reports a field."""
+    if leaf_values is None:
+        return np.empty(0), True  # gribjump has no message for this field
+    arrays = [np.asarray(values, dtype=np.float64) for _, values in leaf_values]
+    if not arrays:
         return np.empty(0), True
-    if isinstance(values, (list, tuple)) and values and isinstance(values[0], (list, tuple, np.ndarray)):
-        values = np.concatenate([np.asarray(v) for v in values]) if len(values) > 1 else np.asarray(values[0])
-    arr = np.asarray(values)
-    if arr.dtype == object:
-        missing = arr.size > 0 and all(v is None for v in arr)
-        return arr.astype(np.float64), missing
-    return arr.astype(np.float64, copy=False), arr.size == 0
+    return (arrays[0] if len(arrays) == 1 else np.concatenate(arrays)), False
 
 
 def lazy_unit_fields(datacube, tree, key_axes, context=None, **kwargs) -> Iterator:
-    """``(key, (values, missing))`` per field, straight from ``datacube.get_iter`` (see the module doc).
+    """``(key, (values, missing))`` per field, straight from ``datacube.get_iter``.
 
     The seam where polytope-feature's per-field extraction plugs in: nothing of the unit beyond the
-    field in flight and the groups still incomplete is held on the Python heap.
+    field in flight and the groups still incomplete is held on the Python heap.  The keys come from
+    the tree, not from the yielded MARS path (see the module doc), and the item count is checked
+    against it.
     """
-    axes = list(key_axes)
-    for item in datacube.get_iter(tree, context, **kwargs):
-        path, values = _field_path_and_values(item)
-        key = tuple(_axis_value(path, axis) for axis in axes)
-        yield key, _field_values(values)
+    from .coverage_plan import analyse_tree
+
+    expected = field_key_sequence(analyse_tree(tree), list(key_axes))
+    n = 0
+    for _path, leaf_values in datacube.get_iter(tree, context, **kwargs):
+        if n >= len(expected):
+            raise RuntimeError(f"datacube.get_iter yielded more than the {len(expected)} fields of the unit")
+        yield expected[n], _field_values(leaf_values)
+        n += 1
+    if n != len(expected):
+        raise RuntimeError(f"datacube.get_iter yielded {n} of the unit's {len(expected)} fields")
 
 
-def _axis_value(path: Mapping, axis: str) -> Optional[Any]:
-    value = path.get(axis)
-    return value
-
-
-def unit_field_source(datacube) -> str:
-    """``"get_iter"`` when the datacube delivers fields one at a time, else ``"get"``."""
-    return "get_iter" if has_per_field_consumption(datacube) else "get"
+def unit_field_source(datacube, enabled: bool = True) -> str:
+    """``"get_iter"`` when the datacube can stream fields and that is enabled, else ``"get"``."""
+    return "get_iter" if enabled and has_per_field_consumption(datacube) else "get"

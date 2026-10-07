@@ -89,6 +89,12 @@ class LimitsConfig(ConfigModel):
     safety_factor: float = 1.5
     #: hard cap on the values of one ``datacube.get``, independent of the estimate and of the budget
     max_values_per_unit: Optional[int] = 8_000_000
+    #: consume a unit's fields one at a time (``FDBDatacube.get_iter``) instead of fetching the whole
+    #: unit with ``FDBDatacube.get``: the Python side then holds one field group instead of the whole
+    #: unit, so units may be as large as gribjump's own buffer allows.  Off until the polytope-feature
+    #: API is released and ``bytes_per_value`` re-calibrated against it; ignored by a datacube that
+    #: has no ``get_iter`` (:mod:`polytope_mars.field_stream`).
+    per_field_consumption: bool = False
     #: Deprecated alias of ``bytes_per_value`` (its ``default`` entry).
     bytes_per_point: Optional[BytesPerPointConfig] = None
 

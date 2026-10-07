@@ -130,6 +130,42 @@ SCENARIOS = {
     ),
 }
 
+EUROPE_BBOX = bbox([[72, -25], [34, 45]])
+#: ~480k HEALPix-1024 points: the climate-dt Europe box that was OOM-killed on LUMI at 24 fields
+EUROPE_BBOX_NARROW = bbox([[72, -25], [34, 10]])
+DANUBE_BBOX = bbox([[50.25, 8.15], [42.08, 29.73]])
+GLOBAL_BBOX = bbox([[90, -180], [-90, 180]])
+
+
+def cdt(feature, **keys):
+    return {**CDT, "date": "20200101", "time": "0000", "param": "167", "feature": feature, **keys}
+
+
+def od(feature, **keys):
+    return {**OD, "date": "20240101", "time": "0000", "step": "0", "param": "167", "feature": feature, **keys}
+
+
+def efas(feature, **keys):
+    return {**EFAS, "step": "6", "param": "240023", "feature": feature, **keys}
+
+
+# -- ranges: points and gribjump index ranges of one field, and what they cost in gribjump's buffer
+RANGE_SCENARIOS = {
+    "ranges_healpix1024_global_bbox": ("healpix_1024", cdt(GLOBAL_BBOX)),
+    "ranges_o1280_global_bbox": ("octahedral_1280", od(GLOBAL_BBOX)),
+    "ranges_healpix1024_europe_bbox": ("healpix_1024", cdt(EUROPE_BBOX_NARROW)),
+    "ranges_o1280_europe_bbox": ("octahedral_1280", od(EUROPE_BBOX)),
+    "ranges_efas_danube_bbox": ("efas_local_regular", efas(DANUBE_BBOX)),
+}
+
+#: calibration of ``limits.bytes_per_value``: one ``datacube.get`` + block emission of n fields
+CALIBRATE_SHAPES = {
+    "efas_danube": ("efas_local_regular", DANUBE_BBOX, "step", ["6", "12", "18", "24", "30", "36", "42", "48"]),
+    "healpix1024_europe": ("healpix_1024", EUROPE_BBOX_NARROW, "time", [f"{h:02d}00" for h in range(24)]),
+    "o1280_europe": ("octahedral_1280", EUROPE_BBOX, "step", [str(s) for s in range(0, 72, 6)]),
+}
+CALIBRATE_FIELDS = (1, 4, 12)
+
 DANUBE_10_STEPS = {**EFAS, "step": "6/to/60/by/6", "param": "240023", "feature": bbox([[50.25, 8.15], [42.08, 29.73]])}
 # -- stream: extract_stream, output discarded; (kind, grid, request, memory_budget_bytes)
 STREAM_SCENARIOS = {
@@ -324,7 +360,130 @@ def run_stream(grid, request, budget):
     }
 
 
-def run_one(name, budget="default"):
+def run_ranges(grid, request):
+    """Points and gribjump index ranges of one field, and what they cost in gribjump's buffer.
+
+    No extraction: the counts come from the prepared tree exactly as the planner reads them
+    (``polytope_mars.grid_ranges``), and the bytes from ``polytope_mars.sizing``.
+    """
+    from polytope_mars.coverage_plan import analyse_tree
+    from polytope_mars.extract import spatial_counts
+    from polytope_mars.grid_ranges import RangeCounter
+    from polytope_mars.sizing import UnitSizing
+
+    fake, api, preq = _prepare(grid, request)
+    rss0 = rss()
+    t0 = time.perf_counter()
+    tree = api.slice(api.datacube, preq.polytopes())
+    t_slice = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    tree = api.datacube.prepare(tree)
+    t_prepare = time.perf_counter() - t0
+    rss_prepared = rss()
+
+    info = analyse_tree(tree)
+    counter = RangeCounter()
+    t0 = time.perf_counter()
+    counts = spatial_counts(info, [0])
+    range_counts = counter.counts(info, [0], counts)
+    t_count = time.perf_counter() - t0
+    points, ranges = int(sum(counts)), int(sum(range_counts))
+
+    sizing = UnitSizing()
+    values_bytes = 8 * points
+    mask_bytes = points // 8
+    range_bytes = sizing.bytes_per_range * ranges
+    return {
+        "lat_nodes": len(counts),
+        "points": points,
+        "ranges": ranges,
+        "points_per_range": round(points / max(ranges, 1), 2),
+        "gribjump_mb": round((values_bytes + mask_bytes + range_bytes) / 1e6, 1),
+        "gribjump_b_per_value": round((values_bytes + mask_bytes + range_bytes) / max(points, 1), 1),
+        "range_term_mb": round(range_bytes / 1e6, 1),
+        "python_mb": round(sizing.bytes_per_value * points / 1e6, 1),
+        "cross_node_duplicates": counter.cross_node_duplicates,
+        "slice_s": round(t_slice, 1),
+        "prepare_s": round(t_prepare, 1),
+        "count_s": round(t_count, 1),
+        "rss_before_mib": round(rss0 / MiB, 1),
+        "rss_prepared_mib": round(rss_prepared / MiB, 1),
+        "peak_rss_mib": round(peak_rss() / MiB, 1),
+    }
+
+
+def run_calibrate(name, n_fields):
+    """Peak RSS growth of one ``datacube.get`` + block emission of ``n_fields`` fields of one shape.
+
+    The budget and the cap are set out of the way so that the whole request is one unit (one call,
+    all fields), and the peak is measured from the moment the tree is sliced and prepared: what is
+    left is what the unit itself costs on the Python heap, which is what ``limits.bytes_per_value``
+    has to cover.  Re-run after polytope-feature changes how results are consumed
+    (``values_flat``, ``get_iter``).
+    """
+    from polytope_mars.api import PolytopeMars
+    from polytope_mars.extract import BlockExtractor
+    from polytope_mars.testing import fake_gribjump_config_dict, make_fake_gribjump
+
+    grid, feature, axis, values = CALIBRATE_SHAPES[name]
+    builder = {"healpix_1024": cdt, "octahedral_1280": od, "efas_local_regular": efas}[grid]
+    request = builder(feature, **{axis: "/".join(values[:n_fields])})
+    fake = make_fake_gribjump(grid)
+    config = fake_gribjump_config_dict(grid, request)
+    config["limits"] = {"memory_budget_bytes": 10**12, "max_values_per_unit": None}
+    pm = PolytopeMars(config, datacube_factory=lambda: fake)
+
+    marks = {}
+    original = BlockExtractor._slice_and_prepare
+
+    def spy(self):
+        api, tree = original(self)
+        marks["rss"] = rss()
+        reset_peak_rss()
+        marks["peak0"] = peak_rss()
+        return api, tree
+
+    BlockExtractor._slice_and_prepare = spy
+    try:
+        t0 = time.perf_counter()
+        n_bytes = max_chunk = 0
+        for chunk in pm.extract_stream(copy.deepcopy(request)):
+            n_bytes += len(chunk)
+            max_chunk = max(max_chunk, len(chunk))
+        t_stream = time.perf_counter() - t0
+    finally:
+        BlockExtractor._slice_and_prepare = original
+    peak = peak_rss()
+    n_vals = fake.n_values
+    points = n_vals // max(n_fields, 1)
+    growth = peak - marks["rss"]
+    return {
+        "shape": name,
+        "fields": n_fields,
+        "points": points,
+        "values": n_vals,
+        "n_ranges": pm.timings["n_ranges"],
+        "n_units": pm.timings["n_units"],
+        "estimated_unit_mb": round(pm.timings["estimated_unit_bytes_max"] / 1e6, 1),
+        "output_mib": round(n_bytes / MiB, 1),
+        "max_chunk_mib": round(max_chunk / MiB, 2),
+        "max_chunk_b_per_point": round(max_chunk / max(points, 1), 1),
+        "stream_s": round(t_stream, 1),
+        "rss_after_prepare_mib": round(marks["rss"] / MiB, 1),
+        "peak_rss_mib": round(peak / MiB, 1),
+        "growth_mb": round(growth / 1e6, 1),
+        "python_b_per_value": round(growth / max(n_vals, 1), 1),
+        "max_rss_mb": round(pm.timings["max_rss_bytes"] / 1e6, 1),
+    }
+
+
+def run_one(name, budget: object = "default"):
+    if name in RANGE_SCENARIOS:
+        grid, request = RANGE_SCENARIOS[name]
+        return run_ranges(grid, request)
+    if name.startswith("calibrate_"):
+        shape, _, fields = name[len("calibrate_") :].rpartition("_")  # noqa: E203
+        return run_calibrate(shape, int(fields))
     if name in STREAM_SCENARIOS:
         kind, grid, request, default_budget = STREAM_SCENARIOS[name]
         return run_stream(grid, request, default_budget if budget == "default" else budget)
@@ -382,6 +541,35 @@ TABLE_COLUMNS = {
         "peak_bytes_per_value",
         "timings_ms",
     ],
+    "ranges": [
+        "lat_nodes",
+        "points",
+        "ranges",
+        "points_per_range",
+        "gribjump_mb",
+        "gribjump_b_per_value",
+        "range_term_mb",
+        "python_mb",
+        "cross_node_duplicates",
+        "slice_s",
+        "prepare_s",
+        "count_s",
+        "peak_rss_mib",
+    ],
+    "calibrate": [
+        "fields",
+        "points",
+        "values",
+        "n_ranges",
+        "estimated_unit_mb",
+        "max_chunk_mib",
+        "max_chunk_b_per_point",
+        "stream_s",
+        "rss_after_prepare_mib",
+        "peak_rss_mib",
+        "growth_mb",
+        "python_b_per_value",
+    ],
 }
 
 
@@ -404,15 +592,20 @@ def _table(rows, cols):
 
 def main(argv):
     if argv[:1] == ["--run"]:
-        budget = "default"
+        budget: object = "default"
         if "--budget" in argv:
             value = argv[argv.index("--budget") + 1]
-            budget = None if value == "none" else int(value)
+            try:
+                budget = None if value == "none" else int(value)
+            except ValueError:
+                raise SystemExit(f"--budget takes a byte count or 'none', got {value!r}") from None
         print(json.dumps(run_one(argv[1], budget)), flush=True)
         # Skip interpreter teardown: the pygribjump/eckit libraries can segfault at exit.
         os._exit(0)
     groups = argv or ["slice", "get", "e2e", "stream"]
     kinds = {name: spec[0] for name, spec in {**SCENARIOS, **STREAM_SCENARIOS}.items()}
+    kinds.update({name: "ranges" for name in RANGE_SCENARIOS})
+    kinds.update({f"calibrate_{shape}_{n}": "calibrate" for shape in CALIBRATE_SHAPES for n in CALIBRATE_FIELDS})
     results = {}
     for name, kind in kinds.items():
         if kind not in groups:
@@ -424,7 +617,8 @@ def main(argv):
         results[name] = _parse_result(proc)
         results[name]["wall_s"] = round(time.perf_counter() - t0, 1)
         print(f"{name}: {results[name]}", file=sys.stderr, flush=True)
-    by_kind = {k: [(n, results[n]) for n in results if kinds[n] == k] for k in ("slice", "get", "e2e", "stream")}
+    order = ("slice", "get", "e2e", "stream", "ranges", "calibrate")
+    by_kind = {k: [(n, results[n]) for n in results if kinds[n] == k] for k in order}
     for kind, rows in by_kind.items():
         if rows:
             print(_table(rows, TABLE_COLUMNS[kind]) + "\n")

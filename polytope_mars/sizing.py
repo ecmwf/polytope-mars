@@ -27,15 +27,16 @@ covers depends on how the unit's results are consumed:
   they arrive and each group's blocks are emitted and freed as soon as the group is complete, so
   the term applies to one group (:mod:`polytope_mars.field_stream`).
 
-A unit of ``k`` groups is planned when all of
+A unit of ``k`` groups is planned when
 
-    ``buffer_bytes(unit) x safety_factor <= memory_budget_bytes``
+    ``buffer_bytes(unit) + bytes_per_value x python_values <= memory_budget_bytes``
     ``n_fields x n_points <= max_values_per_unit``
-    ``python_values x bytes_per_value <= memory_budget_bytes``
 
-hold, where ``python_values`` is the unit's values on the whole-unit path and one group's values on
-the per-field path.  A single group that does not fit is fetched in latitude bands instead
-(:meth:`UnitSizing.band_points`).
+where ``python_values`` is the unit's values on the whole-unit path and one group's values on the
+per-field path.  The two terms are added because they are resident at the same time: gribjump's
+buffer is only released when the call returns, by which time the Python copies exist.  (Adding them
+is stricter than asking each term to fit on its own.)  A single group that does not fit is fetched
+in latitude bands instead (:meth:`UnitSizing.band_points`).
 
 The sizing is a pure function of (request, config, prepared tree).  Nothing here reads the process
 RSS, a cgroup or any other runtime signal; ``timings`` *reports* the estimate and the observed peak
@@ -141,10 +142,12 @@ class UnitSizing:
         if self.max_values_per_unit is not None:
             limits.append(self.max_values_per_unit // group_values)
         if self.budget is not None:
-            per_group = self.buffer_bytes(group_fields, n_points, n_ranges)
-            limits.append(_floor_div(self.budget, max(per_group, 1)))
-            if not self.per_field_consumption:
-                limits.append(_floor_div(self.budget, self.python_bytes(group_values)))
+            per_group = max(self.buffer_bytes(group_fields, n_points, n_ranges), 1)
+            if self.per_field_consumption:
+                # the Python side holds one group however many groups the call fetches
+                limits.append(_floor_div(self.budget - self.python_bytes(group_values), per_group))
+            else:
+                limits.append(_floor_div(self.budget, per_group + self.python_bytes(group_values)))
         if self.per_field_consumption:
             limits.append(MAX_FIELDS_PER_UNIT // group_fields)
         elif self.budget is None:
@@ -166,9 +169,9 @@ class UnitSizing:
         n_fields = max(1, n_fields)
         allowed = []
         if self.budget is not None:
-            allowed.append(_floor_div(self.budget, self.bytes_per_value * (n_fields + 1)))
-            per_point = GRIBJUMP_BYTES_PER_VALUE + 0.125 + self.bytes_per_range * max(ranges_per_point, 0.0)
-            allowed.append(_floor_div(self.budget, per_point * max(self.safety_factor, 0.0)))
+            buffer_point = GRIBJUMP_BYTES_PER_VALUE + 0.125 + self.bytes_per_range * max(ranges_per_point, 0.0)
+            per_point = buffer_point * max(self.safety_factor, 0.0) + self.bytes_per_value * (n_fields + 1)
+            allowed.append(_floor_div(self.budget, per_point))
         if self.max_values_per_unit is not None:
             allowed.append(self.max_values_per_unit // n_fields)
         return max(1, min(allowed)) if allowed else UNLIMITED
