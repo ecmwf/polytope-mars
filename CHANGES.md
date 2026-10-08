@@ -411,3 +411,100 @@ request at one field per call passed.  Two things were missing from the model:
   `per_field_consumption` on, including missing fields in both reporting modes.
 - Measurements and the calibration of `bytes_per_value`: MEASUREMENTS.md (`python tools/measure_memory.py
   ranges calibrate`, re-runnable).
+
+# Phase 2f: per-field consumption by default, and a unit sizing that pays for one call
+
+## Why
+
+Measured on the Bologna dev cluster with the Phase 2d build: the EFAS Volga 4-param ensemble
+(609,851 points x 12,000 fields, 1,131 index ranges per field) was planned into units of **12
+fields**, i.e. ~1,000 gribjump calls at ~0.4-0.5 s of fixed cost each, although the exact C++ reply
+of one field is only ~5.1 MB. Two reasons, both in the model rather than in the data:
+
+- `limits.per_field_consumption` was **off**, so the Python-side term was charged for every field of
+  the call (`bytes_per_value x n_fields x n_points`) even though the extractor already emits and
+  frees a group at a time;
+- `bytes_per_value` was 128 B/value, a constant calibrated on a *single-field* call, where it stands
+  in for the request side (`FDBDatacube` builds one Python `int` per point before fetching
+  anything). Paid per value of a 12-field call, that is ~10x what the call actually holds.
+
+Decisions (project owner): fe pods go to 3 GiB, so `memory_budget_bytes` is 1.5 GiB; batch far more
+fields per call; keep the 1,024-field request-list cap until the gribjump team confirms how the
+union of a call's requests scales on their side, but make it configurable.
+
+## Behaviour changes
+
+- **`limits.per_field_consumption` defaults to `true`.** A multi-group unit is fetched through
+  `FDBDatacube.get_iter` and consumed field by field, so the Python side holds the groups still
+  incomplete (one group when the group axes are outermost) instead of the whole call.
+  `timings["unit_source"]` reports `get_iter`; the whole-unit `FDBDatacube.get` stays as the opt-out
+  (`per_field_consumption: false`) and is still used for single-group units, for latitude bands and
+  for point features. A datacube without `get_iter` falls back to it silently.
+- **Unit sizing** (`polytope_mars.sizing.UnitSizing`). A unit of `k` groups is planned when
+
+      buffer_cpp(unit) x safety_factor
+        + bytes_per_point_call x n_points
+        + bytes_per_value x python_values
+        + fragment_bytes  <=  memory_budget_bytes
+
+  with `buffer_cpp(unit) = n_fields x (8 x n_points + n_points/8 + bytes_per_range x n_ranges)` (the
+  exact Phase 2d gribjump term, the only one the safety factor multiplies), `python_values` the
+  values the Python side holds at once (**one group** on the per-field path, the whole unit on the
+  opt-out), and `fragment_bytes = 2 x` the encoder's `max_fragment_bytes` (2 x 8 MiB for covjsonkit,
+  read off the encoder in use). The two hard caps are `max_fields_per_call` and
+  `max_values_per_unit`. Without a budget a unit is one field group, as in Phase 2.
+- **`limits`**: `bytes_per_point_call` (**new**, 128: the request-side grid indices, paid once per
+  call however many fields it asks for), `bytes_per_value` 128 -> **32** (now only the values held
+  at once), `max_values_per_unit` 8,000,000 -> **256,000,000** (~2 GB of gribjump buffer at
+  8 B/value: a backstop, no longer binding before the budget), `max_fields_per_call` (**new**, 1024:
+  what used to be the hard-wired `tree_units.MAX_GROUPS_PER_UNIT`, now counted in fields and
+  configurable). `bytes_per_range` (96) and `safety_factor` (1.5) are unchanged. Both new constants
+  are calibrated in MEASUREMENTS.md.
+- **The cap is counted in fields, not groups.** `MAX_GROUPS_PER_UNIT` is gone: a unit may hold up to
+  `max_fields_per_call` fields, so a 4-param group counts four times. The deployed value is
+  unchanged for single-param requests (1024).
+- **Latitude bands** are sized by the same terms (a band is one field of one call plus one band of
+  every field of the group, the band-0 peek holding them all, plus the fragments), so lowering
+  `bytes_per_value` does not silently make bands larger than the budget.
+- **`timings`**: `fields_per_unit_max` (fields one `datacube.get` asked for at most) next to
+  `groups_per_unit_max`, and a per-unit `get` histogram -- `units_get_le_1s`, `units_get_le_5s`,
+  `units_get_le_30s`, `units_get_gt_30s`, `get_ms_max` -- so Splunk can show where the get time went
+  without per-unit DEBUG lines. The INFO summary carries both. `n_units` now also counts a
+  `get_iter` pass as one unit (it is one gribjump call).
+- **Fake gribjump**: the EFAS axis table has an ensemble sub-cube (`type: pf` with `number` 1-50 and
+  the four Volga parameters), so ensemble shapes can be measured and pinned.
+
+## What polytope-config / the chart must set
+
+Only `limits.memory_budget_bytes` (half the pod's memory: **1610612736** for a 3 GiB pod). The new
+constants are defaults in code; `max_fields_per_call` is worth injecting next to the budget if the
+gribjump team asks for a different request-list size. A config that still sets the deprecated
+`limits.bytes_per_point` keeps working (its `default` entry fills `bytes_per_value`), but it should
+be removed: at 64 B/value it now *under*-sizes nothing, it only makes units smaller than they could
+be.
+
+## Verification
+
+- The golden corpus is byte-identical with per-field consumption on (the new default) and off, in
+  both missing-field reporting modes, and so are the unit- and band-invariance suites
+  (`tests/test_streaming.py`, 10 MultiPoint cases x {1, 3, all} groups per call).
+  `tests/test_field_stream.py` covers the lazy path end to end: five golden cases byte-identical,
+  the DataNotFound fallbacks (unit -> per group -> per (param, level)) in both reporting modes, and
+  **at most one group's fields alive at a time** -- every array `get_iter` hands over is
+  weak-referenced and a ten-group unit never has more than two of them alive while it streams.
+- `tests/test_unit_sizing.py`: the four terms, the per-branch request side, the planned fields per
+  call for the measured shapes at 1.5 and 1.8 GiB, the raised caps, and bands on a whole-world
+  HEALPix field.
+- `tests/test_tree_units.py::test_an_efas_ensemble_unit_batches_the_members_of_one_step`: with room
+  for two groups a call fetches both members of one step, with room for four the 2 x 2 rectangle --
+  the batching the Volga numbers rest on.
+- Measured (MEASUREMENTS.md, `python tools/measure_memory.py calibrate targets` and
+  `--run stream_healpix1024_europe_24fields_1_5GiB`): 15 calibration runs across four shapes and
+  1/4/12/48 fields per call, all below their estimate; the climate-dt HEALPix Europe box x 24 hourly
+  fields runs in **2 calls of 14 and 10 fields with a peak RSS of 1.79 GB** at a 1.5 GiB budget
+  (target: under 2.2 GB in a 3 GiB pod), output unchanged.
+- At a 1.5 GiB budget the planner gives the Volga 4-param ensemble **188 fields per call** (120
+  calls for 12,000 fields, the step-major coverage order and the product rule deciding the count)
+  and the Switzerland ensemble **1,000 fields per call** (3 calls for 3,000 fields, the per-call
+  field cap deciding). At 1.8 GiB: Volga 200 fields per call and **60 calls** (one step per call),
+  Switzerland unchanged.

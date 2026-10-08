@@ -227,3 +227,143 @@ high-resolution global grid) would therefore be emitted as a **single ~1.0 GB fr
 whatever the extraction unit size: the band only bounds what polytope-mars holds, not what the encoder
 builds per block. Values blocks are smaller (~17-20 B/value). Bounding the fragment is covjsonkit's side of
 the contract (`CovjsonStreamEncoder.encode_iter`), not polytope-mars'.
+
+# Phase 2f measurements (per-field consumption, and what one call really costs)
+
+Same machine and fake gribjump as above, `.venv` with polytope-feature `d3656bd2`
+(`FDBDatacube.get_iter`) and the Phase 2f polytope-mars. Re-runnable:
+
+    python tools/measure_memory.py ranges      # points and index ranges per field (unchanged)
+    python tools/measure_memory.py calibrate   # limits.bytes_per_point_call, limits.bytes_per_value
+    python tools/measure_memory.py targets     # what the planner does with the REQUESTS.md shapes
+    python tools/measure_memory.py --run stream_healpix1024_europe_24fields_1_5GiB   # measured peak
+
+Re-run `calibrate` after polytope-feature changes how requests are built or results consumed, and
+after covjsonkit changes `max_fragment_bytes`.
+
+## 1. What one call costs, per shape and per field count
+
+`tools/measure_memory.py calibrate`: one unit of *n* fields on the production path
+(`per_field_consumption`, `FDBDatacube.get_iter`), the budget and the caps set out of the way so
+that the whole request is one call, the peak measured from after the tree is sliced and prepared.
+`cpp MB` is the exact gribjump term of that call (`n_fields x (8 x points + points/8 + 96 x
+ranges)`, no safety factor) and `residual` what the Python terms have to cover. The EFAS shapes keep
+their group axes compressed in one branch (`request side` = per call); the HEALPix shape is
+climate-dt hourly, whose merged date/time axis gives every field its own branch (per group).
+
+| run | fields | group fields | branches | points | ranges/field | growth MB | cpp MB | residual MB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| efas_danube_1 | 1 | 1 | 1 | 634,550 | 490 | 74.2 | 5.2 | 69.0 |
+| efas_danube_4 | 4 | 1 | 1 | 634,550 | 490 | 72.7 | 20.8 | 51.9 |
+| efas_danube_12 | 12 | 1 | 1 | 634,550 | 490 | 89.7 | 62.4 | 27.3 |
+| efas_danube_48 | 48 | 1 | 1 | 634,550 | 490 | 276.8 | 249.7 | 27.0 |
+| efas_volga_4 | 4 | 4 | 1 | 609,851 | 1,131 | 64.7 | 20.3 | 44.5 |
+| efas_volga_12 | 12 | 4 | 1 | 609,851 | 1,131 | 120.5 | 60.8 | 59.8 |
+| efas_volga_48 | 48 | 4 | 1 | 609,851 | 1,131 | 425.6 | 243.1 | 182.6 |
+| healpix1024_europe_1 | 1 | 1 | 1 | 479,865 | 300,315 | 101.6 | 32.7 | 68.9 |
+| healpix1024_europe_4 | 4 | 1 | 4 | 479,865 | 300,315 | 309.7 | 130.9 | 178.8 |
+| healpix1024_europe_12 | 12 | 1 | 12 | 479,865 | 300,315 | 819.0 | 392.7 | 426.2 |
+| healpix1024_europe_48 | 48 | 1 | 48 | 479,865 | 300,315 | 2904.0 | 1571.0 | 1333.0 |
+| o1280_europe_1 | 1 | 1 | 1 | 222,960 | 1,080 | 19.6 | 1.9 | 17.7 |
+| o1280_europe_4 | 4 | 1 | 1 | 222,960 | 1,080 | 19.8 | 7.7 | 12.1 |
+| o1280_europe_12 | 12 | 1 | 1 | 222,960 | 1,080 | 28.2 | 23.0 | 5.2 |
+| o1280_europe_48 | 48 | 1 | 1 | 222,960 | 1,080 | 94.3 | 91.9 | 2.4 |
+
+Fitting ``residual = bytes_per_point_call x (points x branches) + bytes_per_value x group values
++ 16 MiB of fragments`` over all 15 runs by least squares:
+
+    bytes_per_point_call = 57.6 B/point     bytes_per_value = 16.8 B/value
+
+**Defaults: `bytes_per_point_call = 128`, `bytes_per_value = 32`** -- about twice the fit, which
+together with the safety factor on the gribjump term leaves every measured run below its
+estimate (worst margin 1.26x, on the 48-field Volga unit):
+
+| run | request points | group values | residual MB | needs B/point_call | needs B/value | estimate MB | covered |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| calibrate_efas_danube_1 | 634,550 | 634,550 | 69.0 | 50.3 | -45.7 | 126.1 | yes |
+| calibrate_efas_danube_4 | 634,550 | 634,550 | 51.9 | 23.4 | -72.6 | 149.5 | yes |
+| calibrate_efas_danube_12 | 634,550 | 634,550 | 27.3 | -15.4 | -111.4 | 212.0 | yes |
+| calibrate_efas_danube_48 | 634,550 | 634,550 | 27.0 | -15.9 | -111.9 | 492.9 | yes |
+| calibrate_efas_volga_4 | 609,851 | 2,439,404 | 44.5 | -82.5 | -20.6 | 203.3 | yes |
+| calibrate_efas_volga_12 | 609,851 | 2,439,404 | 59.8 | -57.5 | -14.4 | 264.0 | yes |
+| calibrate_efas_volga_48 | 609,851 | 2,439,404 | 182.6 | 143.9 | 36.0 | 537.5 | yes |
+| calibrate_healpix1024_europe_1 | 479,865 | 479,865 | 68.9 | 76.6 | -19.4 | 142.6 | yes |
+| calibrate_healpix1024_europe_4 | 1,919,460 | 479,865 | 178.8 | 76.4 | -174.4 | 474.2 | yes |
+| calibrate_healpix1024_europe_12 | 5,758,380 | 479,865 | 426.2 | 68.4 | -682.8 | 1358.3 | yes |
+| calibrate_healpix1024_europe_48 | 23,033,520 | 479,865 | 1333.0 | 56.5 | -3401.1 | 5336.9 | yes |
+| calibrate_o1280_europe_1 | 222,960 | 222,960 | 17.7 | -27.9 | -123.9 | 55.3 | yes |
+| calibrate_o1280_europe_4 | 222,960 | 222,960 | 12.1 | -53.0 | -149.0 | 63.9 | yes |
+| calibrate_o1280_europe_12 | 222,960 | 222,960 | 5.2 | -83.9 | -179.9 | 86.9 | yes |
+| calibrate_o1280_europe_48 | 222,960 | 222,960 | 2.4 | -96.5 | -192.5 | 190.3 | yes |
+
+- "needs B/point_call" is what the measurement would demand of that constant with the other one at
+  its default and *without* the safety factor; a negative value means the other terms already cover
+  the row. Only the 48-field Volga unit asks for more than 128 B/point (144), and the safety factor
+  covers it.
+- **The request side is paid once per spatial sub-tree, not once per call.** `FDBDatacube` builds a
+  Python `int` per point per branch and keeps them until the call returns, and the fields of a branch
+  share them. The EFAS rows (`number`/`step` compressed in one branch) therefore cost the same 50 B
+  per point at 1 and at 48 fields, while the HEALPix rows (one branch per hourly field) pay ~70 B per
+  point per field: 1.33 GB of residual for 48 fields. That is what `UnitSizing.request_bytes`
+  multiplies by the unit's branch count, and it is why a 24-hour HEALPix request is planned into
+  14-field units while a 12,000-field EFAS ensemble goes 188 fields at a time.
+- The per-value term is small and grid-independent (16.8 B/value fitted, polytope-feature measures
+  ~24 B/value for the same thing): the leaf arrays plus the float64 field copy handed to the encoder.
+  This is what per-field consumption buys -- it applies to one field group instead of to the whole
+  call.
+- `efas_danube_1`, `efas_volga_4`, `healpix1024_europe_1` and `o1280_europe_1` are single-group
+  requests, which never take the multi-group path: they are fetched with one whole-unit `get`
+  (`unit_source` = `get`) and are in the table as the one-field baseline.
+- The fake was changed in this phase to build `values_flat` in one vectorised pass instead of one
+  numpy array per index range (300,315 of them per HEALPix field). Before, that synthesis dominated
+  every HEALPix measurement; it is gone from these numbers.
+
+## 2. The requests Phase 2f has to plan well
+
+`python tools/measure_memory.py targets`: the request is sliced, prepared and planned (no data
+fetched) and its units replanned at both budgets with the deployed defaults. Points and ranges are
+per field; "fields per call" is the largest unit the planner produced.
+
+| request | groups x fields | points | ranges/field | request side | 1.5 GiB: fields/call, calls | 1.8 GiB: fields/call, calls |
+| --- | ---: | ---: | ---: | --- | ---: | ---: |
+| EFAS Volga ensemble, 4 params x 50 members x 60 steps | 3,000 x 4 | 609,851 | 1,131 | per call | **188, 120** (est. 1,601 MB) | **200, 60** (est. 1,692 MB) |
+| EFAS Switzerland ensemble, 1 param x 50 x 60 | 3,000 x 1 | 18,834 | 151 | per call | **1,000, 3** (est. 271 MB) | **1,000, 3** |
+| climate-dt HEALPix-1024 Europe box x 24 hourly | 24 x 1 | 479,865 | 300,315 | per group | **14, 2** (est. 1,579 MB) | **17, 2** (est. 1,911 MB) |
+
+- **Volga**: 188 fields per call at 1.5 GiB against the 12 fields Phase 2d planned, i.e. ~15x fewer
+  calls (~2 min of fixed cost instead of ~8 min at 0.5 s per call). The call *count* is 120 rather
+  than 12,000/188 = 64 because coverages come out (reference, step, number) -- all 50 members of a
+  step, then the next step (`tests/golden/expected/efas_bbox_ensemble.covjson`) -- and a unit must be
+  a cartesian product of the group axes, so a unit of 47 groups covers 47 of the 50 members of one
+  step and the remaining 3 go in a second call. 60 calls (one step each) need room for 50 groups =
+  200 fields, which is what the 1.8 GiB budget buys. A budget between the two does not help: the
+  next useful size after 50 groups is 100 (two whole steps).
+- **Switzerland**: the per-call field cap decides (1,024 fields), and the product rule rounds the
+  unit down to 20 steps x 50 members = 1,000 groups, so 3 calls instead of 3,000. The budget is
+  irrelevant here (271 MB of 1.5 GiB).
+- **HEALPix Europe x 24**: 14 fields per call. Every hourly field is its own branch (the merged
+  date/time axis), so this unit pays the request side 14 times -- that term, not gribjump's buffer,
+  is what bounds it.
+
+## 3. Measured peak of the HEALPix case
+
+`python tools/measure_memory.py --run stream_healpix1024_europe_24fields_1_5GiB` (the request that
+was OOM-killed on LUMI at 3 GiB with Phase 2c's 19-field units), budget 1.5 GiB:
+
+| | units (gets) | fields per unit | estimated unit MB | peak RSS | growth | wall | get / prepare / slice |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Phase 2d (whole-unit `get`) | 2 | 14 | 1,547 | 1,789 MB | 1,603 MB | 522 s | - |
+| Phase 2f (per-field `get_iter`) | 2 | 14 | 1,579 | **1,790 MB** | 1,603 MB | 511 s | 237 s / 235 s / 29 s |
+
+**1.79 GB peak against the 2.2 GB target** (3 GiB pod, 1.5 GiB budget), output byte count unchanged.
+The peak is the whole process: the sliced and prepared tree of all 24 branches and the slicing
+transients are in it, which is why it exceeds the planner's estimate for the unit alone. Half the
+wall time is `prepare` on the whole tree (11.5M grid-index lookups); preparing per unit would cut
+that, as the banded path already does per band.
+
+## 4. Largest fragment the CovJSON encoder emits per block
+
+`max_chunk_mib` of the calibration runs: **5.4-5.5 MiB** on every shape and field count, against
+covjsonkit's `max_fragment_bytes` of 8 MiB. The sizing charges `2 x max_fragment_bytes` (16.8 MB,
+one fragment being built while the previous is still referenced), which the measurements never
+approach -- unlike Phase 2d, where a coordinate block was emitted whole (17-23 MiB).
