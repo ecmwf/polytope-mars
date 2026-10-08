@@ -17,6 +17,8 @@ Groups:
 * ``stream``: peak RSS growth of ``PolytopeMars.extract_stream`` with the output discarded, for
   several ``limits.memory_budget_bytes``.  ``--budget N`` (bytes, or ``none``) overrides the budget.
 * ``ranges``: points and gribjump index ranges of one field, and what they cost in gribjump's buffer.
+* ``tree``: what a prepared tree costs resident with the spatial fold off and on (its arrays are
+  16 + 8 B/point per sub-tree against the row tree's ~9 B/point).
 * ``calibrate``: peak of one unit of n fields on the per-field path, against the exact gribjump
   term, plus the least-squares fit of ``limits.bytes_per_point_call`` and ``limits.bytes_per_value``.
 * ``targets``: what the planner does with the requests of REQUESTS.md at the budgets under
@@ -24,6 +26,7 @@ Groups:
 """
 
 import copy
+import datetime
 import gc
 import json
 import os
@@ -206,6 +209,9 @@ RANGE_SCENARIOS = {
     "ranges_healpix1024_europe_narrow_bbox": ("healpix_1024", cdt(EUROPE_BBOX_NARROW)),
     "ranges_o1280_europe_bbox": ("octahedral_1280", od(EUROPE_BBOX)),
     "ranges_efas_danube_bbox": ("efas_local_regular", efas(DANUBE_BBOX)),
+    "ranges_efas_volga_polygon": ("efas_local_regular", efas(VOLGA_POLYGON)),
+    "ranges_efas_switzerland_polygon": ("efas_local_regular", efas(SWITZERLAND_POLYGON)),
+    "ranges_efas_whole_domain_bbox": ("efas_local_regular", efas(bbox([[72.24, -25.24], [22.76, 50.24]]))),
 }
 
 #: calibration of ``limits.bytes_per_point_call`` and ``limits.bytes_per_value``: one unit of n
@@ -313,8 +319,85 @@ TARGET_SCENARIOS = {
     "targets_healpix1024_europe_24h": ("healpix_1024", HEALPIX_EUROPE_24H, BUDGETS),
 }
 
+#: the polygon of `fe-oom-climate-dt-polygon-2027-hourly-year` (polytope-config
+#: `location/lumi/requests.heavy-fe.jsonc`): ~2.5k HEALPix-1024 points, every hour of a year.  A
+#: climate-dt *polygon* request has its date and time axes unmerged and both compressed, so all
+#: 8,760 hourly fields share **one** spatial sub-tree
+CDT_YEAR_POLYGON = {
+    "type": "polygon",
+    "shape": [
+        [0.014869101089765205, 42.93374856181829],
+        [3.3855298642355875, 42.93374856181829],
+        [3.3855298642355875, 40.465083525508696],
+        [0.014869101089765205, 40.465083525508696],
+        [0.014869101089765205, 42.93374856181829],
+    ],
+}
+#: whole-world and whole-domain single fields: the largest requests in the corpus (DESIGN 2.16)
+WHOLE_WORLD_HEALPIX = {**CDT, "date": "20200101", "time": "0000", "param": "167", "feature": GLOBAL_BBOX}
+EFAS_WHOLE_DOMAIN = {**EFAS, "step": "6", "param": "240023", "feature": bbox([[72.24, -25.24], [22.76, 50.24]])}
+
+
+#: the same rectangle as a bounding box: a box keeps climate-dt's merged date/time axis, which puts
+#: every hour in its own branch -- 8,760 spatial sub-trees of one field each, the shape that pays most
+#: for the fold's arrays
+CDT_YEAR_BBOX = bbox([[42.93374856181829, 0.014869101089765205], [40.465083525508696, 3.3855298642355875]])
+
+
+def dates_from(n_days: int) -> list:
+    """``n_days`` consecutive dates from 2020-01-01, as the fake's axis values."""
+    return [(datetime.date(2020, 1, 1) + datetime.timedelta(days=n)).strftime("%Y%m%d") for n in range(n_days)]
+
+
+def cdt_hourly(feature, n_days: int) -> dict:
+    """The hourly-year climate-dt request of REQUESTS.md over ``n_days`` days (24 fields each)."""
+    dates = dates_from(n_days)
+    return {
+        **CDT,
+        "date": f"{dates[0]}/to/{dates[-1]}",
+        "time": "/".join(f"{h:02d}00" for h in range(24)),
+        "param": "167",
+        "feature": feature,
+    }
+
+
+def dated_axes(grid: str, n_days: int) -> list:
+    """The fake's axis table with ``n_days`` dates on every sub-cube that has a date axis."""
+    from polytope_mars.testing import default_axes
+
+    axes = default_axes(grid)
+    for cube in axes:
+        if "date" in cube:
+            cube["date"] = dates_from(n_days)
+    return axes
+
+
+#: days of the hourly climate-dt scenarios below.  A whole year (8,760 branches) does not fit this
+#: machine: *slicing* 8,760 branches of a box peaks over 5 GB (~220 B/point, the slicer's own cost,
+#: nothing to do with the fold), so the shape is measured over 30 days (720 branches) and scales
+#: linearly in the branch count.
+HOURLY_DAYS = 30
+
+#: (grid, request, bulk, days of dates for the fake) -- a prepared tree's cost, fold off and on
+TREE_SCENARIOS = {
+    "tree_healpix1024_europe_24h_fold_off": ("healpix_1024", HEALPIX_EUROPE_24H, False, None),
+    "tree_healpix1024_europe_24h_fold_on": ("healpix_1024", HEALPIX_EUROPE_24H, True, None),
+    "tree_cdt_hourly_polygon_fold_off": (
+        "healpix_1024",
+        cdt_hourly(CDT_YEAR_POLYGON, HOURLY_DAYS),
+        False,
+        HOURLY_DAYS,
+    ),
+    "tree_cdt_hourly_polygon_fold_on": ("healpix_1024", cdt_hourly(CDT_YEAR_POLYGON, HOURLY_DAYS), True, HOURLY_DAYS),
+    "tree_cdt_hourly_bbox_fold_off": ("healpix_1024", cdt_hourly(CDT_YEAR_BBOX, HOURLY_DAYS), False, HOURLY_DAYS),
+    "tree_cdt_hourly_bbox_fold_on": ("healpix_1024", cdt_hourly(CDT_YEAR_BBOX, HOURLY_DAYS), True, HOURLY_DAYS),
+}
+
 STREAM_SCENARIOS = {
     "stream_healpix1024_europe_24fields_1_5GiB": ("stream", "healpix_1024", HEALPIX_EUROPE_24H, 3 * 1024**3 // 2),
+    # the two largest single fields of the corpus, each whole in one call at the deployed budget
+    "stream_healpix1024_whole_world_1_5GiB": ("stream", "healpix_1024", WHOLE_WORLD_HEALPIX, 3 * 1024**3 // 2),
+    "stream_efas_whole_domain_1_5GiB": ("stream", "efas_local_regular", EFAS_WHOLE_DOMAIN, 3 * 1024**3 // 2),
     "stream_efas_danube_40steps_1GiB": ("stream", "efas_local_regular", DANUBE_40_STEPS, 1024**3),
     "stream_efas_danube_10steps_budget200MB": ("stream", "efas_local_regular", DANUBE_10_STEPS, 200_000_000),
     "stream_efas_danube_10steps_budget20MB": ("stream", "efas_local_regular", DANUBE_10_STEPS, 20_000_000),
@@ -355,24 +438,78 @@ def reset_peak_rss():
 
 
 def tree_stats(tree):
-    """(latitude nodes, spatial points, leaf values) of a polytope request tree."""
-    from polytope_feature.datacube.tensor_index_tree import MergedTensorIndexNode
+    """(spatial nodes, spatial points, result values) of a polytope request tree.
 
-    n_lat = n_pts = n_vals = 0
+    A prepared tree holds one array-backed bulk node per spatial sub-tree (``bulk_grid_leaves``); with
+    the fold off it holds one latitude node per grid row, each with its longitude leaves.
+    """
+    from polytope_feature.datacube.tensor_index_tree import (
+        BulkMergedTensorIndexNode,
+        MergedTensorIndexNode,
+    )
+
+    n_spatial = n_pts = n_vals = 0
     stack = [tree]
     while stack:
         node = stack.pop()
+        if isinstance(node, BulkMergedTensorIndexNode):
+            n_spatial += 1
+            n_pts += node.point_count
+            n_vals += sum(len(values) for values in node.result)
+            continue
         if isinstance(node, MergedTensorIndexNode):
+            n_spatial += 1
             n_pts += 1
             n_vals += len(node.result)
             continue
         if node.axis.name == "latitude":
-            n_lat += 1
+            n_spatial += 1
         if not node.children:
             n_pts += len(node.values)
             n_vals += len(node.result)
         stack.extend(node.children)
-    return n_lat, n_pts, n_vals
+    return n_spatial, n_pts, n_vals
+
+
+def _array_bytes(obj, seen: set) -> int:
+    """Bytes ``obj`` owns: a numpy array's buffer (counted once per base), a container's items."""
+    import numpy as np
+
+    if isinstance(obj, np.ndarray):
+        base = obj.base if obj.base is not None else obj
+        if id(base) in seen:
+            return 0  # a view (eg. a bulk grid node's lon_values) or an array already counted
+        seen.add(id(base))
+        nbytes: int = getattr(base, "nbytes", 0)
+        return nbytes
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        return sys.getsizeof(obj) + sum(_array_bytes(item, seen) for item in obj)
+    if obj is None:
+        return 0
+    return sys.getsizeof(obj)
+
+
+def tree_bytes(tree) -> int:
+    """Bytes the tree itself holds: every node's shell and dict plus the arrays it owns.
+
+    An estimate (``sys.getsizeof`` for the Python objects, ``nbytes`` for the arrays, views counted
+    once), to be read next to the measured RSS: it says *where* a tree's memory is.
+    """
+    seen: set = set()
+    total = 0
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        total += sys.getsizeof(node) + sys.getsizeof(getattr(node, "__dict__", {}))
+        for name in ("values", "indexes", "coordinates", "lat_values", "tag_ids", "tag_sets", "result"):
+            total += _array_bytes(getattr(node, name, None), seen)
+        children = getattr(node, "children", ())
+        total += sys.getsizeof(children)
+        stack.extend(children)
+    return total
 
 
 def datacube_of(api) -> Any:
@@ -383,7 +520,13 @@ def datacube_of(api) -> Any:
     return datacube
 
 
-def _prepare(grid, request):
+def _prepare(grid, request, bulk=True, axes=None):
+    """``(fake, api, preq)``: everything ``PolytopeMars`` does up to (not including) the slice.
+
+    The ``Polytope`` is built exactly as :meth:`BlockExtractor._slice` builds it -- merged union rows
+    and, unless ``bulk`` is false, one bulk node per spatial sub-tree -- so a measurement taken here
+    is a measurement of the production path.
+    """
     from polytope_feature.polytope import Polytope, Request
 
     from polytope_mars.api import PolytopeMars, features
@@ -391,7 +534,7 @@ def _prepare(grid, request):
     from polytope_mars.testing import fake_gribjump_config_dict, make_fake_gribjump
 
     request = copy.deepcopy(request)
-    fake = make_fake_gribjump(grid)
+    fake = make_fake_gribjump(grid, axes=dated_axes(grid, axes) if isinstance(axes, int) else axes)
     pm = PolytopeMars(fake_gribjump_config_dict(grid, request), datacube_factory=lambda: fake)
     conf = cast(PolytopeMarsConfig, pm.conf)
     feature_config = request.pop("feature")
@@ -400,7 +543,10 @@ def _prepare(grid, request):
     request = feature.parse(request, dict(feature_config))
     shapes = pm._create_base_shapes(request, feature_type) + feature.get_shapes()
     preq = Request(*shapes)
-    api = Polytope(datacube=fake, options=conf.options.model_dump())
+    options = conf.options.model_dump()
+    options["bulk_grid_leaves"] = bulk
+    api = Polytope(datacube=fake, options=options)
+    api._merge_union_rows = True
     # Polytope.retrieve minus the nearest-point bookkeeping (no Point shapes here) and the get.
     datacube_of(api).check_branching_axes(preq)
     api.switch_polytope_dim(preq)
@@ -414,12 +560,12 @@ def run_slice_or_get(kind, grid, request):
     tree = api.slice(api.datacube, preq.polytopes())
     t_slice = time.perf_counter() - t0
     rss1 = rss()
-    n_lat, n_pts, _ = tree_stats(tree)
+    n_spatial, n_pts, _ = tree_stats(tree)
     out = {
         "slice_s": round(t_slice, 2),
         "rss_before_mib": round(rss0 / MiB, 1),
         "rss_after_slice_mib": round(rss1 / MiB, 1),
-        "lat_nodes": n_lat,
+        "spatial_nodes": n_spatial,
         "tree_points": n_pts,
         "slice_bytes_per_point": round((rss1 - rss0) / max(n_pts, 1), 1),
     }
@@ -503,10 +649,10 @@ def run_stream(grid, request, budget):
         "n_groups": pm.timings["n_groups"],
         "n_units": pm.timings["n_units"],
         "groups_per_unit_max": pm.timings["groups_per_unit_max"],
-        "n_bands": pm.timings["n_bands"],
+        "n_spatial_subtrees": pm.timings["n_spatial_subtrees"],
         "estimated_unit_mb": round(pm.timings["estimated_unit_bytes_max"] / 1e6, 1),
         "n_ranges": pm.timings["n_ranges"],
-        "prepare_mode": pm.timings["prepare_mode"],
+        "fields_per_unit_max": pm.timings["fields_per_unit_max"],
         "max_rss_mb": round(pm.timings["max_rss_bytes"] / 1e6, 1),
         "output_mib": round(n_bytes / MiB, 1),
         "chunks": n_chunks,
@@ -524,12 +670,12 @@ def run_stream(grid, request, budget):
 def run_ranges(grid, request):
     """Points and gribjump index ranges of one field, and what they cost in gribjump's buffer.
 
-    No extraction: the counts come from the prepared tree exactly as the planner reads them
-    (``polytope_mars.grid_ranges``), and the bytes from ``polytope_mars.sizing``.
+    No extraction: the counts come from the prepared tree's bulk spatial nodes exactly as the planner
+    reads them (``polytope_mars.bulk_tree``), and the bytes from ``polytope_mars.sizing``.
     """
+    from polytope_mars.bulk_tree import RangeCounts
     from polytope_mars.coverage_plan import analyse_tree
-    from polytope_mars.extract import spatial_counts
-    from polytope_mars.grid_ranges import RangeCounter
+    from polytope_mars.extract import spatial_counts, spatial_nodes
     from polytope_mars.sizing import UnitSizing
 
     fake, api, preq = _prepare(grid, request)
@@ -543,10 +689,11 @@ def run_ranges(grid, request):
     rss_prepared = rss()
 
     info = analyse_tree(tree)
-    counter = RangeCounter()
+    counter = RangeCounts()
     t0 = time.perf_counter()
+    nodes = spatial_nodes(info, [0])
     counts = spatial_counts(info, [0])
-    range_counts = counter.counts(info, [0], counts)
+    range_counts = [counter.of(node) for node in nodes]
     t_count = time.perf_counter() - t0
     points, ranges = sum(counts), sum(range_counts)
 
@@ -555,7 +702,7 @@ def run_ranges(grid, request):
     mask_bytes = points // 8
     range_bytes = sizing.bytes_per_range * ranges
     return {
-        "lat_nodes": len(counts),
+        "subtrees": len(counts),
         "points": points,
         "ranges": ranges,
         "points_per_range": round(points / max(ranges, 1), 2),
@@ -563,12 +710,57 @@ def run_ranges(grid, request):
         "gribjump_b_per_value": round((values_bytes + mask_bytes + range_bytes) / max(points, 1), 1),
         "range_term_mb": round(range_bytes / 1e6, 1),
         "python_mb": round(sizing.bytes_per_value * points / 1e6, 1),
-        "cross_node_duplicates": counter.cross_node_duplicates,
+        "prepared_tree_mb": round(tree_bytes(tree) / 1e6, 1),
         "slice_s": round(t_slice, 1),
         "prepare_s": round(t_prepare, 1),
         "count_s": round(t_count, 1),
         "rss_before_mib": round(rss0 / MiB, 1),
         "rss_prepared_mib": round(rss_prepared / MiB, 1),
+        "peak_rss_mib": round(peak_rss() / MiB, 1),
+    }
+
+
+def run_tree(grid, request, bulk, axes=None):
+    """What a prepared request tree costs resident, with the spatial fold off and on.
+
+    A bulk node holds ``coordinates`` (16 B/point) and ``indexes`` (8 B/point) of its sub-tree for the
+    whole request, where the row tree held ~9 B/point: on a request with thousands of sub-trees that
+    difference is the price of the fold, and this is where it is measured.  RSS is the number that
+    counts; ``tree_mb`` says where it sits (see :func:`tree_bytes`).
+    """
+    fake, api, preq = _prepare(grid, request, bulk=bulk, axes=axes)
+    gc.collect()
+    rss0 = rss()
+    reset_peak_rss()
+    t0 = time.perf_counter()
+    tree = api.slice(api.datacube, preq.polytopes())
+    t_slice = time.perf_counter() - t0
+    gc.collect()
+    rss_sliced = rss()
+    sliced_mb = tree_bytes(tree) / 1e6
+    t0 = time.perf_counter()
+    tree = datacube_of(api).prepare(tree)
+    t_prepare = time.perf_counter() - t0
+    gc.collect()
+    rss_prepared = rss()
+    n_spatial, n_pts, _ = tree_stats(tree)
+    prepared_mb = tree_bytes(tree) / 1e6
+    metrics = getattr(api.datacube, "prototype_metrics", {}) or {}
+    return {
+        "bulk": bulk,
+        "subtrees": n_spatial,
+        "points": n_pts,
+        "ranges_per_field": metrics.get("ranges_per_field"),
+        "slice_s": round(t_slice, 1),
+        "prepare_s": round(t_prepare, 1),
+        "sliced_tree_mb": round(sliced_mb, 1),
+        "tree_mb": round(prepared_mb, 1),
+        "tree_b_per_point": round(prepared_mb * 1e6 / max(n_pts, 1), 1),
+        "rss_before_mib": round(rss0 / MiB, 1),
+        "rss_sliced_mib": round(rss_sliced / MiB, 1),
+        "rss_prepared_mib": round(rss_prepared / MiB, 1),
+        "prepare_growth_mb": round((rss_prepared - rss_sliced) / 1e6, 1),
+        "prepare_growth_b_per_point": round((rss_prepared - rss_sliced) / max(n_pts, 1), 1),
         "peak_rss_mib": round(peak_rss() / MiB, 1),
     }
 
@@ -687,7 +879,7 @@ def _group_specs_of(grid, request):
 
     def spy(self, datacube, tree, info, plan, groups, specs, sizing):
         captured["specs"] = specs
-        captured["prepare_mode"] = self.counters.prepare_mode
+        captured["subtrees"] = self.counters.n_spatial_subtrees
         raise _Planned
 
     BlockExtractor._multipoint_blocks = spy
@@ -726,7 +918,12 @@ def run_targets(name):
         conf = PolytopeMarsConfig.model_validate({"limits": {"memory_budget_bytes": budget}})
         sizing = UnitSizing.from_limits(conf.limits, per_field_consumption=True)
         sized = [
-            dataclasses.replace(s, max_groups=sizing.max_unit_groups(s.n_points, s.n_fields, s.n_ranges, s.own_branch))
+            dataclasses.replace(
+                s,
+                max_groups=sizing.max_unit_groups(
+                    s.n_points, s.n_fields, s.n_ranges, n_subtrees=s.n_subtrees, own_branch=s.own_branch
+                ),
+            )
             for s in specs
         ]
         units = plan_units(sized)
@@ -737,7 +934,7 @@ def run_targets(name):
             first.n_points,
             first.n_ranges,
             group_fields=first.n_fields,
-            n_branches=groups_max if first.own_branch else 1,
+            n_branches=first.n_subtrees * (groups_max if first.own_branch else 1),
         )
         plans[f"{budget / 1024 ** 3:.2f}GiB"] = {
             "groups_per_call": groups_max,
@@ -751,8 +948,9 @@ def run_targets(name):
         "ranges": first.n_ranges,
         "fields_per_group": first.n_fields,
         "fields": len(specs) * first.n_fields,
+        "subtrees_per_group": first.n_subtrees,
+        "subtrees": captured["subtrees"],
         "plan_s": round(t_plan, 1),
-        "prepare_mode": captured["prepare_mode"],
         "request_side": "per_group" if first.own_branch else "per_call",
         "plans": plans,
         "peak_rss_mib": round(peak_rss() / MiB, 1),
@@ -763,6 +961,8 @@ def run_one(name, budget: object = "default"):
     if name in RANGE_SCENARIOS:
         grid, request = RANGE_SCENARIOS[name]
         return run_ranges(grid, request)
+    if name in TREE_SCENARIOS:
+        return run_tree(*TREE_SCENARIOS[name])
     if name in TARGET_SCENARIOS:
         return run_targets(name)
     if name in CALIBRATE_SCENARIOS:
@@ -778,7 +978,7 @@ def run_one(name, budget: object = "default"):
 
 TABLE_COLUMNS = {
     "slice": [
-        "lat_nodes",
+        "spatial_nodes",
         "tree_points",
         "slice_s",
         "rss_before_mib",
@@ -814,10 +1014,10 @@ TABLE_COLUMNS = {
         "n_groups",
         "n_units",
         "groups_per_unit_max",
-        "n_bands",
+        "fields_per_unit_max",
+        "n_spatial_subtrees",
         "estimated_unit_mb",
         "n_ranges",
-        "prepare_mode",
         "output_mib",
         "max_chunk_mib",
         "stream_s",
@@ -829,7 +1029,7 @@ TABLE_COLUMNS = {
         "timings_ms",
     ],
     "ranges": [
-        "lat_nodes",
+        "subtrees",
         "points",
         "ranges",
         "points_per_range",
@@ -837,10 +1037,26 @@ TABLE_COLUMNS = {
         "gribjump_b_per_value",
         "range_term_mb",
         "python_mb",
-        "cross_node_duplicates",
+        "prepared_tree_mb",
         "slice_s",
         "prepare_s",
         "count_s",
+        "peak_rss_mib",
+    ],
+    "tree": [
+        "bulk",
+        "subtrees",
+        "points",
+        "ranges_per_field",
+        "slice_s",
+        "prepare_s",
+        "sliced_tree_mb",
+        "tree_mb",
+        "tree_b_per_point",
+        "rss_sliced_mib",
+        "rss_prepared_mib",
+        "prepare_growth_mb",
+        "prepare_growth_b_per_point",
         "peak_rss_mib",
     ],
     "calibrate": [
@@ -865,8 +1081,8 @@ TABLE_COLUMNS = {
         "points",
         "ranges",
         "fields_per_group",
+        "subtrees_per_group",
         "request_side",
-        "prepare_mode",
         "plan_s",
         "plans",
     ],
@@ -960,6 +1176,7 @@ def main(argv):
     groups = argv or ["slice", "get", "e2e", "stream"]
     kinds = {name: spec[0] for name, spec in {**SCENARIOS, **STREAM_SCENARIOS}.items()}
     kinds.update({name: "ranges" for name in RANGE_SCENARIOS})
+    kinds.update({name: "tree" for name in TREE_SCENARIOS})
     kinds.update({name: "calibrate" for name in CALIBRATE_SCENARIOS})
     kinds.update({name: "targets" for name in TARGET_SCENARIOS})
     results = {}
@@ -973,7 +1190,7 @@ def main(argv):
         results[name] = _parse_result(proc)
         results[name]["wall_s"] = round(time.perf_counter() - t0, 1)
         print(f"{name}: {results[name]}", file=sys.stderr, flush=True)
-    order = ("slice", "get", "e2e", "stream", "ranges", "calibrate", "targets")
+    order = ("slice", "get", "e2e", "stream", "ranges", "tree", "calibrate", "targets")
     by_kind = {k: [(n, results[n]) for n in results if kinds[n] == k] for k in order}
     for kind, rows in by_kind.items():
         if not rows:

@@ -270,7 +270,8 @@ climate-dt hourly, whose merged date/time axis gives every field its own branch 
 | o1280_europe_48 | 48 | 1 | 1 | 222,960 | 1,080 | 94.3 | 91.9 | 2.4 |
 
 Fitting ``residual = bytes_per_point_call x (points x branches) + bytes_per_value x group values
-+ 16 MiB of fragments`` over all 15 runs by least squares:
+
+- 16 MiB of fragments`` over all 15 runs by least squares:
 
     bytes_per_point_call = 57.6 B/point     bytes_per_value = 16.8 B/value
 
@@ -403,3 +404,187 @@ never moved from the 528 MB the 40-field Danube unit had set on that pod.
 covjsonkit's `max_fragment_bytes` of 8 MiB. The sizing charges `2 x max_fragment_bytes` (16.8 MB,
 one fragment being built while the previous is still referenced), which the measurements never
 approach -- unlike Phase 2d, where a coordinate block was emitted whole (17-23 MiB).
+
+# Phase 3b measurements (one bulk node per spatial sub-tree, no banding)
+
+Same machine and fake gribjump as above, `.venv` with polytope-feature `6ac17964`
+(`bulk_grid_leaves`, the fold in `prepare`) and the Phase 3b polytope-mars. Re-runnable:
+
+    python tools/measure_memory.py ranges      # points and whole-field index ranges
+    python tools/measure_memory.py calibrate   # limits.bytes_per_point_call, limits.bytes_per_value
+    python tools/measure_memory.py targets     # what the planner does with the REQUESTS.md shapes
+    python tools/measure_memory.py tree        # what a prepared tree costs, fold off vs on
+    python tools/measure_memory.py --run stream_healpix1024_whole_world_1_5GiB
+    python tools/measure_memory.py --run stream_efas_whole_domain_1_5GiB
+
+## 1. Whole-field index ranges
+
+`tools/measure_memory.py ranges`: one field, the counts read off the prepared tree's bulk node the
+way the planner reads them. "per row" is the Phase 2d count of the same request (one range per run
+of consecutive indices *within a latitude row*).
+
+| field | points | ranges | per row | points per range | gribjump B/value |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| HEALPix-1024 whole world | 12,582,912 | **1** | 7,864,320 | 12,582,912 | 8.1 |
+| O1280 whole world | 6,599,680 | **1** | 2,560 | 6,599,680 | 8.1 |
+| HEALPix-1024 Europe box | 479,865 | **1,388** | 300,315 | 346 | 8.4 |
+| HEALPix-1024 Europe box, half as wide | 239,821 | **1,005** | 150,209 | 239 | 8.5 |
+| O1280 Europe box | 222,960 | **541** | 1,080 | 412 | 8.4 |
+| EFAS Danube box | 634,550 | 490 | 490 | 1,295 | 8.2 |
+| EFAS Volga polygon | 609,851 | 1,131 | 1,131 | 539 | 8.3 |
+| EFAS Switzerland polygon | 18,834 | 151 | 151 | 125 | 8.9 |
+| EFAS whole domain | 13,439,104 | 2,968 | 2,970 | 4,528 | 8.1 |
+
+(the "per row" column is the Phase 2d measurement of the same request, section 1 above; the EFAS
+shapes and the Volga/Switzerland polygons cover their rows in ascending index order, so the whole-field
+sort finds the same ranges.)
+
+The gribjump term is **8.1-8.9 B/value on every grid and shape**, against 65 B/value for the HEALPix
+Europe box in Phase 2d: the range count no longer depends on how the grid numbers its points, so it
+no longer decides how many fields a call may ask for. `bytes_per_range` (96 B) stays because the term
+is exact, but it is now 0.1 MB of the 4.0 MB a HEALPix Europe field costs. A box that covers whole
+rows is one range (the sort merges adjacent rows), which also halves the O1280 Europe count.
+
+## 2. What one call costs, per shape and per field count
+
+`tools/measure_memory.py calibrate`: one unit of *n* fields on the production path
+(`per_field_consumption`, `FDBDatacube.get_iter`), the budget and the caps set out of the way so that
+the whole request is one call, the peak measured from after the tree is sliced **and prepared**.
+`cpp MB` is the exact gribjump term of that call (`n_fields x (8 x points + points/8 + 96 x ranges)`,
+no safety factor) and `residual` what the Python terms have to cover.
+
+| run | fields | group fields | sub-trees | points | ranges/field | growth MB | cpp MB | residual MB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| efas_danube_1 | 1 | 1 | 1 | 634,550 | 490 | 20.7 | 5.2 | 15.5 |
+| efas_danube_4 | 4 | 1 | 1 | 634,550 | 490 | 40.5 | 20.8 | 19.7 |
+| efas_danube_12 | 12 | 1 | 1 | 634,550 | 490 | 80.9 | 62.4 | 18.5 |
+| efas_danube_48 | 48 | 1 | 1 | 634,550 | 490 | 266.8 | 249.7 | 17.0 |
+| efas_volga_4 | 4 | 4 | 1 | 609,851 | 1,131 | 35.0 | 20.3 | 14.8 |
+| efas_volga_12 | 12 | 4 | 1 | 609,851 | 1,131 | 104.4 | 60.8 | 43.6 |
+| efas_volga_48 | 48 | 4 | 1 | 609,851 | 1,131 | 412.4 | 243.1 | 169.3 |
+| healpix1024_europe_1 | 1 | 1 | 1 | 479,865 | 1,388 | 16.3 | 4.0 | 12.3 |
+| healpix1024_europe_4 | 4 | 1 | 4 | 479,865 | 1,388 | 26.1 | 16.1 | 10.0 |
+| healpix1024_europe_12 | 12 | 1 | 12 | 479,865 | 1,388 | 52.2 | 48.4 | 3.8 |
+| healpix1024_europe_48 | 48 | 1 | 48 | 479,865 | 1,388 | 195.5 | 193.5 | 2.0 |
+| o1280_europe_1 | 1 | 1 | 1 | 222,960 | 541 | 10.1 | 1.9 | 8.2 |
+| o1280_europe_4 | 4 | 1 | 1 | 222,960 | 541 | 16.3 | 7.5 | 8.9 |
+| o1280_europe_12 | 12 | 1 | 1 | 222,960 | 541 | 29.4 | 22.4 | 7.1 |
+| o1280_europe_48 | 48 | 1 | 1 | 222,960 | 541 | 93.4 | 89.4 | 3.9 |
+
+Fitting `residual = bytes_per_point_call x (points x sub-trees) + bytes_per_value x group values
+
+- 16 MiB of fragments` over all 15 runs by least squares:
+
+    bytes_per_point_call = -1.4 B/point     bytes_per_value = 21.2 B/value
+
+**The per-call request side is gone.** It used to be 50-77 B/point *per spatial sub-tree*
+(`FDBDatacube` building a Python `int` per point before fetching anything); the bulk node's
+coordinates and indexes are built once, in `prepare`, and the call only sorts the indexes to get its
+ranges - a transient the heap freed by the planning absorbs. The HEALPix rows show it directly: the
+residual of a 48-field call over 48 sub-trees (23M request points) is **2.0 MB**, against 1,333 MB in
+Phase 2f.
+
+**Defaults: `bytes_per_point_call = 32`, `bytes_per_value = 32`.** The 32 B/point is not a fit of the
+rows above (which want 0) but the bulk node's own arrays - coordinates 16 B + indexes 8 B per point -
+which `prepare` builds and the call's sub-trees hold throughout, with a small margin for the sort.
+Charging a unit for them keeps the estimate an upper bound on what the process holds *because of that
+call*, and it is what makes the resident-tree growth of section 4 visible to the planner. All 15 runs
+stay below their estimate (`covered` = yes), the worst margin being 1.16x on the 48-field Volga unit
+(estimate 479 MB, growth 412 MB); `bytes_per_value` is 1.5x the fitted 21.2.
+
+## 3. The requests Phase 3b has to plan well
+
+`python tools/measure_memory.py targets`: the request is sliced, prepared and planned (no data
+fetched) and its units replanned at both budgets with the deployed defaults. Points and ranges are
+per field; "fields per call" is the largest unit the planner produced. The Phase 2f column is the
+same request with per-row ranges and a 128 B/point request side.
+
+| request | groups x fields | points | ranges/field | 1.5 GiB: fields/call, calls | 1.8 GiB | Phase 2f at 1.5 GiB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| EFAS Volga ensemble, 4 params x 50 members x 60 steps | 3,000 x 4 | 609,851 | 1,131 | **196, 120** (est. 1,603 MB) | **200, 60** | 188, 120 |
+| EFAS Switzerland ensemble, 1 param x 50 x 60 | 3,000 x 1 | 18,834 | 151 | **1,000, 3** (est. 269 MB) | **1,000, 3** | 1,000, 3 |
+| climate-dt HEALPix-1024 Europe box x 24 hourly | 24 x 1 | 479,865 | 1,388 | **24, 1** (est. 546 MB) | **24, 1** | 14, 2 |
+
+- **The LUMI HEALPix request is now a single call** of all 24 hourly fields, estimated at 546 MB
+  against the 1,579 MB Phase 2f estimated for 14 of them. Both terms that bounded it are gone: the
+  C++ buffer per field fell from 32.7 MB to 4.0 MB (1,388 ranges instead of 300,315) and the request
+  side from 128 B/point per sub-tree to the node's own arrays.
+- **Volga** gains little from the budget (196 fields per call against 188): it is bounded by
+  gribjump's buffer for 4 params x 609,851 points, which whole-field ranges barely change (1,131
+  ranges either way on a row-ordered grid). The call count is still 120 because coverages come out
+  (reference, step, number) and a unit must be a cartesian product, so 49 of the 50 members of a step
+  go in one call; 1.8 GiB buys the 50th and halves the calls to 60.
+- **Switzerland** is still decided by `max_fields_per_call` (1,024, rounded down to 20 steps x 50
+  members by the product rule).
+
+## 4. What the prepared tree costs resident, with the fold off and on
+
+`python tools/measure_memory.py tree`: slice (always with `_merge_union_rows`), then `prepare` with
+`bulk_grid_leaves` off and on, in a fresh subprocess each.  A bulk node holds `coordinates`
+(16 B/point) and `indexes` (8 B/point) for its whole sub-tree, where the row tree held the latitude
+nodes and the longitude leaf arrays; `tree MB` is a structural estimate (`getsizeof` of the nodes plus
+the arrays' `nbytes`, views counted once), RSS is what the process actually holds.
+
+| request | fold | sub-trees | points | tree MB | tree B/point | RSS after slice | RSS after prepare | peak |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| climate-dt HEALPix-1024 Europe box x 24 hourly | off | 19,128 rows | 11,516,760 | 108.0 | 9.4 | 339 MB | 441 MB | 1,707 MB |
+| | **on** | **24 nodes** | 11,516,760 | **276.7** | **24.0** | 339 MB | **658 MB** | **672 MB** |
+| climate-dt 2027 polygon, 30 days x 24 hourly | off | 90 rows | 2,520 | 0.1 | 43.7 | 182 MB | 183 MB | 183 MB |
+| | **on** | **1 node** | 2,520 | 0.1 | **30.9** | 182 MB | 183 MB | 183 MB |
+| the same rectangle as a box, 30 days x 24 hourly | off | 36,000 rows | 1,378,080 | 44.4 | 32.2 | 1,414 MB | 1,442 MB | 1,566 MB |
+| | **on** | **720 nodes** | 1,378,080 | **37.6** | **27.3** | 1,414 MB | 1,447 MB | **1,465 MB** |
+
+- **The 24-hour HEALPix request pays 169 MB more resident tree** (108 -> 277 MB: 24 sub-trees of
+  479,865 points at 24 B/point instead of 797 row nodes at 9.4 B/point) **and 1,035 MB less peak**
+  (1,707 -> 672 MB): preparing the rows built a Python `int` per point per row, which is exactly what
+  the fold replaces. `prepare` is also 2.5x faster (31.6 -> 12.6 s).
+- **The 8,760-sub-tree shape of `fe-oom-climate-dt-polygon-2027-hourly-year` does not exist.** A
+  climate-dt *polygon* request has its date and time axes unmerged (the fe-worker's
+  `unmerge_date_time_options`) and both are compressed, so all 8,760 hourly fields hang off **one**
+  branch and therefore one bulk node of 2,520 points: 0.1 MB either way, and the fold *halves* the
+  per-point cost (43.7 -> 30.9 B/point) because 90 nearly empty row nodes cost more than one node's
+  arrays.  The shape the brief describes is what a *box* of the same rectangle gives, since a box keeps
+  the merged date/time axis: one branch per hour. Measured over 30 days (720 branches, a year does not
+  fit this machine: *slicing* 8,760 branches peaks over 5 GB, which is the slicer's own cost and has
+  nothing to do with the fold) the fold again **saves** memory (44.4 -> 37.6 MB), and it is the slice,
+  not the tree, that dominates such a request: 1.2 GB of RSS for 720 branches of 1,914 points.
+- **Recommendation: leave `coordinates` eager.** The growth is material on exactly one shape -- long
+  rows repeated over many sub-trees -- and there it is 169 MB against a 1,035 MB fall in the peak. If
+  it ever has to come down, the cheap fix is not laziness but **sharing**: the sub-trees of such a
+  request are the same spatial selection repeated per datetime (identical `lat_values`, `row_lengths`
+  and `indexes`), so `fold_into_bulk_grid` could keep one set of arrays per distinct row structure and
+  let the other sub-trees reference it -- 277 MB -> ~12 MB for the request above, and the per-call sort
+  of the ranges would be shared too. Making `coordinates` itself lazy (keeping `indexes` and asking the
+  mapper for the latitudes/longitudes when the coordinate block is emitted) saves only 16 of the
+  24 B/point and costs a mapper pass per block.
+
+## 5. End to end: `extract_stream` on the fake, output discarded
+
+`python tools/measure_memory.py stream`, one subprocess per run, peak = `max_rss_bytes` of the run
+(`ru_maxrss`, the whole process: imports, the sliced and prepared tree, the call, the encoder).
+
+| request | budget | values | calls (fields each) | estimated unit | peak RSS | growth | output | wall |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| climate-dt HEALPix-1024 Europe box x 24 hourly | 1.5 GiB | 11,516,760 | **1** (24) | 546 MB | **803 MB** | 616 MB | 601.6 MiB | 49 s |
+| HEALPix-1024 whole world, one field | 1.5 GiB | 12,582,912 | **1** (1) | 975 MB | **1,242 MB** | 1,055 MB | 655.5 MiB | 39 s |
+| EFAS whole domain, one field | 1.5 GiB | 13,439,104 | **1** (1) | 1,041 MB | **1,192 MB** | 1,005 MB | 704.7 MiB | 81 s |
+| EFAS Danube box x 40 steps | 1 GiB | 25,382,000 | **1** (40) | 370 MB | 466 MB | 279 MB | 1,347.7 MiB | 8 s |
+| EFAS Danube box x 10 steps | 200 MB | 6,345,500 | 1 (10) | 135 MB | 311 MB | 124 MB | 337.2 MiB | 5 s |
+| EFAS Danube box x 10 steps | none | 6,345,500 | 10 (1) | 65 MB | 273 MB | 86 MB | 337.2 MiB | 5 s |
+| EFAS Danube box x 10 steps | 20 MB | - | **refused** | 65 MB | - | - | - | - |
+
+- **The LUMI request that was OOM-killed runs in one call at 803 MB** against 1,790 MB and 511 s in
+  Phase 2f (2 calls of 14 and 10 fields), in a 3 GiB pod with a 1.5 GiB budget. Most of the wall time
+  is the slice (33 s) and `prepare` (13 s); the `get` of all 24 fields is 2.1 s against 237 s.
+- **The two largest single fields of the corpus are served whole**, 1,242 MB and 1,192 MB of peak
+  against a 1.5 GiB budget in a 3 GiB pod -- which is what justifies deleting the banding. Both are
+  one gribjump call of one field (1 and 2,968 index ranges).
+- **A budget that cannot hold one field refuses the request** instead of banding it: 20 MB against the
+  634,550-point Danube field raises `One field of this request covers 634550 grid points and needs
+  about 65 MB to extract, more than the memory budget of 20000000 bytes` before any call.
+- **Output bytes do not depend on the call pattern**: 337.2 MiB for the Danube x 10 request at one
+  call per group, at one call for all ten, and -- as Phase 1 measured the same request with latitude
+  bands -- 337 MiB then. Byte identity itself is pinned by the golden corpus (28 cases, both
+  consumption modes, both missing-field reporting modes) and by
+  `../polytope/performance/bulk_order.py`, which asserts the ordered `(lat, lon)` list and the
+  per-field values are identical with the fold off and on for every case.
