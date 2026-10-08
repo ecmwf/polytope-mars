@@ -74,6 +74,7 @@ from .field_stream import (
     unit_field_source,
     whole_unit_fields,
 )
+from .limits import format_bytes, tree_byte_limit
 from .sizing import DEFAULT_FRAGMENT_BYTES, UnitSizing
 from .tree_units import GroupSpec, plan_units, prune_values, unit_select
 
@@ -475,13 +476,35 @@ class BlockExtractor:
 
         ``prepare`` also folds each spatial sub-tree into one bulk node and is where the request ranges
         are planned, so after it the tree holds the exact coordinates, grid indexes and range counts the
-        extraction is sized and emitted from.
+        extraction is sized and emitted from.  It is also the first point where the tree's size is known
+        exactly rather than estimated, so that is where ``limits.max_tree_bytes`` is enforced
+        (:meth:`_check_tree_bytes`) -- still before any gribjump call.
         """
         t0 = time.perf_counter()
         try:
-            return datacube.prepare(tree, self.pm.log_context, **kwargs)
+            prepared = datacube.prepare(tree, self.pm.log_context, **kwargs)
         finally:
             self.pm._add_timing("prepare_ms", time.perf_counter() - t0)
+        self._check_tree_bytes(prepared)
+        return prepared
+
+    def _check_tree_bytes(self, tree) -> None:
+        """Report the prepared tree's size and refuse it when it exceeds ``limits.max_tree_bytes``.
+
+        The pre-slice estimate (:meth:`polytope_mars.api.PolytopeMars._check_tree_bytes`) prices the
+        branching axes it can read off the request; this is the exact figure, and the backstop for the
+        shapes the estimate cannot see (an uncompressed union leaf, an ``ALL`` axis).
+        """
+        n_spatial, n_points, n_bytes = bulk_tree.tree_summary(tree)
+        self.pm.timings["tree_bytes"] = n_bytes
+        limit = tree_byte_limit(self.conf.limits)
+        if limit is None or n_bytes <= limit:
+            return
+        raise ValueError(
+            f"The request tree holds {n_points} grid points in {n_spatial} separate branches and costs "
+            f"{format_bytes(n_bytes)}, more than the limit of {format_bytes(limit)}; "
+            "request a smaller area, or fewer dates and times per request"
+        )
 
     def _slice_and_prepare(self):
         """``(api, prepared tree)`` of the whole request (point features, and tests that spy here)."""

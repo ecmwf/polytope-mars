@@ -55,7 +55,18 @@ def test_unbudgeted_run_produces_the_same_output_size():
 
 
 def test_a_budget_smaller_than_one_field_refuses_the_request():
-    """A field is fetched whole: 20 MB cannot serve a 634,550-point field, and nothing is split."""
-    res = measure(20_000_000)
+    """A field is fetched whole: 60 MB cannot serve a 634,550-point field (65 MB), and nothing is split.
+
+    60 MB rather than 20 MB because the tree guard comes first: the request's tree (15 MB measured,
+    25 MB estimated) has to fit ``max_tree_bytes``, half the budget, before the field is sized at all.
+    """
+    res = measure(60_000_000)
     assert "error" in res, json.dumps(res)
     assert any("One field of this request covers 634550 grid points" in line for line in res["error"]), res
+
+
+def test_a_budget_too_small_for_the_request_tree_refuses_it_before_slicing():
+    """Half of a 20 MB budget cannot hold the tree of a 634,550-point field: refused before slicing."""
+    res = measure(20_000_000)
+    assert "error" in res, json.dumps(res)
+    assert any("The request tree alone would need about 25 MB" in line for line in res["error"]), res

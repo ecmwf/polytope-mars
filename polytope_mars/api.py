@@ -24,7 +24,13 @@ from .features.position import Position
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
-from .limits import estimate_points_per_field
+from .limits import (
+    estimate_points_per_field,
+    estimate_tree_branches,
+    estimate_tree_bytes,
+    format_bytes,
+    tree_byte_limit,
+)
 from .param_db import get_param_ids
 from .utils.datetimes import convert_timestamp, find_step_intervals, time_step_to_freq
 
@@ -195,6 +201,7 @@ class PolytopeMars:
         header = self._build_header(request, feature_type, feature, role)
         encoder = get_encoder(output_format, self.conf)
         self._check_points_per_field(request, feature)
+        self._check_tree_bytes(request, feature)
         return BlockExtractor(self, request, feature_type, feature, role, header, encoder)
 
     def _build_header(self, request, feature_type, feature, role) -> RequestHeader:
@@ -239,6 +246,36 @@ class PolytopeMars:
                 f"The requested {feature.name()} covers about {int(estimate)} grid points per field, more than the "
                 f"limit of {limit}; request a smaller area"
             )
+
+    def _check_tree_bytes(self, request, feature):
+        """Refuse a request whose tree alone would exhaust the pod, before anything is sliced.
+
+        polytope-feature gives every value of a branching axis its own node, spatial sub-tree and
+        slice, so the tree grows with the product of those axes' value counts: "Europe hourly for a
+        month" on a merged date/time axis is 720 sub-trees of ~480k points, an 8 GB tree built before
+        the first gribjump call.  :func:`polytope_mars.limits.estimate_tree_bytes` prices that from
+        the request alone; the exact size is checked again after ``prepare``
+        (:meth:`polytope_mars.extract.BlockExtractor._prepare`).
+        """
+        limit = tree_byte_limit(self.conf.limits)
+        if limit is None:
+            return
+        estimate = estimate_tree_bytes(request, feature, self.conf.options, self.conf.limits.bytes_per_point_tree)
+        if estimate is None or estimate <= limit:
+            return
+        branches = estimate_tree_branches(request, self.conf.options)
+        points = int(estimate_points_per_field(feature, self.conf.options) or 0)
+        shape = (
+            f"{branches} separate branches (dates, times or other uncompressed axis values) of about "
+            f"{points} grid points each"
+            if branches > 1
+            else f"about {points} grid points"
+        )
+        advice = "request fewer dates and times per request" if branches > 1 else "request a smaller area"
+        raise ValueError(
+            f"The request tree alone would need about {format_bytes(estimate)} ({shape}), "
+            f"more than the limit of {format_bytes(limit)}; {advice}"
+        )
 
     @staticmethod
     def _default_gribjump():

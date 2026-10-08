@@ -102,6 +102,10 @@ class LimitsConfig(ConfigModel):
     max_polygon_points: int = 3600
     #: max points per field, estimated before slicing from the grid density and the feature area (None: off)
     max_points_per_field: Optional[int] = None
+    #: max bytes the request tree itself may cost -- estimated before slicing from the branching axes
+    #: and the points per field (:mod:`polytope_mars.limits`) and measured exactly after ``prepare``.
+    #: None: half of ``memory_budget_bytes`` when that is set, otherwise off.
+    max_tree_bytes: Optional[int] = None
     #: memory one ``datacube.get`` may cost; None: one field group per call, nothing refused
     memory_budget_bytes: Optional[int] = None
     #: measured Python-side peak bytes per value held at once (the leaf arrays plus the float64
@@ -115,6 +119,11 @@ class LimitsConfig(ConfigModel):
     #: bytes one gribjump index range costs in an ``ExtractionResult``: two vector headers plus two
     #: heap allocations, for the values and the bitmap of that range
     bytes_per_range: int = 96
+    #: measured bytes per point one spatial sub-tree of the request tree costs, the constant
+    #: ``max_tree_bytes`` is estimated with: 24 B/point of bulk-node arrays after ``prepare``
+    #: (``coordinates`` 16 B + ``indexes`` 8 B) plus the row leaves the slicer builds before the fold
+    #: (9-16 B/point measured, MEASUREMENTS.md)
+    bytes_per_point_tree: int = 40
     #: multiplier on the estimated gribjump buffer of a unit
     safety_factor: float = 1.5
     #: hard cap on the values of one ``datacube.get``, independent of the estimate and of the
@@ -134,12 +143,20 @@ class LimitsConfig(ConfigModel):
 
     @model_validator(mode="after")
     def _check_limits(self):
-        for name in ("bytes_per_value", "bytes_per_point_call", "bytes_per_range", "safety_factor"):
+        for name in (
+            "bytes_per_value",
+            "bytes_per_point_call",
+            "bytes_per_range",
+            "bytes_per_point_tree",
+            "safety_factor",
+        ):
             value = getattr(self, name)
             if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
                 raise ValueError(f"limits.{name} must be positive, got {value!r}")
         if self.max_values_per_unit is not None and self.max_values_per_unit < 1:
             raise ValueError(f"limits.max_values_per_unit must be positive or null, got {self.max_values_per_unit!r}")
+        if self.max_tree_bytes is not None and self.max_tree_bytes < 1:
+            raise ValueError(f"limits.max_tree_bytes must be positive or null, got {self.max_tree_bytes!r}")
         if self.max_fields_per_call < 1:
             raise ValueError(f"limits.max_fields_per_call must be positive, got {self.max_fields_per_call!r}")
         if self.bytes_per_point is not None and "bytes_per_value" not in self.model_fields_set:

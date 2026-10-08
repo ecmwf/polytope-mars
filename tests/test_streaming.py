@@ -217,10 +217,14 @@ def test_one_call_per_field_gives_the_same_bytes(name):
 
 @pytest.mark.parametrize("name", ["efas_bbox_multiparam", "cdt_bbox_levelist"])
 def test_a_field_too_large_for_the_budget_is_refused(name):
-    """A field is never split, so one that does not fit the budget is a client error, not a smaller call."""
+    """A field is never split, so one that does not fit the budget is a client error, not a smaller call.
+
+    The budget is 4 kB rather than 1 B so that the request still gets past the tree guard (half the
+    budget, against a tree of at most 21 points x 40 B here): what is refused is the field.
+    """
     fake = build_fake(case(name))
     with pytest.raises(ValueError, match=r"One field of this request covers \d+ grid points"):
-        run(name, budget=1, fake=fake)
+        run(name, budget=4000, fake=fake)
     assert fake.n_extract_calls == 0, "refused before anything is fetched"
 
 

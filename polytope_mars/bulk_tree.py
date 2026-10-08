@@ -30,8 +30,11 @@ __all__ = [
     "coordinates",
     "field_results",
     "is_bulk",
+    "node_bytes",
     "point_count",
     "range_count",
+    "tree_bytes",
+    "tree_summary",
 ]
 
 
@@ -114,3 +117,44 @@ class RangeCounts:
             count = self._cache[key] = range_count(node)
             self.n_counted += 1
         return count
+
+
+def node_bytes(node) -> int:
+    """Bytes a bulk spatial node's own arrays hold: ``coordinates`` (16 B/point) + ``indexes`` (8 B/point).
+
+    The ``lat_values``/``lon_values`` the walker reads are views on ``coordinates``, and the
+    ``result`` arrays belong to the call in flight, not to the tree.
+    """
+    node = bulk_node(node)
+    total = 0
+    for name in ("coordinates", "indexes"):
+        nbytes = getattr(getattr(node, name, None), "nbytes", 0)
+        if isinstance(nbytes, int):
+            total += nbytes
+    return total
+
+
+def tree_summary(tree) -> tuple[int, int, int]:
+    """``(spatial sub-trees, points, bytes)`` of a prepared tree, counting every bulk node once.
+
+    The bytes are the measured form of what :func:`polytope_mars.limits.estimate_tree_bytes` predicts
+    before slicing: with one node per sub-tree it is what the request's points cost as arrays.
+    """
+    nodes, points, total, seen = 0, 0, 0, set()
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        if is_bulk(node):
+            if id(node) not in seen:
+                seen.add(id(node))
+                nodes += 1
+                points += point_count(node)
+                total += node_bytes(node)
+            continue
+        stack.extend(node.children)
+    return nodes, points, total
+
+
+def tree_bytes(tree) -> int:
+    """Bytes the spatial sub-trees of a prepared tree hold (see :func:`tree_summary`)."""
+    return tree_summary(tree)[2]
