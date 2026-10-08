@@ -360,10 +360,29 @@ class BlockExtractor:
             info, plan, groups = self._plan(tree)
             source = self._whole_tree_blocks(datacube, tree, info, plan, groups)
 
+        encode_iter = getattr(self.encoder, "encode_iter", None)
         for block in source:
-            data = emit(self.encoder.encode, block)
-            if data:
-                yield data
+            if encode_iter is not None:
+                # Bounded fragments (covjsonkit >= feat/streaming-encoder): the encoder never materialises a
+                # whole block's text, so memory per block does not scale with the block. The generator must be
+                # consumed completely and in order before the next block (the encoder's state advances with it).
+                t0 = time.perf_counter()
+                fragments = encode_iter(block)
+                enc_seconds += time.perf_counter() - t0
+                while True:
+                    t0 = time.perf_counter()
+                    try:
+                        data = next(fragments)
+                    except StopIteration:
+                        enc_seconds += time.perf_counter() - t0
+                        break
+                    enc_seconds += time.perf_counter() - t0
+                    if data:
+                        yield data
+            else:
+                data = emit(self.encoder.encode, block)
+                if data:
+                    yield data
         last = emit(self.encoder.end)
 
         c = self.counters
