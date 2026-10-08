@@ -284,11 +284,10 @@ class PolytopeMars:
     def _create_base_shapes(self, request: dict, feature_type) -> List[shapes.Shape]:
         base_shapes = []
 
-        if (
-            "dataset" in request
-            and request["dataset"] == "climate-dt"  # noqa: W503
-            and (feature_type == "timeseries" or feature_type == "polygon")  # noqa: W503
-        ) or (request["class"] == "ng" and (feature_type == "timeseries" or feature_type == "polygon")):
+        # climate-dt / class=ng: date and time are independent axes for every feature type.
+        # The deployment un-merges them in the datacube's axis_config (the fe-worker's
+        # unmerge_date_time_options), so the request has to address them as separate axes here.
+        if ("dataset" in request and request["dataset"] == "climate-dt") or request["class"] == "ng":
             for k, v in request.items():
                 split = str(v).split("/")
 

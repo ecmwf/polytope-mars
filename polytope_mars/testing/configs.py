@@ -463,9 +463,7 @@ def _pre_path(request: dict, pre_path_axes: list) -> dict:
 
 def _unmerge_date_time(request: dict, options: dict) -> None:
     # fe-worker unmerge_date_time_options (LUMI separate_datetime: true).
-    if (
-        request.get("dataset") == "climate-dt" or request.get("class") == "ng" or request.get("stream") == "efcl"
-    ) and request["feature"]["type"] in ("timeseries", "polygon"):
+    if request.get("dataset") == "climate-dt" or request.get("class") == "ng" or request.get("stream") == "efcl":
         for mapping in options["axis_config"]:
             if mapping["axis_name"] in ("date", "hdate"):
                 mapping["transformations"] = [{"name": "type_change", "type": "date"}]

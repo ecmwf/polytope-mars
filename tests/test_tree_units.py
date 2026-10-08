@@ -206,13 +206,14 @@ def test_prune_values_keeps_the_selected_values_and_leaves_the_tree_untouched(mo
 
 
 def test_prune_values_selects_whole_branches(monkeypatch):
-    # climate-dt merges date and time into one axis and slices one branch per datetime
+    # climate-dt date and time are separate compressed axes: 2 dates x 2 times in one spatial sub-tree
     datacube, tree, fake = prepared("cdt_bbox_sfc", monkeypatch)
-    dates = analyse_tree(tree).values["date"]
-    assert len(dates) == 4
-    sub = prune_values(tree, {"date": tuple(dates[:2])})
+    info = analyse_tree(tree)
+    dates = info.values["date"]
+    assert len(dates) == 2 and len(info.values["time"]) == 2 and len(info.branches) == 1
+    sub = prune_values(tree, {"date": (dates[0],)})
     pruned = analyse_tree(sub)
-    assert len(pruned.branches) == 2 and pruned.values["date"] == list(dates[:2])
+    assert len(pruned.branches) == 1 and pruned.values["date"] == [dates[0]] and len(pruned.values["time"]) == 2
 
 
 def test_prune_values_rejects_unknown_values_and_spatial_axes(monkeypatch):

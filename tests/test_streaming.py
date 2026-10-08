@@ -78,7 +78,7 @@ GROUP_GRID = {
     "efas_bbox_ensemble": (6, (3, 2)),  # 3 steps x 2 numbers, step-major
     "o1280_bbox_ensemble": (6, (3, 2)),  # 3 numbers x 2 steps
     "cdt_bbox_levelist": (1, ()),  # a single group (2 params x 2 levels)
-    "cdt_bbox_sfc": (4, (4,)),  # 2 dates x 2 times on the merged date axis
+    "cdt_bbox_sfc": (4, (2, 2)),  # 2 dates x 2 times, separate compressed axes (one spatial sub-tree)
     "efas_polygon_fc": (2, (2,)),  # 2 steps
     "cdt_polygon_sfc": (3, (3,)),  # 3 times
     "clmn_bbox": (3, (3,)),  # 3 months
@@ -133,7 +133,9 @@ def test_one_unit_per_group_without_budget(name):
     assert out == expected(name)
     t = pm.timings
     assert fake.n_extract_calls == t["n_units"] == t["n_groups"] == t["n_coverages"] == t["n_gribjump_calls"]
-    assert t["n_spatial_subtrees"] >= 1
+    # every MultiPoint case selects one spatial footprint: date and time are separate compressed
+    # axes on climate-dt too, so no request branches per datetime
+    assert t["n_spatial_subtrees"] == 1
     assert t["groups_per_unit_max"] == 1
 
 

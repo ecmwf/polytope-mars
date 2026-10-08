@@ -152,7 +152,7 @@ def stamp_date_plus_time(date_z: str, time) -> str:
 # Axes each legacy walker keeps out of mars:metadata, and whether it writes "Forecast date" at the date node.
 LEGACY_WALKERS = {
     # Encoder.walk_tree (date_key="date")
-    "date": {"exclude": ("latitude", "longitude", "param", "date"), "forecast_date_axes": ("date", "time")},
+    "date": {"exclude": ("latitude", "longitude", "param", "date", "time"), "forecast_date_axes": ("date", "time")},
     # Encoder.walk_tree (date_key="hdate")
     "hdate": {"exclude": ("latitude", "longitude", "param", "hdate"), "forecast_date_axes": ("hdate", "time")},
     # Encoder.walk_tree_step

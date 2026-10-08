@@ -244,8 +244,15 @@ class Plan:
     def date_z(self, g) -> str:
         return f"{g.path.get('date')}Z"
 
+    def datetime_z(self, g) -> str:
+        """The group's reference datetime: the date node, plus the time node when the axes are separate."""
+        time = g.path.get("time")
+        if time is None:
+            return self.date_z(g)
+        return (pd.Timestamp(g.path.get("date")) + time).isoformat() + "Z"
+
     def t(self, g) -> tuple:
-        return (self.date_z(g),)
+        return (self.datetime_z(g),)
 
     def number(self, g):
         return g.path.get("number", 0)
@@ -257,7 +264,7 @@ class Plan:
         m = dict(self.meta)
         m["number"] = self.number(g)
         m["step"] = normalize_step_value(self.step(g))
-        m["Forecast date"] = self.date_z(g)
+        m["Forecast date"] = self.datetime_z(g)
         return m
 
     def level_out(self, level):
@@ -365,7 +372,7 @@ class TimeSeriesDatePlan(Plan):
     split_levels = True
 
     def t(self, g) -> tuple:
-        return (stamp_date_plus_step(self.date_z(g), self.step(g)),)
+        return (stamp_date_plus_step(self.datetime_z(g), self.step(g)),)
 
     def level(self, g):
         return g.levels[0] if g.levels else 0
@@ -373,7 +380,7 @@ class TimeSeriesDatePlan(Plan):
     def metadata(self, g) -> dict:
         m = dict(self.meta)
         m["number"] = self.number(g)
-        m["Forecast date"] = self.date_z(g)
+        m["Forecast date"] = self.datetime_z(g)
         m["levelist"] = self.level(g)
         m.pop("step", None)
         return m
@@ -388,7 +395,7 @@ class PositionDatePlan(TimeSeriesDatePlan):
     def metadata(self, g) -> dict:
         m = dict(self.meta)
         m["number"] = self.number(g)
-        m["Forecast date"] = self.date_z(g)
+        m["Forecast date"] = self.datetime_z(g)
         m.pop("step", None)
         return m
 
@@ -399,12 +406,12 @@ class VerticalProfileDatePlan(Plan):
     domain_type = "VerticalProfile"
 
     def t(self, g) -> tuple:
-        return (stamp_date_plus_step(self.date_z(g), self.step(g)),)
+        return (stamp_date_plus_step(self.datetime_z(g), self.step(g)),)
 
     def metadata(self, g) -> dict:
         m = dict(self.meta)
         m["number"] = self.number(g)
-        m["Forecast date"] = self.date_z(g)
+        m["Forecast date"] = self.datetime_z(g)
         m["step"] = normalize_step_value(self.step(g))
         return m
 
@@ -426,7 +433,7 @@ class TrajectoryDatePlan(Plan):
     def metadata(self, g) -> dict:
         m = dict(self.meta)
         m["number"] = self.number(g)
-        m["Forecast date"] = self.date_z(g)
+        m["Forecast date"] = self.datetime_z(g)
         m.pop("levelist", None)
         return m
 

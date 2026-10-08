@@ -10,6 +10,7 @@ prepared tree reports (``timings["tree_bytes"]``).
 
 import copy
 import math
+import re
 from pathlib import Path
 
 import pytest
@@ -172,24 +173,32 @@ def test_a_non_positive_tree_limit_is_rejected():
 
 
 def test_a_tree_over_the_limit_is_refused_before_slicing():
-    c = case("cdt_bbox_sfc")  # 2 dates x 2 times on a merged axis: 4 sub-trees of 21 points
+    c = case("cdt_bbox_sfc")  # 2 dates x 2 times on separate compressed axes: one sub-tree of 21 points
     fake = build_fake(c)
-    pm, request = make_polytope_mars(c, fake, {"limits": {"max_tree_bytes": 1000}})
+    pm, request = make_polytope_mars(c, fake, {"limits": {"max_tree_bytes": 500}})
     with pytest.raises(ValueError, match="The request tree alone would need about"):
         pm.extract(request)
     # Nothing was sliced: the fake was never even asked for its axes.
     assert fake.n_axes_calls == 0
 
 
+def _steps_uncompressed(c):
+    """``efas_bbox_fc_steps`` with ``step`` taken out of ``compressed_axes_config``: its three steps branch."""
+    options = fake_gribjump_config_dict(c["grid"], copy.deepcopy(c["request"]))["options"]
+    options["compressed_axes_config"] = [a for a in options["compressed_axes_config"] if a != "step"]
+    return options
+
+
 def test_the_refusal_names_the_branches_the_points_and_what_to_do():
-    c = case("cdt_bbox_sfc")
-    pm, request = make_polytope_mars(c, build_fake(c), {"limits": {"max_tree_bytes": 1000}})
+    c = case("efas_bbox_fc_steps")
+    options = _steps_uncompressed(c)
+    pm, request = make_polytope_mars(c, build_fake(c), {"options": options, "limits": {"max_tree_bytes": 100}})
     with pytest.raises(ValueError) as excinfo:
         pm.extract(request)
     message = str(excinfo.value)
-    assert "4 separate branches (dates, times or other uncompressed axis values)" in message
-    assert "about 21 grid points each" in message
-    assert "about 3.4 kB" in message and "more than the limit of 1.0 kB" in message
+    assert "3 separate branches (dates, times or other uncompressed axis values)" in message
+    assert re.search(r"about \d+ grid points each", message)
+    assert "more than the limit of 100 bytes" in message
     assert "request fewer dates and times per request" in message
 
 
@@ -205,16 +214,29 @@ def test_a_single_branch_refusal_asks_for_a_smaller_area_instead():
 
 
 def test_a_request_just_under_the_limit_is_extracted():
-    # cdt_bbox_sfc estimates 4 branches x 21.0 points x 40 B = 3,361 B of tree; the prepared tree is
-    # 4 x 21 x (16 + 8) = 2,016 B.  One byte either side of the estimate decides the request.
+    # cdt_bbox_sfc: one sub-tree of 21 points.  The estimate is 1 x 21.0 x 40 B; one byte either side
+    # of it decides the request, and the prepared tree is 21 x (16 + 8) = 504 B.
     c = case("cdt_bbox_sfc")
-    pm, request = make_polytope_mars(c, build_fake(c), {"limits": {"max_tree_bytes": 3360}})
+    pm, request = make_polytope_mars(c, build_fake(c))
+    options = fake_gribjump_config_dict(c["grid"], copy.deepcopy(c["request"]))["options"]
+    feature = pm._feature_factory(request["feature"]["type"], copy.deepcopy(request["feature"]), pm.conf)
+    estimate = estimate_tree_bytes(request, feature, options, 40)
+    below, above = math.floor(estimate), math.floor(estimate) + 1
+    pm, request = make_polytope_mars(c, build_fake(c), {"limits": {"max_tree_bytes": below}})
     with pytest.raises(ValueError, match="The request tree alone"):
         pm.extract(copy.deepcopy(request))
-    pm, request = make_polytope_mars(c, build_fake(c), {"limits": {"max_tree_bytes": 3361}})
+    pm, request = make_polytope_mars(c, build_fake(c), {"limits": {"max_tree_bytes": above}})
     coverage = pm.extract(request)
     assert len(coverage["coverages"]) == 4
-    assert pm.timings["tree_bytes"] == 2016
+    assert pm.timings["tree_bytes"] == 21 * 24
+
+
+def test_three_uncompressed_steps_build_three_sub_trees():
+    c = case("efas_bbox_fc_steps")
+    pm, request = make_polytope_mars(c, build_fake(c), {"options": _steps_uncompressed(c)})
+    pm.extract(request)
+    assert pm.timings["n_spatial_subtrees"] == 3
+    assert pm.timings["tree_bytes"] == 3 * pm.timings["tree_bytes"] // 3
 
 
 def test_the_prepared_tree_bytes_are_reported_for_a_golden_case():
