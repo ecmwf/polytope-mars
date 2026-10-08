@@ -7,7 +7,6 @@ by default they come from one ``FDBDatacube.get`` (the whole unit at once) throu
 consumer, so both paths must produce the same bytes.
 """
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -183,8 +182,8 @@ def test_a_unit_whose_groups_are_separate_branches_buffers_one_group():
     if pm.timings["unit_source"] == "get":
         pytest.skip(f"whole-unit path: get_iter is {has_get_iter()}")
     assert out == expected_bytes("cdt_bbox_sfc")
-    doc = json.loads(out)
-    params_per_group = len(doc["parameters"])
+    case = load_case(GOLDEN / "cases" / "cdt_bbox_sfc.yaml")
+    params_per_group = len(str(case["request"]["param"]).split("/"))
     assert pm.timings["n_groups"] == 4
     assert pm.timings["buffered_fields_max"] <= params_per_group
 

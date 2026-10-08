@@ -758,7 +758,7 @@ class BlockExtractor:
         band = self._prepare(datacube, tree, select=select, latitude_range=(lo, hi))
         band_info = analyse_tree(band)
         branches = range(len(band_info.branches))
-        n_points = int(sum(spatial_counts(band_info, branches)))
+        n_points = sum(spatial_counts(band_info, branches))
         lat, lon = group_coordinates(band_info, branches)
         return n_points, lat, lon
 

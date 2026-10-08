@@ -27,6 +27,7 @@ import subprocess
 import sys
 import time
 import warnings
+from typing import Any, cast
 
 warnings.filterwarnings("ignore")
 
@@ -167,6 +168,8 @@ CALIBRATE_SHAPES = {
     "o1280_europe": ("octahedral_1280", EUROPE_BBOX, "step", [str(s) for s in range(0, 72, 6)]),
 }
 CALIBRATE_FIELDS = (1, 4, 12)
+#: scenario name -> (shape, number of fields)
+CALIBRATE_SCENARIOS = {f"calibrate_{shape}_{n}": (shape, n) for shape in CALIBRATE_SHAPES for n in CALIBRATE_FIELDS}
 
 DANUBE_10_STEPS = {**EFAS, "step": "6/to/60/by/6", "param": "240023", "feature": bbox([[50.25, 8.15], [42.08, 29.73]])}
 # -- stream: extract_stream, output discarded; (kind, grid, request, memory_budget_bytes)
@@ -242,24 +245,34 @@ def tree_stats(tree):
     return n_lat, n_pts, n_vals
 
 
+def datacube_of(api) -> Any:
+    """``api.datacube`` as an ``FDBDatacube`` (``Polytope`` types it as an optional union)."""
+    datacube = api.datacube
+    if datacube is None or not hasattr(datacube, "prepare"):
+        raise SystemExit(f"expected an FDBDatacube, got {type(datacube).__name__}")
+    return datacube
+
+
 def _prepare(grid, request):
     from polytope_feature.polytope import Polytope, Request
 
     from polytope_mars.api import PolytopeMars, features
+    from polytope_mars.config import PolytopeMarsConfig
     from polytope_mars.testing import fake_gribjump_config_dict, make_fake_gribjump
 
     request = copy.deepcopy(request)
     fake = make_fake_gribjump(grid)
     pm = PolytopeMars(fake_gribjump_config_dict(grid, request), datacube_factory=lambda: fake)
+    conf = cast(PolytopeMarsConfig, pm.conf)
     feature_config = request.pop("feature")
     feature_type = feature_config["type"]
-    feature = features[feature_type](dict(feature_config), pm.conf)
+    feature = features[feature_type](dict(feature_config), conf)
     request = feature.parse(request, dict(feature_config))
     shapes = pm._create_base_shapes(request, feature_type) + feature.get_shapes()
     preq = Request(*shapes)
-    api = Polytope(datacube=fake, options=pm.conf.options.model_dump())
+    api = Polytope(datacube=fake, options=conf.options.model_dump())
     # Polytope.retrieve minus the nearest-point bookkeeping (no Point shapes here) and the get.
-    api.datacube.check_branching_axes(preq)
+    datacube_of(api).check_branching_axes(preq)
     api.switch_polytope_dim(preq)
     return fake, api, preq
 
@@ -282,7 +295,7 @@ def run_slice_or_get(kind, grid, request):
     }
     if kind == "get":
         t0 = time.perf_counter()
-        api.datacube.get(tree)
+        datacube_of(api).get(tree)
         t_get = time.perf_counter() - t0
         rss2 = rss()
         _, _, n_vals = tree_stats(tree)
@@ -395,7 +408,7 @@ def run_ranges(grid, request):
     tree = api.slice(api.datacube, preq.polytopes())
     t_slice = time.perf_counter() - t0
     t0 = time.perf_counter()
-    tree = api.datacube.prepare(tree)
+    tree = datacube_of(api).prepare(tree)
     t_prepare = time.perf_counter() - t0
     rss_prepared = rss()
 
@@ -405,7 +418,7 @@ def run_ranges(grid, request):
     counts = spatial_counts(info, [0])
     range_counts = counter.counts(info, [0], counts)
     t_count = time.perf_counter() - t0
-    points, ranges = int(sum(counts)), int(sum(range_counts))
+    points, ranges = sum(counts), sum(range_counts)
 
     sizing = UnitSizing()
     values_bytes = 8 * points
@@ -502,9 +515,8 @@ def run_one(name, budget: object = "default"):
     if name in RANGE_SCENARIOS:
         grid, request = RANGE_SCENARIOS[name]
         return run_ranges(grid, request)
-    if name.startswith("calibrate_"):
-        shape, _, fields = name[len("calibrate_") :].rpartition("_")  # noqa: E203
-        return run_calibrate(shape, int(fields))
+    if name in CALIBRATE_SCENARIOS:
+        return run_calibrate(*CALIBRATE_SCENARIOS[name])
     if name in STREAM_SCENARIOS:
         kind, grid, request, default_budget = STREAM_SCENARIOS[name]
         return run_stream(grid, request, default_budget if budget == "default" else budget)
@@ -630,7 +642,7 @@ def main(argv):
     groups = argv or ["slice", "get", "e2e", "stream"]
     kinds = {name: spec[0] for name, spec in {**SCENARIOS, **STREAM_SCENARIOS}.items()}
     kinds.update({name: "ranges" for name in RANGE_SCENARIOS})
-    kinds.update({f"calibrate_{shape}_{n}": "calibrate" for shape in CALIBRATE_SHAPES for n in CALIBRATE_FIELDS})
+    kinds.update({name: "calibrate" for name in CALIBRATE_SCENARIOS})
     results = {}
     for name, kind in kinds.items():
         if kind not in groups:
