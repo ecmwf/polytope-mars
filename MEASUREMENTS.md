@@ -192,11 +192,38 @@ row's estimate is above its growth. Least squares per shape (`growth = intercept
 
 `python tools/measure_memory.py stream`, budget as the chart injects it.
 
-| request | budget | groups | planned k | units | estimated unit MB | measured peak RSS MB | growth MB | B/value |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| HEALPix-1024 Europe box x 24 hourly fields (11.5M values) | 1.5 GiB | 24 | 14 | 2 | 1,547 | see below | | |
-| EFAS Danube bbox x 40 steps (25.4M values) | 1 GiB | 40 | 12 | 4 | 1,068 | 452.7 | 288.9 | 11.4 |
+| request | budget | groups | planned k | units | estimated unit MB | peak RSS MB | growth MB | B/value | wall s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| HEALPix-1024 Europe box x 24 hourly fields (11.5M values) | 1.5 GiB | 24 | **14** | 2 | 1,547.2 | **1,788.7** | 1,602.6 | 139.2 | 522 |
+| EFAS Danube bbox x 40 steps (25.4M values) | 1 GiB | 40 | **12** | 4 | 1,068.3 | **474.7** | 288.9 | 11.4 | 9 |
 
-- The HEALPix case is the request that was OOM-killed at 3 GiB on LUMI with Phase 2c's 19-field units.
-- The EFAS case was 2 units in Phase 2c (k=26 at 64 B/point, no gribjump term); the new model halves it to
-  12 groups per call, i.e. 4 calls instead of 2 -- about 1 s more at ~480 ms per call.
+- The HEALPix request is the one that was OOM-killed at 3 GiB on LUMI with Phase 2c's 19-field units
+  (`480k x 160 x 19 = 1.46 GB` against the same budget). It now runs in two calls of 14 and 10 fields with a
+  peak of 1.79 GB, 40% under the 3 GiB limit, and its output is unchanged.
+- Peak RSS is the whole process, so it also holds the sliced and prepared tree of all 24 branches and the
+  slicing transients; the planner's estimate covers the unit alone. The chart's
+  `limits.memory_budget_bytes` must therefore stay a *share* of the pool's memory, as DESIGN 2.7 says, not
+  the whole of it.
+- 230 s of the HEALPix run is `prepare` on the whole tree (11.5M grid-index lookups, one per point per
+  branch) and 29 s is slicing. A unit that fits is still prepared with the whole tree; preparing per unit
+  (as the banded path already prepares per band) would cut that to one branch's worth.
+- The EFAS request was 2 units in Phase 2c (k=26 at 64 B/point and no gribjump term); the new model halves
+  it to 12 groups per call, i.e. 4 calls instead of 2 -- about 1 s more at ~480 ms per call.
+
+## 4. Largest fragment the CovJSON encoder emits per block
+
+`max_chunk_mib` of the calibration runs: the biggest single `bytes` object the encoder returns for one
+block, which is a coordinate block (the `composite` tuples), **38.0-38.8 B per point** on every grid and
+independent of the number of fields:
+
+| field | points | largest fragment | B/point |
+| --- | ---: | ---: | ---: |
+| EFAS Danube | 634,550 | 23.5 MiB | 38.8 |
+| HEALPix-1024 Europe | 479,865 | 17.4 MiB | 38.0 |
+| O1280 Europe | 222,960 | 8.2 MiB | 38.5 |
+
+A 26M-point field (a whole-world O1280 bbox is 6.6M, a global HEALPix-1024 one 12.6M; 26M is a
+high-resolution global grid) would therefore be emitted as a **single ~1.0 GB fragment** of coordinates,
+whatever the extraction unit size: the band only bounds what polytope-mars holds, not what the encoder
+builds per block. Values blocks are smaller (~17-20 B/value). Bounding the fragment is covjsonkit's side of
+the contract (`CovjsonStreamEncoder.encode_iter`), not polytope-mars'.
