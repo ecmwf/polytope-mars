@@ -508,3 +508,119 @@ be.
   and the Switzerland ensemble **1,000 fields per call** (3 calls for 3,000 fields, the per-call
   field cap deciding). At 1.8 GiB: Volga 200 fields per call and **60 calls** (one step per call),
   Switzerland unchanged.
+
+# Phase 3b: one bulk node per spatial sub-tree, and no latitude banding
+
+## Why
+
+Two things bounded a unit on LUMI, and both were properties of the *per-row* request planning rather
+than of the data (`PHASE3-BRIEF.md`, DESIGN 2.16):
+
+- **index ranges.** gribjump is asked for runs of consecutive grid indices, and a HEALPix-nested box
+  breaks into nearly one range per point (479,865 points in 300,315 ranges) because a ring's pixels
+  are scattered over the index space. At 96 B per range that was 32.7 MB of C++ buffer per field,
+  eight times the values themselves.
+- **the request side.** `FDBDatacube` built one Python `int` per point per row and sorted
+  `enumerate(...)` of those lists before fetching anything: ~70 B per point *per field* on the
+  HEALPix request (every hourly field is its own branch), 1.33 GB of it for a 48-field call.
+
+polytope-feature's `bulk_grid_leaves` (`../polytope/CHANGES.md`) replaces the spatial layers of a
+prepared tree with one array-backed node per spatial sub-tree and derives the ranges from one sort of
+the whole field's indexes. Both terms collapse, and with them the reason a field was ever cut into
+latitude bands.
+
+## Behaviour changes
+
+- **Every request is sliced and prepared with `options["bulk_grid_leaves"] = True`** (set in
+  `BlockExtractor._slice`, next to `_merge_union_rows`). The spatial walk is
+  :mod:`polytope_mars.bulk_tree`: `node.coordinates` (float64 (N, 2), output order),
+  `node.point_count`, `node.indexes`, one `node.result` array per field of the call. Nothing in the
+  extraction holds a Python object per point any more, and `polytope_mars.grid_ranges` (which
+  re-derived the ranges the way `FDBDatacube` built them) is gone: the count is
+  `np.diff(np.sort(node.indexes)) > 1` plus one, exact and cheap.
+- **Output bytes are unchanged.** The fold happens in `prepare` in the order the legacy encoders read
+  the tree in (rows in tree order, each row's points in grid-index order), which
+  `../polytope/performance/bulk_order.py` asserts for all 28 golden cases. The whole corpus is
+  byte-identical in both consumption modes and both missing-field reporting modes.
+- **Latitude banding is removed.** Gone: `BlockExtractor._banded`, `_prepared_band`, the band-0 peek,
+  `_prepare_whole_tree` (the whole tree is always prepared now - it is what folds the nodes and plans
+  the ranges), `polytope_mars.grid_ranges`, `UnitSizing.band_points`, `tests/test_band_prepare.py`,
+  `tests/test_grid_ranges.py` and the band-invariance parametrisation of `tests/test_streaming.py`.
+  `timings` loses `n_bands` and `prepare_mode` and gains `n_spatial_subtrees`.
+- **A group that does not fit one call is fetched one (param, level) at a time**, each field whole
+  (`_field_units`): gribjump's buffer then holds one field while the Python side still holds the
+  group (a coverage lists the params that have data, so all of them are fetched before the first
+  block). This is also the DataNotFound fallback of a whole-group unit, and it is what reports a
+  missing field: a `DataNotFound` for a call asking for one field says that this field has no
+  message. Missing-field detection is therefore unit -> group -> field, with no peek anywhere.
+- **A field that does not fit the budget is refused** (`ValueError`, the `max_points_per_field` path):
+  `One field of this request covers <n> grid points and needs about <m> MB to extract, more than the
+  memory budget of <b> bytes; request a smaller area or fewer parameters per request`. There is no
+  splitting of any kind left. `limits.max_points_per_field` remains the explicit, pre-slicing cap.
+- **The block IR keeps its band attributes** at their single-band values (`FieldGroup.n_bands = 1`,
+  `CoordsBlock`/`ValuesBlock` `band = 0`, `offset = 0`) so that covjsonkit's stream encoder (PR #140,
+  which groups by `n_bands` and reads `band`/`offset` structurally) is untouched. They can be dropped
+  from the IR and from the encoder together, in one later change on both sides.
+- **Unit sizing** (`polytope_mars.sizing.UnitSizing`). A unit of `k` groups is planned when
+
+      buffer_cpp(unit) x safety_factor
+        + bytes_per_point_call x n_points x n_subtrees
+        + bytes_per_value x live_values
+        + fragment_bytes  <=  memory_budget_bytes
+
+  with `buffer_cpp(unit) = n_fields x (8 x n_points + n_points/8 + bytes_per_range x n_ranges)` as
+  before, `n_subtrees` the spatial sub-trees the call asks for (`k` of them when every group brings
+  its own, one when they share), `live_values` one group's values on the per-field path (the default)
+  and the unit's on the opt-out, and `fragment_bytes = 2 x` the encoder's `max_fragment_bytes`.
+  `n_ranges` comes from the prepared tree's bulk nodes. `bytes_per_range` stays: the term is exact,
+  it is just small now (0.1 MB of 4.0 MB for the HEALPix Europe field).
+- **`limits.bytes_per_point_call` 128 -> 32.** It no longer stands for per-point Python objects built
+  per call: it is the bulk node's own arrays (coordinates 16 B + indexes 8 B per point), which
+  `prepare` builds once and the call's sub-trees hold throughout, plus the sort the call's ranges come
+  from. Measured per *call* it is ~0 (the arrays are already in the tree when the call starts, and the
+  sort is absorbed by the heap the planning just freed), so 32 B/point is a deliberate margin that
+  charges a unit for the part of the resident tree it touches. `bytes_per_value` stays 32 (fitted
+  21 B/value), `bytes_per_range` 96, `safety_factor` 1.5, `max_values_per_unit` 256M,
+  `max_fields_per_call` 1024.
+- **`timings`**: `n_spatial_subtrees` (bulk nodes the request walks) is new; `n_units`,
+  `n_gribjump_calls`, `fields_per_unit_max`, `groups_per_unit_max`, `estimated_unit_bytes_max`,
+  `max_rss_bytes`, the `get_ms` histogram, `n_ranges`, `n_ranges_requested`, `unit_source`,
+  `request_side`, `buffered_fields_max`, `n_missing_fields` and `n_fallbacks` are unchanged in
+  meaning. The INFO summary drops the band count and the prepare mode and carries the sub-tree count.
+
+## What polytope-config / the chart must set
+
+**Nothing new.** `limits.memory_budget_bytes` (1,610,612,736 for a 3 GiB pod) is still the only value
+a deployment has to set; the recalibrated `bytes_per_point_call` is a default in code. A config that
+sets the deprecated `limits.bytes_per_point` keeps working. Note for the deployment: the prepared
+tree is now ~24 B/point *per spatial sub-tree* and is resident for the whole request, outside the
+budget the unit model covers - see MEASUREMENTS.md for the two requests where that matters.
+
+## Verification
+
+- The golden corpus is byte-identical: 28 cases x {`extract`, `extract_stream`} x {per-field
+  consumption on and off} x {`DataNotFound` and empty-result reporting}, plus the unit-invariance
+  suite (`tests/test_streaming.py`, 10 MultiPoint cases at 1, 3 and all groups per call) and the new
+  `test_one_call_per_field_gives_the_same_bytes` (the same 10 cases with `max_fields_per_call = 1`,
+  i.e. one call per (param, level)).
+- `tests/test_streaming.py::test_a_field_too_large_for_the_budget_is_refused` and
+  `tests/test_stream_memory.py::test_a_budget_smaller_than_one_field_refuses_the_request`: the
+  refusal happens before any gribjump call.
+- `tests/test_missing_fields.py`: the fallbacks and their call counts in both reporting modes on the
+  whole-group path and the per-(param, level) path, including
+  `test_a_field_that_vanishes_between_calls_is_reported_missing` (what the "later band re-raises"
+  case becomes when every field is fetched by exactly one call).
+- `tests/test_tree_units.py::test_compressed_axes_expand_as_a_product_in_tree_order` now pins the
+  order on a bulk node's `result` (one array per field of the branch) against real `FDBDatacube`
+  output, which is what `collect_field_values` and `field_stream` split a unit by.
+- `tests/test_unit_sizing.py`: the four terms, whole-field ranges on every grid, the planned fields
+  per call for the measured shapes at 1.5 and 1.8 GiB, the caps, the two largest single fields
+  fitting one call, and a group that is fetched one field per call.
+- Removed with the banding: `tests/test_band_prepare.py` (6 tests) and `tests/test_grid_ranges.py`
+  (11 tests), and the band-invariance and band-0-peek cases of `tests/test_streaming.py`; 18 tests
+  replace them. Suite: **310 passed, 1 skipped** (was 309 passed, 1 skipped).
+- Measured (MEASUREMENTS.md): whole-field ranges on nine shapes, 15 calibration runs all below their
+  estimate, the planner on the three REQUESTS.md shapes at both budgets, the resident tree with the
+  fold off and on, and `extract_stream` end to end -- the LUMI HEALPix request in **one call at
+  803 MB** (Phase 2f: two calls, 1,790 MB) and the whole-world HEALPix and whole-domain EFAS fields
+  served whole at **1,242 MB** and **1,192 MB** against a 1.5 GiB budget.
