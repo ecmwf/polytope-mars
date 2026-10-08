@@ -9,6 +9,7 @@ prepared tree reports (``timings["tree_bytes"]``).
 """
 
 import copy
+import math
 from pathlib import Path
 
 import pytest
@@ -134,7 +135,7 @@ def test_estimated_tree_bytes_is_branches_times_points_times_the_constant():
 def test_a_pole_to_pole_box_has_no_estimate_and_is_not_refused_by_one():
     # get_boundingbox_area returns NaN for [[90, -180], [-90, 180]]: unknown, so neither limit binds
     # (the exact post-prepare check is what covers a whole-world request).
-    box = _Box(area_bb=float("nan"), points=[[90, -180], [-90, 180]])
+    box = _Box(area_bb=math.nan, points=[[90, -180], [-90, 180]])
     assert estimate_tree_bytes(HOURLY_MONTH, box, CDT_OPTIONS, 40) is None
 
 
