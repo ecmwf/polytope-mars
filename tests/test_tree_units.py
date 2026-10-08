@@ -78,6 +78,46 @@ def test_compressed_axes_expand_as_a_product_in_tree_order(monkeypatch):
     assert got == fields
 
 
+def extract_calls(name, fields_per_call, **limits) -> list:
+    """The ``(number, step)`` pairs each ``gribjump.extract`` call asked for, in call order."""
+    c = load_case(GOLDEN / "cases" / f"{name}.yaml")
+    fake = build_fake(c)
+    calls: list = []
+    original = fake.extract
+
+    def spy(requests, ctx=None):
+        requests = list(requests)
+        pairs = {(int(r[0]["number"]), int(r[0]["step"])) for r in requests}
+        calls.append(sorted(pairs))
+        return original(requests, ctx)
+
+    fake.extract = spy
+    update = {"limits": {"memory_budget_bytes": 10**12, "max_fields_per_call": fields_per_call, **limits}}
+    pm, request = make_polytope_mars(c, fake, update)
+    b"".join(pm.extract_stream(request))
+    return calls
+
+
+def test_an_efas_ensemble_unit_batches_the_members_of_one_step():
+    """class=ce coverages come out (reference, step, number), so a unit is members at one step.
+
+    The Volga ensemble shape (50 members x 60 steps): consecutive groups are the members of one
+    step, so one call fetches several *members* of the same step, and a call can only cover two
+    steps once it has room for every member of one.
+    """
+    # room for two groups (2 members x 2 params per group)
+    assert extract_calls("efas_bbox_ensemble", 4) == [
+        [(1, 6), (2, 6)],
+        [(1, 12), (2, 12)],
+        [(1, 18), (2, 18)],
+    ]
+    # room for four groups: both members of two steps (a 2 x 2 rectangle of the group axes)
+    assert extract_calls("efas_bbox_ensemble", 8) == [
+        [(1, 6), (1, 12), (2, 6), (2, 12)],
+        [(1, 18), (2, 18)],
+    ]
+
+
 # --- planning the units ----------------------------------------------------------------------------------
 
 

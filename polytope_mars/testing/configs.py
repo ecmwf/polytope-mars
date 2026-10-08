@@ -288,6 +288,22 @@ _AXES = {
             "param": ["240023", "240024"],
         },
         {
+            # EFAS ensemble (the Volga 4-param request of REQUESTS.md): type pf with a number axis.
+            "class": ["ce"],
+            "stream": ["efas"],
+            "type": ["pf"],
+            "levtype": ["sfc"],
+            "expver": ["0001"],
+            "origin": ["ecmf"],
+            "domain": ["g"],
+            "model": ["lisflood"],
+            "date": _dates("20240101", "20240102"),
+            "time": ["0000", "1200"],
+            "step": _steps(6, 360, 6),
+            "number": _steps(1, 50, 1),
+            "param": ["228141", "231002", "231026", "240023", "240024"],
+        },
+        {
             "class": ["ce"],
             "stream": ["efcl"],
             "type": ["sfo"],

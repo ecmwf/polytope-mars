@@ -56,6 +56,7 @@ def n_spatial_nodes(doc):
 
 MULTIPOINT = [
     "efas_bbox_multiparam",
+    "efas_bbox_ensemble",
     "o1280_bbox_ensemble",
     "cdt_bbox_levelist",
     "cdt_bbox_sfc",
@@ -71,6 +72,8 @@ MULTIPOINT = [
 #: ``cdt_*`` requests have their date and time merged into one group axis, so their groups vary on one axis.
 GROUP_GRID = {
     "efas_bbox_multiparam": (4, (2, 2)),  # 2 dates x 2 steps
+    # class=ce coverages come out (reference, step, number): all members of a step, then the next step
+    "efas_bbox_ensemble": (6, (3, 2)),  # 3 steps x 2 numbers, step-major
     "o1280_bbox_ensemble": (6, (3, 2)),  # 3 numbers x 2 steps
     "cdt_bbox_levelist": (1, ()),  # a single group (2 params x 2 levels)
     "cdt_bbox_sfc": (4, (4,)),  # 2 dates x 2 times on the merged date axis
