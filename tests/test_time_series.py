@@ -383,7 +383,7 @@ class TestRequestNotMutated:
         PolytopeMars(self.cf).extract(self.request)
 
         assert self.request == original, "extract() mutated the caller's request dict in place"
-        # spot check the keys that used to get popped/deleted
+        # spot check the keys parsing reads and must leave in the caller's dict
         assert "feature" in self.request
         assert "format" in self.request
         assert self.request["feature"].get("axes") == "step"

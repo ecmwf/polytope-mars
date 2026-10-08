@@ -13,7 +13,7 @@ Groups:
 * ``get``: RSS of a bare ``datacube.get`` (gribjump result assignment onto the tree, no encoding)
   per extracted value, per mapper family.
 * ``e2e``: peak RSS of ``PolytopeMars.extract`` + ``json.dumps(...).encode()`` per value (the
-  fe-worker's buffered path; with the Phase 0 code this measured the legacy pipeline).
+  fe-worker's buffered path; run against a legacy checkout it measures the legacy pipeline).
 * ``stream``: peak RSS growth of ``PolytopeMars.extract_stream`` with the output discarded, for
   several ``limits.memory_budget_bytes``.  ``--budget N`` (bytes, or ``none``) overrides the budget.
 * ``ranges``: points and gribjump index ranges of one field, and what they cost in gribjump's buffer.
@@ -21,8 +21,8 @@ Groups:
   16 + 8 B/point per sub-tree against the row tree's ~9 B/point).
 * ``calibrate``: peak of one unit of n fields on the per-field path, against the exact gribjump
   term, plus the least-squares fit of ``limits.bytes_per_point_call`` and ``limits.bytes_per_value``.
-* ``targets``: what the planner does with the requests of REQUESTS.md at the budgets under
-  discussion -- fields per call and call count, without fetching anything.
+* ``targets``: what the planner does with the deployment's largest requests at a 1.5 and a 1.8 GiB
+  budget (3 and 3.6 GiB pods) -- fields per call and call count, without fetching anything.
 """
 
 import copy
@@ -145,7 +145,7 @@ EUROPE_BBOX = bbox([[72, -25], [34, 45]])
 EUROPE_BBOX_NARROW = bbox([[72, -25], [34, 10]])
 DANUBE_BBOX = bbox([[50.25, 8.15], [42.08, 29.73]])
 GLOBAL_BBOX = bbox([[90, -180], [-90, 180]])
-#: the Volga catchment of `fe-oom-efas-pf-volga-ensemble-4param` (REQUESTS.md): 18 vertices, ~610k
+#: the Volga catchment of the EFAS ensemble request that was OOM-killed: 18 vertices, ~610k
 #: EFAS points, the largest EFAS forecast request in the corpus (4 params x 50 members x 60 steps)
 VOLGA_POLYGON = {
     "type": "polygon",
@@ -284,8 +284,8 @@ CALIBRATE_SCENARIOS = {
 
 DANUBE_10_STEPS = {**EFAS, "step": "6/to/60/by/6", "param": "240023", "feature": bbox([[50.25, 8.15], [42.08, 29.73]])}
 # -- stream: extract_stream, output discarded; (kind, grid, request, memory_budget_bytes)
-#: the two cases Phase 2d has to get right: the request that was OOM-killed on LUMI, and the one
-#: Phase 2c batched into 2 calls
+#: the climate-dt HEALPix Europe box x 24 hourly fields (the request that was OOM-killed on LUMI)
+#: and the EFAS Danube box x 40 steps
 HEALPIX_EUROPE_24H = {
     **CDT,
     "date": "20200101",
@@ -294,8 +294,8 @@ HEALPIX_EUROPE_24H = {
     "feature": EUROPE_BBOX,
 }
 DANUBE_40_STEPS = {**EFAS, "step": "6/to/240/by/6", "param": "240023", "feature": DANUBE_BBOX}
-#: the three requests Phase 2f has to plan well, at the two budgets under discussion (3 GiB and
-#: 3.6 GiB pods, half of each): (grid, request, budgets)
+#: the three largest deployed request shapes, at a 1.5 and a 1.8 GiB budget (half of a 3 GiB and
+#: of a 3.6 GiB pod): (grid, request, budgets)
 BUDGETS = (3 * 1024**3 // 2, 9 * 1024**3 // 5)
 VOLGA_ENSEMBLE_4PARAM = {
     **EFAS,
@@ -333,7 +333,7 @@ CDT_YEAR_POLYGON = {
         [0.014869101089765205, 42.93374856181829],
     ],
 }
-#: whole-world and whole-domain single fields: the largest requests in the corpus (DESIGN 2.16)
+#: whole-world and whole-domain single fields: the largest requests a deployment serves
 WHOLE_WORLD_HEALPIX = {**CDT, "date": "20200101", "time": "0000", "param": "167", "feature": GLOBAL_BBOX}
 EFAS_WHOLE_DOMAIN = {**EFAS, "step": "6", "param": "240023", "feature": bbox([[72.24, -25.24], [22.76, 50.24]])}
 
@@ -350,7 +350,7 @@ def dates_from(n_days: int) -> list:
 
 
 def cdt_hourly(feature, n_days: int) -> dict:
-    """The hourly-year climate-dt request of REQUESTS.md over ``n_days`` days (24 fields each)."""
+    """The hourly climate-dt request over ``n_days`` days (24 fields each)."""
     dates = dates_from(n_days)
     return {
         **CDT,

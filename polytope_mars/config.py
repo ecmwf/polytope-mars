@@ -39,8 +39,8 @@ class EncodersConfig(ConfigModel):
 class BytesPerPointConfig(ConfigModel):
     """Deprecated: use ``limits.bytes_per_value``.
 
-    Phase 2 sized an extraction unit with one constant per grid mapper family, because HEALPix nested
-    cost ~2.5x more per value than the other grids.  That difference is not a property of the grid but
+    This key sized an extraction unit with one constant per grid mapper family, because HEALPix nested
+    costs ~2.5x more per value than the other grids.  That difference is not a property of the grid but
     of the number of gribjump index *ranges* a field needs, which the sizing now counts from the
     prepared tree (:mod:`polytope_mars.sizing`, :mod:`polytope_mars.bulk_tree`).  A config that still
     sets this key has its ``default`` entry used as ``limits.bytes_per_value``; the per-mapper entries
@@ -87,7 +87,7 @@ class LimitsConfig(ConfigModel):
     ``python_values`` the values the Python side holds at once: **one field group** on the
     per-field path (``per_field_consumption``, the default) and the whole unit without it.  Two
     hard caps apply on top, independent of the budget: ``max_fields_per_call`` and
-    ``max_values_per_unit``.  Without a budget a unit is one field group, as in Phase 2.
+    ``max_values_per_unit``.  Without a budget a unit is one field group.
 
     A **field** is never split: a group whose fields do not fit one call together is fetched one
     (param, level) per call, and a request one field of which does not fit at all is refused

@@ -1,7 +1,7 @@
 """Golden corpus: the exact bytes the fe-worker ships for each case must not change.
 
-Each ``cases/<name>.yaml`` is run against the fake gribjump (``polytope_mars.testing``) both as the
-fe-worker does it today (``json.dumps(PolytopeMars.extract(request)).encode("utf-8")``) and through the
+Each ``cases/<name>.yaml`` is run against the fake gribjump (``polytope_mars.testing``) both through
+the buffered API the fe-worker calls (``json.dumps(PolytopeMars.extract(request)).encode("utf-8")``) and through the
 streaming API (``b"".join(PolytopeMars.extract_stream(request))``), and compared byte for byte with:
 
 * ``expected_fixed/<name>.covjson`` when the case lists ``fixes:`` (legacy defects this branch fixes,

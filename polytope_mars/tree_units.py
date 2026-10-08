@@ -1,4 +1,4 @@
-"""Multi-group extraction units (DESIGN §2.3): several field groups in one ``datacube.get``.
+"""Multi-group extraction units: several field groups in one ``datacube.get``.
 
 A remote gribjump ``extract`` call costs ~480 ms before it reads a single value (round trip, request
 parsing, one FDB catalogue/TOC scan per single-field request) plus ~1.3 us per value.  One call per
@@ -15,7 +15,7 @@ Two things bound a unit:
   caps (``limits.max_fields_per_call``, ``limits.max_values_per_unit``) and the group's shape
   (points, fields, gribjump index ranges, spatial sub-trees) into ``GroupSpec.max_groups``, the
   number of groups of that shape one ``datacube.get`` may fetch.  Without a budget every unit is a
-  single group, as in Phase 2 (``UnitSizing`` returns 1); 0 means that not even one group fits, and
+  single group (``UnitSizing`` returns 1); 0 means that not even one group fits, and
   the extractor then fetches it one (param, level) at a time;
 * what one tree can express: the group-axis values of a unit must form a cartesian product (a
   "rectangle"), because the compressed axes of a request tree expand to the *product* of their values
@@ -139,8 +139,8 @@ def _unit_length(specs, start: int, max_groups) -> int:
         if size == k:
             best = k
         elif size > limit:
-            # The rectangle spanned by the run is already larger than any unit that fits: no longer
-            # run can be exactly its own rectangle.
+            # The rectangle spanned by the run is already larger than any unit that fits, so a
+            # longer run cannot be exactly its own rectangle either.
             break
     return best
 

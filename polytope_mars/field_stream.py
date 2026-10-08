@@ -1,11 +1,11 @@
 """The fields of one extraction unit, and the group they belong to.
 
-A multi-group unit (DESIGN §2.3) fetches the fields of several field groups in one
+A multi-group unit fetches the fields of several field groups in one
 ``datacube.get``.  The extractor consumes them *per field* and emits a group's blocks as soon as
 every (param, level) of that group has arrived, so the Python side only holds the groups that are
 still incomplete (:class:`GroupAssembler`), not the whole unit.
 
-Where the fields come from is the seam between polytope-mars and polytope-feature:
+The fields reach polytope-mars from polytope-feature by one of two paths:
 
 * :func:`whole_unit_fields` -- **the default path**: one ``FDBDatacube.get`` fills the pruned
   sub-tree and :func:`~polytope_mars.extract.collect_field_values` splits its results per

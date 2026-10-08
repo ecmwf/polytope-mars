@@ -409,8 +409,8 @@ class PolytopeMars:
             # All class=ce (EFAS) data keeps "date", "hdate" and "time" as
             # independent axes for every feature type (date/hdate ranges become
             # Spans, times become their own Select), mirroring the climate-dt
-            # date/time handling. Previously the date and time axes were merged
-            # into a single datetime axis; now they are separate.
+            # date/time handling: the datacube axes are separate, so the shapes
+            # select them separately.
             separate_datetime = request.get("class") == "ce"
 
             # When the time axis is month or year, there is no "date" key in

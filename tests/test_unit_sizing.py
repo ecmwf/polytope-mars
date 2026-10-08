@@ -5,8 +5,8 @@ calibrate targets``), so these tests state what a deployed worker will do with a
 only that the arithmetic is self-consistent.
 
 Ranges per field are the gaps in a spatial sub-tree's sorted grid indexes (one array-backed bulk node
-per sub-tree), which is why the HEALPix shapes are in the thousands instead of the hundreds of
-thousands the per-row planning needed.
+per sub-tree), which keeps the HEALPix counts in the thousands even though a ring's pixels are
+scattered over the index space.
 """
 
 import pytest
@@ -60,11 +60,11 @@ def test_the_gribjump_term_is_values_mask_and_one_vector_pair_per_range():
 
 
 def test_whole_field_ranges_make_the_range_term_small_on_every_grid():
-    """Why the range count is still read off the tree, and why it no longer decides the unit size.
+    """Why the range count is read off the tree, and why it does not decide the unit size.
 
-    Per-row ranges cost 96 B each and a HEALPix-nested box needed nearly one per point: 65 B per
-    value, eight times the values themselves, which is what bounded the LUMI units.  Ranges derived
-    from the whole field's sorted indexes are 8.4 B/value on the same request.
+    A range costs 96 B, so a field cut into nearly one range per point -- what a HEALPix-nested box
+    does row by row -- costs 65 B per value, eight times the values themselves.  Ranges derived from
+    the whole field's sorted indexes are 8.4 B/value on the same request.
     """
     s = UnitSizing(bytes_per_range=96, safety_factor=1.0)
     per_value = {}
@@ -72,7 +72,7 @@ def test_whole_field_ranges_make_the_range_term_small_on_every_grid():
         points, ranges = SHAPES[name]
         per_value[name] = s.field_buffer_bytes(points, ranges) / points
     assert all(8 < value < 9 for value in per_value.values()), per_value
-    # the per-row count of the same HEALPix request (300,315 ranges) is what it was before
+    # one range per point of the same HEALPix request (300,315 ranges)
     assert s.field_buffer_bytes(479_865, 300_315) / 479_865 > 65
 
 
@@ -134,7 +134,7 @@ def test_the_fragment_term_is_twice_the_encoders_limit():
 @pytest.mark.parametrize(
     "shape, n_fields, budget, expected_fields",
     [
-        # the Volga ensemble (4 params per group) at the two budgets under discussion
+        # the Volga ensemble (4 params per group) at a 3 GiB and a 3.6 GiB pod
         ("efas_volga", 4, BUDGET_1_5_GiB, 196),
         ("efas_volga", 4, BUDGET_1_8_GiB, 236),
         # the Switzerland ensemble: small fields, so the per-call field cap decides
@@ -166,9 +166,9 @@ def test_the_per_field_path_plans_larger_units_than_the_whole_unit_path():
 def test_the_planner_turns_that_into_units():
     """The LUMI case: 24 hourly HEALPix groups, each its own sub-tree, against 1.5 GiB.
 
-    Phase 2f planned 14 fields per call here, bounded by the 300,315 index ranges of a per-row
-    request (32.7 MB of gribjump buffer per field) and a 128 B/point request side.  Whole-field
-    ranges (1,388) and the bulk node's own arrays leave room for the whole request in one call.
+    Whole-field ranges (1,388 of them) and the bulk node's own arrays leave room for the whole
+    request in one call; one range per point (300,315) would be 32.7 MB of gribjump buffer per
+    field and bound the call to 14 fields.
     """
     s = sizing(BUDGET_1_5_GiB)
     points, ranges = SHAPES["healpix1024_europe"]
@@ -180,7 +180,7 @@ def test_the_planner_turns_that_into_units():
 
 
 def test_without_a_budget_a_unit_is_one_group():
-    """Phase 2 behaviour: nothing bounds a larger call, so every call is one coverage."""
+    """Nothing bounds a larger call without a budget, so every call is one coverage."""
     s = sizing(None)
     points, ranges = SHAPES["efas_danube"]
     assert s.max_unit_groups(points, 1, ranges) == 1
@@ -194,7 +194,7 @@ def test_the_hard_caps_are_independent_of_the_budget_and_the_estimate():
     s = sizing(10**15)  # a budget nothing can exhaust
     points, ranges = SHAPES["o1280_europe"]
     assert s.max_values_per_unit == 256_000_000 and s.max_fields_per_call == 1024
-    # 256M values is ~2 GB of gribjump buffer at 8 B/value: it no longer binds before the budget
+    # 256M values is ~2 GB of gribjump buffer at 8 B/value: a backstop the budget reaches first
     assert s.max_unit_groups(points, 1, ranges) == 1024
     assert s.max_unit_groups(points, 4, ranges) == 1024 // 4
     assert sizing(10**15, max_fields_per_call=8).max_unit_groups(points, 1, ranges) == 8
@@ -225,7 +225,7 @@ def test_a_group_that_does_not_fit_is_fetched_one_field_per_call():
 
 @pytest.mark.parametrize("shape", ["healpix1024_global", "efas_whole_domain"])
 def test_a_field_that_does_not_fit_is_refused(shape):
-    """There is no banding left: a field larger than the budget cannot be served at all."""
+    """A field is never split, so a field larger than the budget cannot be served at all."""
     points, ranges = SHAPES[shape]
     s = sizing(500_000_000)
     assert not s.fits_group(points, 1, ranges)

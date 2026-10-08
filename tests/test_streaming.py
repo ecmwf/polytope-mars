@@ -383,7 +383,7 @@ def test_deprecated_config_keys_map_onto_new_sections():
 
 
 def test_deprecated_bytes_per_point_becomes_bytes_per_value():
-    """A config written for Phase 2 keeps working: the per-mapper table's ``default`` is the constant."""
+    """A config that sets the per-mapper table keeps working: its ``default`` is the constant."""
     conf = PolytopeMarsConfig.model_validate({"limits": {"bytes_per_point": {"default": 72, "healpix_nested": 160}}})
     assert conf.limits.bytes_per_value == 72
     # an explicit new key wins over the deprecated table

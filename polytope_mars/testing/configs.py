@@ -15,7 +15,7 @@ The ``options`` blocks are copied verbatim from polytope-config:
 the fe-worker (``polytope-server/workers/polytope-fe-worker/polytope.py``) hands to
 ``PolytopeMars``: ``pre_path`` becomes the dict of single-valued pre-path keys of the
 request, and on LUMI (``separate_datetime: true``) the merged ``date``/``time`` axis is
-split for climate-dt timeseries/polygon requests.
+split for climate-dt, class=ng and stream=efcl requests of every feature type.
 """
 
 from __future__ import annotations
@@ -288,7 +288,7 @@ _AXES = {
             "param": ["240023", "240024"],
         },
         {
-            # EFAS ensemble (the Volga 4-param request of REQUESTS.md): type pf with a number axis.
+            # EFAS ensemble (the Volga 4-param request): type pf with a number axis.
             "class": ["ce"],
             "stream": ["efas"],
             "type": ["pf"],

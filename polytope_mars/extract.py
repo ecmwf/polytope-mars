@@ -3,11 +3,11 @@
 Per request (:meth:`BlockExtractor.stream`):
 
 1. the :class:`~polytope_mars.blocks.RequestHeader` is built from the parsed request alone and the
-   encoder's ``begin()`` bytes are yielded before any datacube work (DESIGN §2.12);
+   encoder's ``begin()`` bytes are yielded before any datacube work;
 2. the datacube is created, the request sliced once and ``FDBDatacube.prepare`` puts the tree into its
    final point order;
 3. :mod:`polytope_mars.coverage_plan` enumerates the field groups in legacy coverage order;
-4. MultiPoint groups are extracted one *unit* at a time (DESIGN §2.3): the largest run of consecutive
+4. MultiPoint groups are extracted one *unit* at a time: the largest run of consecutive
    groups that fits ``limits.memory_budget_bytes`` in one ``datacube.get`` with param/levelist and the
    group axes compressed (:mod:`polytope_mars.tree_units`), one group per call when there is no budget,
    and one (param, level) at a time when a whole group does not fit.  A *field* is never split: one that
@@ -16,14 +16,14 @@ Per request (:meth:`BlockExtractor.stream`):
    ``datacube.get`` and cut into groups afterwards;
 5. ``CoordsBlock``, ``ValuesBlock`` per (param, level), ``GroupEnd``.
 
-Missing fields (DESIGN §2.5).  gribjump reports a field it has no GRIB message for in one of two ways:
+Missing fields.  gribjump reports a field it has no GRIB message for in one of two ways:
 an empty result for that path, or (the remote gribjump, i.e. production) a ``GribJumpException`` whose
 message contains ``DataNotFound`` for the whole ``extract`` call (:func:`is_data_not_found`).  The first is
 read from the filled tree; on the second the unit that raised is re-fetched in smaller pieces so that the
 fields that exist are kept and the missing ones omitted exactly as with empty results:
 
 * whole-group unit -> per (param, level), each field fetched whole: a call asking for one field that
-  raises ``DataNotFound`` says that this field is missing (what the band-0 peek used to establish);
+  raises ``DataNotFound`` says that this field is missing;
 * whole tree of a point feature -> per param, then per (group, param), then per level.
 
 The re-fetches only happen when data is missing; ``timings`` counts them (``n_fallbacks``) and the fields
@@ -107,14 +107,15 @@ def matched_no_field(exc: BaseException) -> bool:
 
 
 class _UnitPartiallyMissing(Exception):
-    """gribjump has some but not all fields of a unit: re-fetch it in smaller pieces (DESIGN §2.5)."""
+    """gribjump has some but not all fields of a unit: re-fetch it in smaller pieces."""
 
 
 def max_rss_bytes() -> int:
     """Peak resident set size of this process so far, in bytes (``ru_maxrss``).
 
     Reported in ``timings`` so that production logs can be held against the planner's estimate.
-    Observation only: no decision in polytope-mars reads it (DESIGN §2.7).
+    Observation only: no decision in polytope-mars reads the RSS, a cgroup or any other runtime
+    signal; the planner is a pure function of (request, config, tree).
     """
     try:
         peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -634,7 +635,7 @@ class BlockExtractor:
     def _refuse_field(self, sizing: UnitSizing, spec) -> None:
         """Refuse a request one field of which does not fit ``limits.memory_budget_bytes``.
 
-        A field is fetched whole -- there is no banding left -- so a field larger than the budget cannot
+        A field is always fetched whole, so a field larger than the budget cannot
         be served at all.  ``limits.max_points_per_field`` is the explicit cap that refuses such a
         request before it is even sliced; this is the backstop for the requests it does not cover.
         """
@@ -703,7 +704,7 @@ class BlockExtractor:
     def _multi_group_unit(
         self, datacube, tree, info, plan, axes, groups, specs, start, length, sizing
     ) -> Iterator[Any]:
-        """One ``datacube.get`` for ``length`` consecutive groups (DESIGN §2.3), consumed per field.
+        """One ``datacube.get`` for ``length`` consecutive groups, consumed per field.
 
         The group axes stay compressed over the unit, so the call fetches every field of every group
         in it.  The fields are then taken one at a time and a group's blocks are emitted (and its
@@ -711,7 +712,7 @@ class BlockExtractor:
         (:class:`~polytope_mars.field_stream.GroupAssembler`): the Python heap only ever holds the
         groups still incomplete, not the whole unit.
 
-        Where the fields come from is the seam of :mod:`polytope_mars.field_stream`:
+        The fields are handed over by :mod:`polytope_mars.field_stream`:
         ``FDBDatacube.get_iter`` hands the fields over as they are decoded (the default), or one
         ``datacube.get`` returns all of them at once (``limits.per_field_consumption: false``, in
         which case the unit's whole size is what the budget has to cover).
@@ -835,7 +836,7 @@ class BlockExtractor:
         Each call fetches one whole field -- a field is never split -- so gribjump's own buffer holds one
         field instead of the group's, while the Python side still holds the group (its params have to be
         known before the coverage is opened).  A ``DataNotFound`` on such a call therefore says that this
-        one field is missing, which is what the band-0 peek used to establish.
+        one field has no GRIB message, which is how a missing field is reported.
         """
         has_levels = bool(g.levels)
         fields: dict = {}

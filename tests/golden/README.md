@@ -21,8 +21,8 @@ The expected bytes were generated with the versions the deployed fe-worker pins
 - pygribjump[binary] 0.12.0.26, pyfdb 5.22.0.26, eccodes 2.47.0
 - polytope-mars from this branch (only test helpers, timings and the `datacube_factory` hook differ from `main`)
 
-To regenerate or verify the oracle, use a pristine environment and the Phase 0 code (commit `bf75a36`, the
-last one that ran the legacy covjsonkit encoders; later code runs the block pipeline), not editable installs
+To regenerate or verify the oracle, use a pristine environment and commit `bf75a36`, the last one that
+ran the legacy covjsonkit encoders (every later commit runs the block pipeline), not editable installs
 of branches under development. `.venv-legacy` has this checkout installed editable, so point it at a worktree:
 
 ```sh
@@ -67,7 +67,7 @@ legacy_error: {...}       # optional, documentation: what the oracle raised for 
 
 The per-request config is built like the fe-worker builds it (`fake_gribjump_config_dict`): the
 deployed `options` block of the grid, `pre_path` = single-valued pre-path keys of the request, and the
-LUMI `separate_datetime` date/time split for climate-dt timeseries/polygon.
+LUMI `separate_datetime` date/time split for climate-dt, class=ng and stream=efcl requests.
 
 ## Checking values, not just bytes
 

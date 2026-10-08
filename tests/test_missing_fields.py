@@ -151,7 +151,7 @@ def test_multi_group_unit_fallback_keeps_the_params_that_exist():
     assert ranges[24] == ["dis06"]
     assert all(r == ["dis06", "dis24"] for step, r in ranges.items() if step != 24)
     assert out == run(c, "raise")[0]
-    # unit + 9 groups + the failing group (1 call) + its two per-param band-0 peeks
+    # unit + 9 groups + the failing group (1 call) + one call per param of that group
     assert fake.n_extract_calls == 1 + 9 + 1 + 2 and fake.n_data_not_found == 3
     assert pm.timings["n_fallbacks"] == 2 and pm.timings["n_missing_fields"] == 1
 
@@ -212,11 +212,10 @@ _VanishingFake.__name__ = "GribJump"  # polytope's Datacube.create dispatches on
 
 
 def test_a_field_that_vanishes_between_calls_is_reported_missing():
-    """Every field is fetched by exactly one call, so a field lost after an earlier call is just missing.
+    """Every field is fetched by exactly one call, so a field lost between calls is simply missing.
 
-    With latitude bands a later band of a field whose band 0 had been found re-raised (the field existed
-    a moment ago).  There are no later bands: a ``DataNotFound`` on a one-field call means that field has
-    no message, which is the empty-result semantics of DESIGN 2.5.
+    A ``DataNotFound`` for a call that asks for a single field says that this field has no message,
+    which carries the empty-result semantics: the param's range is omitted from that coverage.
     """
     c = case("efas_bbox_multiparam")
     fake = _VanishingFake(build_fake(c).cubes, vanish={"param": "240023"})

@@ -143,7 +143,7 @@ def run_of(n, **kwargs) -> list:
 
 
 def test_groups_that_pay_for_one_call_each_are_their_own_unit():
-    """``GroupSpec.max_groups`` 1 -- what the sizing gives without a budget -- is the Phase 2 pattern."""
+    """``GroupSpec.max_groups`` 1 -- what the sizing gives without a budget -- is one call per group."""
     assert units(run_of(5)) == "0+1 1+1 2+1 3+1 4+1"
 
 

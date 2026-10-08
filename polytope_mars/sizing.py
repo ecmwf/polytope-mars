@@ -1,4 +1,4 @@
-"""How much memory one extraction unit needs (DESIGN §2.7).
+"""How much memory one extraction unit needs.
 
 An extraction unit is what one ``datacube.get`` (or one ``get_iter`` pass) costs at its peak.  Four
 terms, all resident at the same time, so they are added:
@@ -49,13 +49,12 @@ A unit of ``k`` groups is planned when
     ``k x group_fields x n_points <= max_values_per_unit``
 
 where ``python_values`` is one group's values on the per-field path and the unit's values on the
-whole-unit path.  Without a budget a unit is a single group (Phase 2 behaviour: nothing bounds a
-larger call).
+whole-unit path.  Without a budget a unit is a single group: nothing bounds a larger call.
 
 **A field is never split.**  When the fields of a *single* group do not fit one call, the group is
 fetched one (param, level) at a time: gribjump's buffer then holds one field while the Python side
 still holds the group, which is :meth:`UnitSizing.field_bytes` (and :meth:`UnitSizing.fits_field`).
-A field that does not fit even on its own is refused -- there is no banding to fall back on --
+A field that does not fit even on its own is refused,
 which ``limits.max_points_per_field`` is the explicit, pre-slicing form of.
 
 The sizing is a pure function of (request, config, prepared tree).  Nothing here reads the process
@@ -219,8 +218,8 @@ class UnitSizing:
     ) -> int:
         """Groups of this shape one ``datacube.get`` may fetch; 0 when one group does not even fit.
 
-        Without a budget every unit is a single group (Phase 2 behaviour: nothing bounds a larger
-        call), the hard caps still applying.  With a budget the per-field path is bounded by
+        Without a budget every unit is a single group (nothing bounds a larger call), the hard caps
+        still applying.  With a budget the per-field path is bounded by
         gribjump's buffer -- plus, when every group brings its own sub-trees (``own_branch``), their
         request side -- because its live values are one group's whatever the unit's size.
         """

@@ -1,4 +1,4 @@
-# Phase 0 measurements (legacy pipeline)
+# Legacy pipeline measurements
 
 Produced by `python tools/measure_memory.py [slice|get|e2e]` with the pristine oracle environment
 (`.venv-legacy`: polytope-python 2.1.20, covjsonkit 0.2.26, numpy 2.4.6, Python 3.11) against the fake
@@ -31,7 +31,7 @@ bytes/point = (RSS after - RSS before) / points; the tree is still alive when RS
   dominant slice-time cost for polygons, not the bbox case.
 - The global H1024 bbox (12.6M points) fits in ~0.8 GiB of tree but takes 140 s to slice.
 
-## 2. `bytes_per_point` of a bare `datacube.get` (DESIGN §2.7)
+## 2. `bytes_per_point` of a bare `datacube.get`
 
 Slice a bbox, then call `datacube.get(tree)` (gribjump extraction + assignment of results onto the tree,
 no encoding); 4 fields (2 params x 2 steps/times) per tree.
@@ -78,10 +78,10 @@ peak B/value = (peak RSS - RSS before extract) / values. `PolytopeMars.timings` 
 All scenarios ran at the requested size; none needed scaling down. The global H1024 slice is the slowest
 (2.3 min). A global H1024 *polygon* was not attempted (projected ~15 GB from (b)).
 
-# Phase 2 measurements (streaming pipeline)
+# Streaming pipeline measurements
 
-`python tools/measure_memory.py stream` (one subprocess per run, `.venv` with the Phase 1/1c polytope-feature
-branch at `50018d5a`, same machine and fake gribjump as above). Request: EFAS Danube bbox
+`python tools/measure_memory.py stream` (one subprocess per run, `.venv` with polytope-feature at
+`50018d5a`, same machine and fake gribjump as above). Request: EFAS Danube bbox
 `[[50.25,8.15],[42.08,29.73]]`, class=ce stream=efas, steps 6 to 60 by 6, one param: 634,550 points x 10 steps =
 **6,345,500 values**, 10 coverages, 337 MiB of CovJSON. The output is consumed chunk by chunk and discarded (as
 the fe-worker will stream it). Growth = peak RSS (`VmHWM`, reset at the start) minus RSS before `extract_stream`
@@ -92,8 +92,8 @@ the fe-worker will stream it). Growth = peak RSS (`VmHWM`, reset at the start) m
 | streaming | 200,000,000 | 10 | 10 | 23.5 | 7.8 | **163** | 25.6 |
 | streaming | 20,000,000 | 50 | 50 | 5.8 | 7.1 | **123** | 19.5 |
 | streaming, no budget | None | 10 | 10 | 23.5 | 7.6 | 163 | 25.7 |
-| new `extract()` + `json.dumps` (fe-worker today) | None | 10 | 10 | - | 18.4 | 2,050 | 323 |
-| legacy `extract()` + `json.dumps` (Phase 0 code, `.venv-legacy`) | - | 1 | - | - | 56.6 | **5,242** | 826 |
+| new `extract()` + `json.dumps` (the fe-worker's buffered path) | None | 10 | 10 | - | 18.4 | 2,050 | 323 |
+| legacy `extract()` + `json.dumps` (`.venv-legacy`) | - | 1 | - | - | 56.6 | **5,242** | 826 |
 
 - Every field group here fits a 200 MB budget (634,550 points x 1 field x 64 B = 41 MB), so the 200 MB and
   no-budget runs are the same call pattern: one get per step. At 20 MB each step is cut into 5 latitude bands.
@@ -101,15 +101,15 @@ the fe-worker will stream it). Growth = peak RSS (`VmHWM`, reset at the start) m
   not grow with the number of steps. The remaining ~40 MB at 200 MB is one coverage's unit (get result, float64
   field copy, the formatted coordinate block of 23.5 MiB).
 - `tests/test_stream_memory.py` asserts growth < 2 x max(budget, 100 MB) for the 200 MB and 20 MB runs.
-- Phase timings of the 200 MB run (ms): slice 3,335, prepare 283, get 2,847, encode 1,164, first byte after
+- Stage timings of the 200 MB run (ms): slice 3,335, prepare 283, get 2,847, encode 1,164, first byte after
   20 ms (before slicing).
-- The buffered `extract()` is kept for compatibility only (the fe-worker still calls it until Phase 3); it holds
-  the whole document as Python objects (`json.loads`), 2.5x less than legacy but still ~320 B/value.
+- The buffered `extract()` is kept for compatibility; it holds the whole document as Python objects
+  (`json.loads`), 2.5x less than legacy but still ~320 B/value.
 
-# Phase 2d measurements (sizing an extraction unit)
+# Sizing an extraction unit
 
 Same machine and fake gribjump as above, `.venv` with polytope-feature `53ccb1fe` (flat per-field result
-assignment) and the Phase 2d polytope-mars. Re-runnable:
+assignment). Re-runnable:
 
     python tools/measure_memory.py ranges      # points and index ranges per field, and what they cost
     python tools/measure_memory.py calibrate   # limits.bytes_per_value
@@ -141,7 +141,7 @@ range), without the safety factor. Python MB = `128 x points`.
   whole-world HEALPix fields are to be served in one call.
 - No request measured here asks for the same grid index from two different latitude nodes
   (`cross_node_duplicates` false), including boxes that wrap past the longitude seam, so latitude bands can
-  be prepared independently (see Phase 2d in CHANGES.md).
+  be prepared independently (see "Preparing band by band" in CHANGES.md).
 - Counting the ranges walks every point once, like `prepare`: 0.4 s for the Danube box, 7 s for the HEALPix
   Europe box, **398 s for a global HEALPix field** (`prepare` itself takes 402 s for it). Planning a
   whole-world HEALPix request therefore doubles its slice-time cost; polytope-feature returning the counts
@@ -188,7 +188,7 @@ row's estimate is above its growth. Least squares per shape (`growth = intercept
   calibrated on. Re-measure against real gribjump before lowering it: at 32 B/value the units of the two
   cases below would be ~4x larger.
 
-## 3. The two requests Phase 2d has to get right
+## 3. The two requests the sizing has to get right
 
 `python tools/measure_memory.py stream`, budget as the chart injects it.
 
@@ -197,17 +197,16 @@ row's estimate is above its growth. Least squares per shape (`growth = intercept
 | HEALPix-1024 Europe box x 24 hourly fields (11.5M values) | 1.5 GiB | 24 | **14** | 2 | 1,547.2 | **1,788.7** | 1,602.6 | 139.2 | 522 |
 | EFAS Danube bbox x 40 steps (25.4M values) | 1 GiB | 40 | **12** | 4 | 1,068.3 | **474.7** | 288.9 | 11.4 | 9 |
 
-- The HEALPix request is the one that was OOM-killed at 3 GiB on LUMI with Phase 2c's 19-field units
+- The HEALPix request is the one that was OOM-killed at 3 GiB on LUMI with 19-field units
   (`480k x 160 x 19 = 1.46 GB` against the same budget). It now runs in two calls of 14 and 10 fields with a
   peak of 1.79 GB, 40% under the 3 GiB limit, and its output is unchanged.
 - Peak RSS is the whole process, so it also holds the sliced and prepared tree of all 24 branches and the
   slicing transients; the planner's estimate covers the unit alone. The chart's
-  `limits.memory_budget_bytes` must therefore stay a *share* of the pool's memory, as DESIGN 2.7 says, not
-  the whole of it.
+  `limits.memory_budget_bytes` must therefore stay a *share* of the pool's memory, not the whole of it.
 - 230 s of the HEALPix run is `prepare` on the whole tree (11.5M grid-index lookups, one per point per
   branch) and 29 s is slicing. A unit that fits is still prepared with the whole tree; preparing per unit
   (as the banded path already prepares per band) would cut that to one branch's worth.
-- The EFAS request was 2 units in Phase 2c (k=26 at 64 B/point and no gribjump term); the new model halves
+- The EFAS request was 2 units under the per-mapper constant (k=26 at 64 B/point and no gribjump term); the model halves
   it to 12 groups per call, i.e. 4 calls instead of 2 -- about 1 s more at ~480 ms per call.
 
 ## 4. Largest fragment the CovJSON encoder emits per block
@@ -228,14 +227,14 @@ whatever the extraction unit size: the band only bounds what polytope-mars holds
 builds per block. Values blocks are smaller (~17-20 B/value). Bounding the fragment is covjsonkit's side of
 the contract (`CovjsonStreamEncoder.encode_iter`), not polytope-mars'.
 
-# Phase 2f measurements (per-field consumption, and what one call really costs)
+# Per-field consumption, and what one call really costs
 
 Same machine and fake gribjump as above, `.venv` with polytope-feature `d3656bd2`
-(`FDBDatacube.get_iter`) and the Phase 2f polytope-mars. Re-runnable:
+(`FDBDatacube.get_iter`). Re-runnable:
 
     python tools/measure_memory.py ranges      # points and index ranges per field (unchanged)
     python tools/measure_memory.py calibrate   # limits.bytes_per_point_call, limits.bytes_per_value
-    python tools/measure_memory.py targets     # what the planner does with the REQUESTS.md shapes
+    python tools/measure_memory.py targets     # what the planner does with the deployed request shapes
     python tools/measure_memory.py --run stream_healpix1024_europe_24fields_1_5GiB   # measured peak
 
 Re-run `calibrate` after polytope-feature changes how requests are built or results consumed, and
@@ -315,11 +314,11 @@ estimate (worst margin 1.26x, on the 48-field Volga unit):
 - `efas_danube_1`, `efas_volga_4`, `healpix1024_europe_1` and `o1280_europe_1` are single-group
   requests, which never take the multi-group path: they are fetched with one whole-unit `get`
   (`unit_source` = `get`) and are in the table as the one-field baseline.
-- The fake was changed in this phase to build `values_flat` in one vectorised pass instead of one
-  numpy array per index range (300,315 of them per HEALPix field). Before, that synthesis dominated
-  every HEALPix measurement; it is gone from these numbers.
+- The fake builds `values_flat` in one vectorised pass rather than one numpy array per index range
+  (300,315 of them per HEALPix field); synthesising them one at a time dominates every HEALPix
+  measurement and is not something production pays for.
 
-## 2. The requests Phase 2f has to plan well
+## 2. The planner on the deployed request shapes
 
 `python tools/measure_memory.py targets`: the request is sliced, prepared and planned (no data
 fetched) and its units replanned at both budgets with the deployed defaults. Points and ranges are
@@ -331,7 +330,8 @@ per field; "fields per call" is the largest unit the planner produced.
 | EFAS Switzerland ensemble, 1 param x 50 x 60 | 3,000 x 1 | 18,834 | 151 | per call | **1,000, 3** (est. 271 MB) | **1,000, 3** |
 | climate-dt HEALPix-1024 Europe box x 24 hourly | 24 x 1 | 479,865 | 300,315 | per group | **14, 2** (est. 1,579 MB) | **17, 2** (est. 1,911 MB) |
 
-- **Volga**: 188 fields per call at 1.5 GiB against the 12 fields Phase 2d planned, i.e. ~15x fewer
+- **Volga**: 188 fields per call at 1.5 GiB against 12 fields when the Python term is charged for
+  every field of the call, i.e. ~15x fewer
   calls (~2 min of fixed cost instead of ~8 min at 0.5 s per call). The call *count* is 120 rather
   than 12,000/188 = 64 because coverages come out (reference, step, number) -- all 50 members of a
   step, then the next step (`tests/golden/expected/efas_bbox_ensemble.covjson`) -- and a unit must be
@@ -349,12 +349,12 @@ per field; "fields per call" is the largest unit the planner produced.
 ## 3. Measured peak of the HEALPix case
 
 `python tools/measure_memory.py --run stream_healpix1024_europe_24fields_1_5GiB` (the request that
-was OOM-killed on LUMI at 3 GiB with Phase 2c's 19-field units), budget 1.5 GiB:
+was OOM-killed on LUMI at 3 GiB with 19-field units), budget 1.5 GiB:
 
 | | units (gets) | fields per unit | estimated unit MB | peak RSS | growth | wall | get / prepare / slice |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| Phase 2d (whole-unit `get`) | 2 | 14 | 1,547 | 1,789 MB | 1,603 MB | 522 s | - |
-| Phase 2f (per-field `get_iter`) | 2 | 14 | 1,579 | **1,790 MB** | 1,603 MB | 511 s | 237 s / 235 s / 29 s |
+| whole-unit `get` | 2 | 14 | 1,547 | 1,789 MB | 1,603 MB | 522 s | - |
+| per-field `get_iter` | 2 | 14 | 1,579 | **1,790 MB** | 1,603 MB | 511 s | 237 s / 235 s / 29 s |
 
 **1.79 GB peak against the 2.2 GB target** (3 GiB pod, 1.5 GiB budget), output byte count unchanged.
 The peak is the whole process: the sliced and prepared tree of all 24 branches and the slicing
@@ -364,7 +364,7 @@ that, as the banded path already does per band.
 
 ## 3b. The same requests on the dev clusters (real gribjump, fe-worker pods at 3 GiB)
 
-Phase 2f worker image (`polytope-mars` `ce8482eb4021`, `limits.memory_budget_bytes` 1,610,612,736),
+Worker image (`polytope-mars` `ce8482eb4021`, `limits.memory_budget_bytes` 1,610,612,736),
 `timings` from the worker's `request completed` line. `max_rss_bytes` is the whole process
 (interpreter, imports, the sliced tree, the Rust side), not the unit alone.
 
@@ -388,10 +388,13 @@ Bologna (`fdbtest`, EFAS as expver 0099):
 
 | request | calls | fields per call | unit estimate | peak RSS | wall | get (max per call) |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| EFAS Danube bbox, 40 steps (1.28 GB out) | **1** (Phase 2d: 4) | 40 | 430 MB | 528 MB | 33 s | 21 s |
-| EFAS Switzerland ensemble, 50 x 60 (2.97 GB out), cold | **3** (Phase 2d: 8) | 1,000 | 271 MB | 528 MB | 698 s | 696 s (243 s) |
+| EFAS Danube bbox, 40 steps (1.28 GB out) | **1** (4) | 40 | 430 MB | 528 MB | 33 s | 21 s |
+| EFAS Switzerland ensemble, 50 x 60 (2.97 GB out), cold | **3** (8) | 1,000 | 271 MB | 528 MB | 698 s | 696 s (243 s) |
 | the same request again, 9 min later | 3 | 1,000 | 271 MB | 528 MB | 265 s | 262 s (96 s) |
-| IFS enfo Volga polygon ensemble, O1280, 7,250 coverages (5.97 GB out) | **8** (Phase 2d: 17) | 1,015 | 235 MB | 437 MB | 195 s | 187 s (68 s) |
+| IFS enfo Volga polygon ensemble, O1280, 7,250 coverages (5.97 GB out) | **8** (17) | 1,015 | 235 MB | 437 MB | 195 s | 187 s (68 s) |
+
+The parenthesised call count is what the same request needed when the Python term was charged for
+every field of a call (128 B/value, per-field consumption off).
 
 The wall time of the ensemble requests is gribjump's, whatever the batching: Switzerland costs the
 server 0.23 s per field cold and 0.09 s warm (the second run found the GRIB files in the page
@@ -403,16 +406,16 @@ never moved from the 528 MB the 40-field Danube unit had set on that pod.
 `max_chunk_mib` of the calibration runs: **5.4-5.5 MiB** on every shape and field count, against
 covjsonkit's `max_fragment_bytes` of 8 MiB. The sizing charges `2 x max_fragment_bytes` (16.8 MB,
 one fragment being built while the previous is still referenced), which the measurements never
-approach -- unlike Phase 2d, where a coordinate block was emitted whole (17-23 MiB).
+approach: a coordinate block is emitted as fragments rather than as one 17-23 MiB object.
 
-# Phase 3b measurements (one bulk node per spatial sub-tree, no banding)
+# One bulk node per spatial sub-tree: whole-field ranges and whole-field calls
 
 Same machine and fake gribjump as above, `.venv` with polytope-feature `6ac17964`
-(`bulk_grid_leaves`, the fold in `prepare`) and the Phase 3b polytope-mars. Re-runnable:
+(`bulk_grid_leaves`, the fold in `prepare`). Re-runnable:
 
     python tools/measure_memory.py ranges      # points and whole-field index ranges
     python tools/measure_memory.py calibrate   # limits.bytes_per_point_call, limits.bytes_per_value
-    python tools/measure_memory.py targets     # what the planner does with the REQUESTS.md shapes
+    python tools/measure_memory.py targets     # what the planner does with the deployed request shapes
     python tools/measure_memory.py tree        # what a prepared tree costs, fold off vs on
     python tools/measure_memory.py --run stream_healpix1024_whole_world_1_5GiB
     python tools/measure_memory.py --run stream_efas_whole_domain_1_5GiB
@@ -420,8 +423,8 @@ Same machine and fake gribjump as above, `.venv` with polytope-feature `6ac17964
 ## 1. Whole-field index ranges
 
 `tools/measure_memory.py ranges`: one field, the counts read off the prepared tree's bulk node the
-way the planner reads them. "per row" is the Phase 2d count of the same request (one range per run
-of consecutive indices *within a latitude row*).
+way the planner reads them. "per row" is the count of the same request when the ranges are derived
+row by row (one range per run of consecutive indices *within a latitude row*).
 
 | field | points | ranges | per row | points per range | gribjump B/value |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -435,14 +438,15 @@ of consecutive indices *within a latitude row*).
 | EFAS Switzerland polygon | 18,834 | 151 | 151 | 125 | 8.9 |
 | EFAS whole domain | 13,439,104 | 2,968 | 2,970 | 4,528 | 8.1 |
 
-(the "per row" column is the Phase 2d measurement of the same request, section 1 above; the EFAS
+(the "per row" column is the row-by-row measurement of the same request, section 1 of the sizing
+above; the EFAS
 shapes and the Volga/Switzerland polygons cover their rows in ascending index order, so the whole-field
 sort finds the same ranges.)
 
-The gribjump term is **8.1-8.9 B/value on every grid and shape**, against 65 B/value for the HEALPix
-Europe box in Phase 2d: the range count no longer depends on how the grid numbers its points, so it
-no longer decides how many fields a call may ask for. `bytes_per_range` (96 B) stays because the term
-is exact, but it is now 0.1 MB of the 4.0 MB a HEALPix Europe field costs. A box that covers whole
+The gribjump term is **8.1-8.9 B/value on every grid and shape**, against 65 B/value row by row on
+the HEALPix Europe box: the range count does not depend on how the grid numbers its points, so it
+does not decide how many fields a call may ask for. `bytes_per_range` (96 B) stays because the term
+is exact, but it is 0.1 MB of the 4.0 MB a HEALPix Europe field costs. A box that covers whole
 rows is one range (the sort merges adjacent rows), which also halves the O1280 Europe count.
 
 ## 2. What one call costs, per shape and per field count
@@ -477,12 +481,12 @@ Fitting `residual = bytes_per_point_call x (points x sub-trees) + bytes_per_valu
 
     bytes_per_point_call = -1.4 B/point     bytes_per_value = 21.2 B/value
 
-**The per-call request side is gone.** It used to be 50-77 B/point *per spatial sub-tree*
-(`FDBDatacube` building a Python `int` per point before fetching anything); the bulk node's
-coordinates and indexes are built once, in `prepare`, and the call only sorts the indexes to get its
-ranges - a transient the heap freed by the planning absorbs. The HEALPix rows show it directly: the
-residual of a 48-field call over 48 sub-trees (23M request points) is **2.0 MB**, against 1,333 MB in
-Phase 2f.
+**The per-call request side costs nothing.** Building a Python `int` per point before fetching
+anything costs 50-77 B/point *per spatial sub-tree*; the bulk node's coordinates and indexes are
+built once, in `prepare`, and the call only sorts the indexes to get its ranges - a transient the
+heap freed by the planning absorbs. The HEALPix rows show it directly: the residual of a 48-field
+call over 48 sub-trees (23M request points) is **2.0 MB**, against 1,333 MB when the request side is
+built per call.
 
 **Defaults: `bytes_per_point_call = 32`, `bytes_per_value = 32`.** The 32 B/point is not a fit of the
 rows above (which want 0) but the bulk node's own arrays - coordinates 16 B + indexes 8 B per point -
@@ -492,21 +496,21 @@ call*, and it is what makes the resident-tree growth of section 4 visible to the
 stay below their estimate (`covered` = yes), the worst margin being 1.16x on the 48-field Volga unit
 (estimate 479 MB, growth 412 MB); `bytes_per_value` is 1.5x the fitted 21.2.
 
-## 3. The requests Phase 3b has to plan well
+## 3. The planner on the same shapes with whole-field ranges
 
 `python tools/measure_memory.py targets`: the request is sliced, prepared and planned (no data
 fetched) and its units replanned at both budgets with the deployed defaults. Points and ranges are
-per field; "fields per call" is the largest unit the planner produced. The Phase 2f column is the
-same request with per-row ranges and a 128 B/point request side.
+per field; "fields per call" is the largest unit the planner produced. The last column is the same
+request with per-row ranges and a 128 B/point request side.
 
-| request | groups x fields | points | ranges/field | 1.5 GiB: fields/call, calls | 1.8 GiB | Phase 2f at 1.5 GiB |
+| request | groups x fields | points | ranges/field | 1.5 GiB: fields/call, calls | 1.8 GiB | per-row ranges at 1.5 GiB |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | EFAS Volga ensemble, 4 params x 50 members x 60 steps | 3,000 x 4 | 609,851 | 1,131 | **196, 120** (est. 1,603 MB) | **200, 60** | 188, 120 |
 | EFAS Switzerland ensemble, 1 param x 50 x 60 | 3,000 x 1 | 18,834 | 151 | **1,000, 3** (est. 269 MB) | **1,000, 3** | 1,000, 3 |
 | climate-dt HEALPix-1024 Europe box x 24 hourly | 24 x 1 | 479,865 | 1,388 | **24, 1** (est. 546 MB) | **24, 1** | 14, 2 |
 
-- **The LUMI HEALPix request is now a single call** of all 24 hourly fields, estimated at 546 MB
-  against the 1,579 MB Phase 2f estimated for 14 of them. Both terms that bounded it are gone: the
+- **The LUMI HEALPix request is a single call** of all 24 hourly fields, estimated at 546 MB
+  against the 1,579 MB that per-row ranges estimate for 14 of them. Both terms that bounded it are gone: the
   C++ buffer per field fell from 32.7 MB to 4.0 MB (1,388 ranges instead of 300,315) and the request
   side from 128 B/point per sub-tree to the node's own arrays.
 - **Volga** gains little from the budget (196 fields per call against 188): it is bounded by
@@ -543,8 +547,8 @@ the arrays' `nbytes`, views counted once), RSS is what the process actually hold
   `unmerge_date_time_options`) and both are compressed, so all 8,760 hourly fields hang off **one**
   branch and therefore one bulk node of 2,520 points: 0.1 MB either way, and the fold *halves* the
   per-point cost (43.7 -> 30.9 B/point) because 90 nearly empty row nodes cost more than one node's
-  arrays.  The shape the brief describes is what a *box* of the same rectangle gives, since a box keeps
-  the merged date/time axis: one branch per hour. Measured over 30 days (720 branches, a year does not
+  arrays.  One branch per hour is what a *box* of the same rectangle gives instead, since a box keeps
+  the merged date/time axis. Measured over 30 days (720 branches, a year does not
   fit this machine: *slicing* 8,760 branches peaks over 5 GB, which is the slicer's own cost and has
   nothing to do with the fold) the fold again **saves** memory (44.4 -> 37.6 MB), and it is the slice,
   not the tree, that dominates such a request: 1.2 GB of RSS for 720 branches of 1,914 points.
@@ -573,39 +577,39 @@ the arrays' `nbytes`, views counted once), RSS is what the process actually hold
 | EFAS Danube box x 10 steps | none | 6,345,500 | 10 (1) | 65 MB | 273 MB | 86 MB | 337.2 MiB | 5 s |
 | EFAS Danube box x 10 steps | 20 MB | - | **refused** | 65 MB | - | - | - | - |
 
-- **The LUMI request that was OOM-killed runs in one call at 803 MB** against 1,790 MB and 511 s in
-  Phase 2f (2 calls of 14 and 10 fields), in a 3 GiB pod with a 1.5 GiB budget. Most of the wall time
+- **The LUMI request that was OOM-killed runs in one call at 803 MB** against 1,790 MB and 511 s
+  with per-row ranges and a per-call request side (2 calls of 14 and 10 fields), in a 3 GiB pod with
+  a 1.5 GiB budget. Most of the wall time
   is the slice (33 s) and `prepare` (13 s); the `get` of all 24 fields is 2.1 s against 237 s.
 - **The two largest single fields of the corpus are served whole**, 1,242 MB and 1,192 MB of peak
-  against a 1.5 GiB budget in a 3 GiB pod -- which is what justifies deleting the banding. Both are
+  against a 1.5 GiB budget in a 3 GiB pod -- which is what lets a field be extracted whole. Both are
   one gribjump call of one field (1 and 2,968 index ranges).
 - **A budget that cannot hold one field refuses the request** instead of banding it: 60 MB against the
   634,550-point Danube field raises `One field of this request covers 634550 grid points and needs
-  about 65 MB to extract, more than the memory budget of 60000000 bytes` before any call. (At 20 MB it
-  is now the tree guard of Phase 3c that answers first -- the tree of that field is 15 MB, more than
-  half the budget.)
+  about 65 MB to extract, more than the memory budget of 60000000 bytes` before any call. (At 20 MB
+  the tree guard answers first -- the tree of that field is 15 MB, more than half the budget.)
 - **Output bytes do not depend on the call pattern**: 337.2 MiB for the Danube x 10 request at one
-  call per group, at one call for all ten, and -- as Phase 1 measured the same request with latitude
-  bands -- 337 MiB then. Byte identity itself is pinned by the golden corpus (28 cases, both
+  call per group, at one call for all ten, and 337 MiB when the same request was served in latitude
+  bands. Byte identity itself is pinned by the golden corpus (28 cases, both
   consumption modes, both missing-field reporting modes) and by
   `../polytope/performance/bulk_order.py`, which asserts the ordered `(lat, lon)` list and the
   per-field values are identical with the fold off and on for every case.
 
-# Phase 3c measurements (separate date/time axes, and the tree guard)
+# Separate date/time axes, and the tree guard
 
 ## 1. What a merged date/time axis costs: the HEALPix Europe x 24 hourly request
 
 polytope-feature never compresses a merged axis (`datacube.py`: "do not compress merged axes"), so a
-climate-dt *box* gets one branch, one spatial sub-tree and one slice per datetime, while the same
-rectangle as a *polygon* -- which the fe-worker un-merges -- gets one of each in total. The same
-request measured both ways, `python tools/measure_memory.py --run tree_healpix1024_europe_24h_fold_on`
-and `--run stream_healpix1024_europe_24fields_1_5GiB` (climate-dt HEALPix-1024, Europe box, 24 hourly
-fields of 479,865 points; the "separate" rows were measured with the date/time axes un-merged for
-every feature type, see `CHANGES.md` -- that change is **not** on this branch):
+climate-dt request whose `date`/`time` axis is merged gets one branch, one spatial sub-tree and one
+slice per datetime, while the same request with `date` and `time` as separate compressed axes gets
+one of each in total. The same request measured both ways, `python tools/measure_memory.py --run
+tree_healpix1024_europe_24h_fold_on` and `--run stream_healpix1024_europe_24fields_1_5GiB`
+(climate-dt HEALPix-1024, Europe box, 24 hourly fields of 479,865 points; the fe-worker un-merges the
+axes for every feature type of these datasets, see `CHANGES.md`):
 
 | date/time axes | sub-trees | points in the tree | `slice` | `prepare` | prepared tree | peak RSS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| merged (today) | **24** | 11,516,760 | **35.5 s** | 14.1 s | **276.7 MB** | **672 MB** |
+| merged | **24** | 11,516,760 | **35.5 s** | 14.1 s | **276.7 MB** | **672 MB** |
 | separate | **1** | 479,865 | **1.5 s** | 0.6 s | **11.5 MB** | **219 MB** |
 
 End to end through `extract_stream` at a 1.5 GiB budget, output discarded (identical bytes, 601.6 MiB
@@ -613,7 +617,7 @@ either way):
 
 | date/time axes | calls (fields) | estimated unit | peak RSS | `slice` | `prepare` | `get` | wall |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| merged (today) | 1 (24) | 546 MB | **803 MB** | 35.5 s | 14.1 s | 2.2 s | **52 s** |
+| merged | 1 (24) | 546 MB | **803 MB** | 35.5 s | 14.1 s | 2.2 s | **52 s** |
 | separate | 1 (24) | 193 MB | **346 MB** | 1.5 s | 0.6 s | 2.2 s | **4.2 s** |
 
 - **24x the tree for the same data**: 24 copies of the same spatial selection at 24 B/point. The
@@ -622,8 +626,8 @@ either way):
 - **The slice is the cost that scales**, not the fetch: 35.5 s for 24 branches against 1.5 s for one,
   and it is linear in the branches. "Europe hourly for a month" (720 branches) is ~18 min of slicing
   and an 8.1 GB tree; a year is 8,760 branches.
-- Wall time is not a goal (DESIGN 1) but 52 s -> 4.2 s on a request the BOBS writer times out of at
-  300 s is worth recording.
+- Wall time is not the goal of this work, but 52 s -> 4.2 s on a request the BOBS writer times out
+  of at 300 s is worth recording.
 
 ## 2. What the tree guard refuses
 
@@ -640,10 +644,10 @@ either way):
 
 - The estimate is **1.7x the 24 B/point the prepared tree actually holds** (40 B/point against 24):
   the slicer's row leaves are built before the fold and are resident with it (9.4 B/point measured on
-  this shape in Phase 3b, 27-44 B/point on shapes with short rows), so the constant covers the peak
+  this shape above, 27-44 B/point on shapes with short rows), so the constant covers the peak
   the tree walks through, not its steady state. The exact post-prepare check (`timings["tree_bytes"]`,
   `coordinates.nbytes + indexes.nbytes` over the bulk nodes) is what bounds the steady state.
 - **A pole-to-pole box has no estimate at all**: `get_boundingbox_area` returns NaN for
   `[[90, -180], [-90, 180]]`, so the pre-slice guard opts out and the exact check does the work (the
   whole-world HEALPix field's tree is 12,582,912 x 24 B = 302 MB, under the 800 MB limit, and the
-  request is served -- as Phase 3b measured, at 1,242 MB of peak).
+  request is served, at the 1,242 MB of peak measured above).
