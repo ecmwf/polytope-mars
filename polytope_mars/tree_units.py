@@ -13,9 +13,10 @@ Two things bound a unit:
 
 * how much memory it costs: :class:`~polytope_mars.sizing.UnitSizing` turns the budget, the hard
   caps (``limits.max_fields_per_call``, ``limits.max_values_per_unit``) and the group's shape
-  (points, fields, gribjump index ranges) into ``GroupSpec.max_groups``, the number of groups of
-  that shape one ``datacube.get`` may fetch.  Without a budget every unit is a single group, as in
-  Phase 2 (``UnitSizing`` returns 1);
+  (points, fields, gribjump index ranges, spatial sub-trees) into ``GroupSpec.max_groups``, the
+  number of groups of that shape one ``datacube.get`` may fetch.  Without a budget every unit is a
+  single group, as in Phase 2 (``UnitSizing`` returns 1); 0 means that not even one group fits, and
+  the extractor then fetches it one (param, level) at a time;
 * what one tree can express: the group-axis values of a unit must form a cartesian product (a
   "rectangle"), because the compressed axes of a request tree expand to the *product* of their values
   (``FDBDatacube._gribjump_requests``).  Groups of one unit must also agree on their point count,
@@ -54,14 +55,14 @@ class GroupSpec:
     #: ``(n_points, params, levels)``; groups of one unit must agree on all three
     shape: tuple
     #: groups of this shape one ``datacube.get`` may fetch (``UnitSizing.max_unit_groups``); 0 when
-    #: a single group does not fit and has to be fetched in latitude bands
+    #: a single group does not fit and is fetched one (param, level) per call
     max_groups: int = 1
-    #: points per spatial node, for the extractor (not used for planning)
+    #: points per spatial sub-tree of the group, in tree order (one entry per bulk spatial node)
     counts: Any = ()
-    #: gribjump index ranges per field, per spatial node (parallel to ``counts``)
+    #: gribjump index ranges of one field, per spatial sub-tree (parallel to ``counts``)
     range_counts: Any = ()
-    #: True when this group has a spatial sub-tree of its own, so a unit of k groups builds the
-    #: gribjump request ranges k times (:meth:`polytope_mars.sizing.UnitSizing.request_bytes`)
+    #: True when this group has spatial sub-trees of its own, so a unit of k groups holds k times
+    #: their arrays (:meth:`polytope_mars.sizing.UnitSizing.request_bytes`)
     own_branch: bool = False
 
     @property
@@ -82,6 +83,11 @@ class GroupSpec:
     def n_ranges(self) -> int:
         """gribjump index ranges of one field of the group."""
         return sum(self.range_counts)
+
+    @property
+    def n_subtrees(self) -> int:
+        """Spatial sub-trees (bulk nodes) of the group: what one call holds the arrays of."""
+        return max(1, len(self.counts))
 
 
 def _same(a, b) -> bool:

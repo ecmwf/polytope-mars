@@ -1,7 +1,8 @@
-"""Streaming extraction: unit/band invariance, missing fields, format selection, limits, config aliases.
+"""Streaming extraction: unit invariance, missing fields, format selection, limits, config aliases.
 
-Runs the golden cases against the fake gribjump with different ``limits.memory_budget_bytes``; the bytes
-must not depend on how the request was cut into extraction units and bands.
+Runs the golden cases against the fake gribjump with different ``limits``; the bytes must not depend on
+how the request was cut into extraction units -- one group per call, several groups per call, or one
+call per (param, level) when a whole group does not fit one call.
 """
 
 import copy
@@ -48,10 +49,11 @@ def run(name, budget=None, fake=None, **limits):
     return b"".join(pm.extract_stream(request)), pm, fake
 
 
-def n_spatial_nodes(doc):
-    """Spatial nodes per coverage: distinct latitudes of a box/polygon (one node per latitude line)."""
-    cov = doc["coverages"][0]
-    return len({tuple(v[:1]) for v in cov["domain"]["axes"]["composite"]["values"]})
+def fields_per_group(name) -> int:
+    """``n_params x n_levels`` of one group of ``name``: the fields of one coverage, from the output."""
+    doc = json.loads(expected(name))
+    values = doc["coverages"][0]["domain"]["axes"]["composite"]["values"]
+    return len(doc["parameters"]) * len({v[2] for v in values})
 
 
 MULTIPOINT = [
@@ -131,7 +133,7 @@ def test_one_unit_per_group_without_budget(name):
     assert out == expected(name)
     t = pm.timings
     assert fake.n_extract_calls == t["n_units"] == t["n_groups"] == t["n_coverages"] == t["n_gribjump_calls"]
-    assert t["n_bands"] == t["n_groups"]
+    assert t["n_spatial_subtrees"] >= 1
     assert t["groups_per_unit_max"] == 1
 
 
@@ -142,7 +144,6 @@ def test_large_budget_is_one_unit_for_all_groups(name):
     t = pm.timings
     assert fake.n_extract_calls == t["n_units"] == t["n_gribjump_calls"] == 1
     assert t["groups_per_unit_max"] == t["n_groups"] == t["n_coverages"] == GROUP_GRID[name][0]
-    assert t["n_bands"] == t["n_groups"]
 
 
 @pytest.mark.parametrize("name", MULTIPOINT)
@@ -157,7 +158,7 @@ def test_unit_invariance_over_consecutive_groups(name, max_groups):
     t = pm.timings
     assert fake.n_extract_calls == t["n_units"] == t["n_gribjump_calls"] == len(units)
     assert t["groups_per_unit_max"] == max(units)
-    assert t["n_groups"] == t["n_bands"] == n_groups
+    assert t["n_groups"] == n_groups
 
 
 def test_unit_runs_stop_at_a_non_rectangular_group_set():
@@ -195,36 +196,37 @@ def test_multi_group_unit_assigns_every_field_to_its_own_group():
 
 
 @pytest.mark.parametrize("name", MULTIPOINT)
-def test_band_invariance(name):
-    """~3 bands per group and one spatial node per band give the same bytes as one unit per group."""
+def test_one_call_per_field_gives_the_same_bytes(name):
+    """A group whose fields do not fit one call is fetched one (param, level) at a time: same bytes.
+
+    ``max_fields_per_call = 1`` is the exact way to force it whatever the grid: the budget also has to
+    pay for gribjump's buffer and the encoder's fragments, which dwarf a 9-point golden case.
+    """
     ref = expected(name)
-    doc = json.loads(ref)
-    n_groups = len(doc["coverages"])
-    cov = doc["coverages"][0]
-    n_fields = len(doc["parameters"])
-    levels = {v[2] for v in cov["domain"]["axes"]["composite"]["values"]}
-    n_fields *= len(levels)
-    n_points = len(cov["domain"]["axes"]["composite"]["values"]) // len(levels)
-    bpp = BYTES_PER_VALUE
+    n_groups = len(json.loads(ref)["coverages"])
+    n_fields = fields_per_group(name)
 
-    # one spatial node per band (a latitude line; a single point on merged lat/lon grids)
-    out, pm, fake = run(name, budget=1)
+    out, pm, fake = run(name, budget=10**12, max_fields_per_call=1)
     assert out == ref
-    nodes = n_spatial_nodes(doc) if name != "ode_bbox_subhourly" else n_points
-    assert pm.timings["n_bands"] == n_groups * nodes
-    assert fake.n_extract_calls == pm.timings["n_units"] == n_fields * pm.timings["n_bands"]
+    assert pm.timings["n_groups"] == n_groups
+    # one call per field of every group, whether the group went through the whole-group path (a
+    # single-field group fits) or through the per-(param, level) path
+    assert fake.n_extract_calls == pm.timings["n_units"] == n_groups * n_fields
+    assert pm.timings["fields_per_unit_max"] == 1
 
-    # roughly three bands per group
-    budget = 3 * bpp * (n_fields + 1) * max(1, n_points // 3)
-    budget = min(budget, n_points * n_fields * bpp - 1)
-    out, pm, fake = run(name, budget=budget)
-    assert out == ref
-    assert n_groups < pm.timings["n_bands"] <= n_groups * nodes
-    assert fake.n_extract_calls == n_fields * pm.timings["n_bands"]
+
+@pytest.mark.parametrize("name", ["efas_bbox_multiparam", "cdt_bbox_levelist"])
+def test_a_field_too_large_for_the_budget_is_refused(name):
+    """A field is never split, so one that does not fit the budget is a client error, not a smaller call."""
+    fake = build_fake(case(name))
+    with pytest.raises(ValueError, match=r"One field of this request covers \d+ grid points"):
+        run(name, budget=1, fake=fake)
+    assert fake.n_extract_calls == 0, "refused before anything is fetched"
 
 
 @pytest.mark.parametrize("missing_mode", ["raise", "empty"])
-@pytest.mark.parametrize("budget", [None, 1, 2000])
+@pytest.mark.parametrize("fields_per_call", [None, 1])
+@pytest.mark.parametrize("budget", [None, 10**12])
 @pytest.mark.parametrize(
     "name",
     [
@@ -236,30 +238,32 @@ def test_band_invariance(name):
         "efas_bbox_nan_points",
     ],
 )
-def test_missing_fields_and_points_through_both_unit_paths(name, budget, missing_mode):
-    out, pm, fake = run(name, budget=budget, fake=build_fake(case(name), missing_mode=missing_mode))
+def test_missing_fields_and_points_through_both_unit_paths(name, budget, fields_per_call, missing_mode):
+    limits = {} if fields_per_call is None else {"max_fields_per_call": fields_per_call}
+    out, pm, fake = run(name, budget=budget, fake=build_fake(case(name), missing_mode=missing_mode), **limits)
     assert out == expected(name)
     assert b"NaN" not in out
 
 
-def test_band0_peek_fetches_a_missing_field_once():
-    # 228 at step 6 of 20240102 is missing: with one band per latitude line (4 lines), the missing field
-    # costs one call (band 0) and the present one 4.
-    out, pm, fake = run("o1280_bbox_missing_field", budget=1)
+def test_a_missing_field_costs_one_call_on_the_per_field_path():
+    # 228 at step 6 of 20240102 is missing: with one call per (param, level) every field of every group
+    # costs exactly one call, and the missing one says so by raising DataNotFound.
+    out, pm, fake = run("o1280_bbox_missing_field", budget=10**12, max_fields_per_call=1)
     assert out == expected("o1280_bbox_missing_field")
     assert pm.timings["n_groups"] == 4
-    assert fake.n_extract_calls == 3 * 2 * 4 + (1 + 4)
+    assert fake.n_extract_calls == 4 * 2 and fake.n_data_not_found == 1
+    assert pm.timings["n_missing_fields"] == 1 and pm.timings["n_fallbacks"] == 0
 
 
 def test_all_absent_group_emits_no_coverage():
-    out, pm, fake = run("o1280_bbox_missing_last_date", budget=1)
+    out, pm, fake = run("o1280_bbox_missing_last_date", budget=10**12, max_fields_per_call=1)
     doc = json.loads(out)
     assert [c["domain"]["axes"]["t"]["values"] for c in doc["coverages"]] == [["2024-01-01T00:00:00Z"]]
     assert pm.timings["n_groups"] == 1
 
 
 def test_bitmap_nan_points_are_null():
-    doc = json.loads(run("o1280_bbox_nan_points", budget=1)[0])
+    doc = json.loads(run("o1280_bbox_nan_points", budget=10**12, max_fields_per_call=1)[0])
     values = doc["coverages"][0]["ranges"]["2t"]["values"]
     assert values.count(None) == 4 and all(v is None or np.isfinite(v) for v in values)
 
@@ -367,7 +371,7 @@ def test_deprecated_config_keys_map_onto_new_sections():
     conf = PolytopeMarsConfig.model_validate({})
     assert conf.limits.max_polygon_points == 3600
     assert conf.limits.bytes_per_value == 32 and conf.limits.bytes_per_range == 96
-    assert conf.limits.bytes_per_point_call == 128 and conf.limits.max_fields_per_call == 1024
+    assert conf.limits.bytes_per_point_call == 32 and conf.limits.max_fields_per_call == 1024
     assert conf.limits.safety_factor == 1.5 and conf.limits.max_values_per_unit == 256_000_000
     assert conf.limits.per_field_consumption
 

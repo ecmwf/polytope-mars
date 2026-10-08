@@ -77,16 +77,21 @@ class LimitsConfig(ConfigModel):
     The unit sizing (:mod:`polytope_mars.sizing`) plans a unit of ``k`` field groups when
 
         ``buffer_cpp(unit) x safety_factor``
-        ``  + bytes_per_point_call x n_points``
+        ``  + bytes_per_point_call x n_points x n_subtrees``
         ``  + bytes_per_value x python_values``
         ``  + 2 x the encoder's max_fragment_bytes  <=  memory_budget_bytes``
 
     with ``buffer_cpp(unit) = n_fields x (8 x n_points + n_points / 8 + bytes_per_range x
-    n_ranges)`` (gribjump's own residency, the only term the safety factor applies to) and
+    n_ranges)`` (gribjump's own residency, the only term the safety factor applies to),
+    ``n_subtrees`` the spatial sub-trees the call asks for (one array-backed bulk node each) and
     ``python_values`` the values the Python side holds at once: **one field group** on the
     per-field path (``per_field_consumption``, the default) and the whole unit without it.  Two
     hard caps apply on top, independent of the budget: ``max_fields_per_call`` and
     ``max_values_per_unit``.  Without a budget a unit is one field group, as in Phase 2.
+
+    A **field** is never split: a group whose fields do not fit one call together is fetched one
+    (param, level) per call, and a request one field of which does not fit at all is refused
+    (``max_points_per_field`` is the explicit, pre-slicing form of that refusal).
 
     ``bytes_per_value``, ``bytes_per_point_call`` and ``bytes_per_range`` are measured
     (MEASUREMENTS.md, ``python tools/measure_memory.py calibrate``); only
@@ -97,14 +102,16 @@ class LimitsConfig(ConfigModel):
     max_polygon_points: int = 3600
     #: max points per field, estimated before slicing from the grid density and the feature area (None: off)
     max_points_per_field: Optional[int] = None
-    #: memory one ``datacube.get`` may cost; None: one field group per call and no banding
+    #: memory one ``datacube.get`` may cost; None: one field group per call, nothing refused
     memory_budget_bytes: Optional[int] = None
     #: measured Python-side peak bytes per value held at once (the leaf arrays plus the float64
     #: field copy handed to the encoder), the same constant for every grid
     bytes_per_value: int = 32
-    #: measured Python-side peak bytes per point of one call, paid once however many fields the
-    #: call asks for: the grid indices ``FDBDatacube`` builds per point before fetching anything
-    bytes_per_point_call: int = 128
+    #: measured Python-side bytes per point of every spatial sub-tree a call asks for, paid once
+    #: however many fields it asks for: the bulk node's own arrays (coordinates 16 B, grid indexes
+    #: 8 B), which ``prepare`` builds and the call holds throughout, plus the sort its index ranges
+    #: come from
+    bytes_per_point_call: int = 32
     #: bytes one gribjump index range costs in an ``ExtractionResult``: two vector headers plus two
     #: heap allocations, for the values and the bitmap of that range
     bytes_per_range: int = 96

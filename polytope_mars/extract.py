@@ -10,12 +10,11 @@ Per request (:meth:`BlockExtractor.stream`):
 4. MultiPoint groups are extracted one *unit* at a time (DESIGN §2.3): the largest run of consecutive
    groups that fits ``limits.memory_budget_bytes`` in one ``datacube.get`` with param/levelist and the
    group axes compressed (:mod:`polytope_mars.tree_units`), one group per call when there is no budget,
-   and one (param, level) at a time in latitude bands when a single group does not fit; the first band of
-   every field is fetched before the group's blocks are emitted (band-0 peek) so params gribjump does not
-   have are left out of the group, and groups with no data at all are skipped.  Point features
+   and one (param, level) at a time when a whole group does not fit.  A *field* is never split: one that
+   does not fit the budget on its own is refused (:meth:`BlockExtractor._refuse_field`).  Point features
    (PointSeries, VerticalProfile, Trajectory) are small: the whole prepared tree is fetched with one
    ``datacube.get`` and cut into groups afterwards;
-5. ``CoordsBlock`` per band, ``ValuesBlock`` per (param, level, band), ``GroupEnd``.
+5. ``CoordsBlock``, ``ValuesBlock`` per (param, level), ``GroupEnd``.
 
 Missing fields (DESIGN §2.5).  gribjump reports a field it has no GRIB message for in one of two ways:
 an empty result for that path, or (the remote gribjump, i.e. production) a ``GribJumpException`` whose
@@ -23,9 +22,8 @@ message contains ``DataNotFound`` for the whole ``extract`` call (:func:`is_data
 read from the filled tree; on the second the unit that raised is re-fetched in smaller pieces so that the
 fields that exist are kept and the missing ones omitted exactly as with empty results:
 
-* whole-group unit -> per (param, level), one band (the banded path with its band-0 peek);
-* band 0 of a (param, level) -> that field is missing; a later band of a field whose band 0 was found
-  re-raises (the field existed a moment ago);
+* whole-group unit -> per (param, level), each field fetched whole: a call asking for one field that
+  raises ``DataNotFound`` says that this field is missing (what the band-0 peek used to establish);
 * whole tree of a point feature -> per param, then per (group, param), then per level.
 
 The re-fetches only happen when data is missing; ``timings`` counts them (``n_fallbacks``) and the fields
@@ -52,8 +50,8 @@ import time
 from typing import Any, Iterator
 
 import numpy as np
-from polytope_feature.datacube.tensor_index_tree import MergedTensorIndexNode
 
+from . import bulk_tree
 from .blocks import (
     CoordsBlock,
     FieldGroup,
@@ -76,7 +74,6 @@ from .field_stream import (
     unit_field_source,
     whole_unit_fields,
 )
-from .grid_ranges import RangeCounter
 from .sizing import DEFAULT_FRAGMENT_BYTES, UnitSizing
 from .tree_units import GroupSpec, plan_units, prune_values, unit_select
 
@@ -159,58 +156,46 @@ def mapper_type(options) -> str | None:
 
 
 # --- reading coordinates and values from (prepared / filled) trees ---------------------------------------
-
-
-def _is_merged(node) -> bool:
-    return isinstance(node, MergedTensorIndexNode)
+#
+# Every spatial sub-tree of a prepared tree is one array-backed bulk node (:mod:`polytope_mars.bulk_tree`):
+# its coordinates, its grid indexes and one result array per field of the call are arrays, so none of the
+# readers below holds anything per point.
 
 
 def _spatial_points(node):
-    """(lat, lon) arrays of one spatial child (latitude node or merged lat/lon leaf)."""
-    if _is_merged(node):
-        return np.array([node.values[0]], dtype=np.float64), np.array([node.values[1]], dtype=np.float64)
-    lons = [np.asarray(leaf.values, dtype=np.float64) for leaf in node.children]
-    lon = np.concatenate(lons) if len(lons) != 1 else lons[0]
-    return np.full(lon.shape, node.values[0], dtype=np.float64), lon
+    """``(lat, lon)`` of one spatial sub-tree, in output order (views on the node's coordinates)."""
+    return bulk_tree.coordinates(node)
 
 
-def _leaves(spatial_node):
-    """(leaf, n_points) of a spatial child; merged lat/lon nodes are their own single-point leaf."""
-    if _is_merged(spatial_node):
-        return [(spatial_node, 1)]
-    return [(leaf, len(leaf.values)) for leaf in spatial_node.children]
+def spatial_nodes(info: TreeInfo, branches) -> list:
+    """The bulk spatial nodes of ``branches``, in tree order: one per spatial sub-tree."""
+    return [child for b in branches for child in spatial_children(info.branches[b].node)]
 
 
-def group_coordinates(info: TreeInfo, branches, start: int = 0, stop: float = math.inf):
-    """lat/lon of spatial nodes ``start <= k < stop`` (counted over ``branches`` in tree order)."""
-    lats, lons, k = [], [], 0
-    for b in branches:
-        for child in spatial_children(info.branches[b].node):
-            if start <= k < stop:
-                lat, lon = _spatial_points(child)
-                lats.append(lat)
-                lons.append(lon)
-            k += 1
-            if k >= stop:
-                break
-        if k >= stop:
-            break
-    if not lats:
+def group_coordinates(info: TreeInfo, branches):
+    """lat/lon of every point of a group, in output order."""
+    points = [_spatial_points(node) for node in spatial_nodes(info, branches)]
+    if not points:
         return np.empty(0), np.empty(0)
-    return np.concatenate(lats), np.concatenate(lons)
+    if len(points) == 1:
+        return points[0]
+    return np.concatenate([lat for lat, _ in points]), np.concatenate([lon for _, lon in points])
 
 
 def spatial_counts(info: TreeInfo, branches) -> list:
-    """Points per spatial node over ``branches`` (what ``latitude_point_counts`` gives for the group)."""
-    return [sum(n for _, n in _leaves(c)) for b in branches for c in spatial_children(info.branches[b].node)]
+    """Points per spatial sub-tree over ``branches``, in tree order."""
+    return [bulk_tree.point_count(node) for node in spatial_nodes(info, branches)]
 
 
 def collect_field_values(tree, key_axes) -> dict:
-    """Split the leaf results of a filled tree into fields.
+    """Split the results of a filled tree into fields.
 
     Returns ``{key: (values float64 array, missing bool)}`` with ``key = tuple(field value of axis for axis
     in key_axes)`` (None for axes absent from a branch).  A field is ``missing`` when gribjump had no
     message for it (every value None); bitmap-missing points come back as NaN.
+
+    A bulk spatial node holds one result array per field of the call, in the ``itertools.product`` order of
+    the compressed axes above it, which is the order ``keys`` is built in.
     """
     info = analyse_tree(tree)
     chunks: dict = {}
@@ -221,15 +206,10 @@ def collect_field_values(tree, key_axes) -> dict:
         for combo in combos:
             values = {a: branch.path[i][1][j] for i, (a, j) in enumerate(zip(axes, combo))}
             keys.append(tuple(values.get(a) for a in key_axes))
-        n_comb = len(combos)
-        for child in spatial_children(branch.node):
-            for leaf, n in _leaves(child):
-                res = leaf.result
-                if len(res) != n_comb * n:
-                    raise RuntimeError(f"Leaf result has {len(res)} values, expected {n_comb} fields x {n} points")
-                for c, key in enumerate(keys):
-                    lo = c * n
-                    chunks.setdefault(key, []).append(res[lo : lo + n])  # noqa: E203
+        for node in spatial_children(branch.node):
+            results = bulk_tree.field_results(node, len(keys))
+            for key, values in zip(keys, results):
+                chunks.setdefault(key, []).append(values)
     out = {}
     for key, parts in chunks.items():
         arr = np.concatenate([np.asarray(p) for p in parts]) if len(parts) != 1 else np.asarray(parts[0])
@@ -252,7 +232,8 @@ class _Counters:
         self.groups_per_unit_max = 0
         #: fields one ``datacube.get`` fetched at most (what the call cost gribjump)
         self.fields_per_unit_max = 0
-        self.n_bands = 0
+        #: spatial sub-trees (bulk nodes) the request walks
+        self.n_spatial_subtrees = 0
         self.n_gribjump_calls = 0
         self.n_missing_fields = 0
         self.n_fallbacks = 0
@@ -270,8 +251,6 @@ class _Counters:
         self.buffered_fields_max = 0
         #: where a unit's fields come from: "get" (whole unit) or "get_iter" (per field)
         self.unit_source = "get"
-        #: "whole_tree" or "per_band": what was handed to ``FDBDatacube.prepare``
-        self.prepare_mode = "whole_tree"
         #: "per_call" or "per_group": how often a unit pays for building its gribjump request ranges
         self.request_side = "per_call"
 
@@ -300,8 +279,8 @@ class BlockExtractor:
         self.header = header
         self.encoder = encoder
         self.counters = _Counters()
-        #: gribjump index ranges per spatial node, memoised per spatial shape
-        self.ranges = RangeCounter()
+        #: gribjump index ranges per spatial sub-tree, counted once per node
+        self.ranges = bulk_tree.RangeCounts()
 
     # -- datacube --------------------------------------------------------------------------------------
 
@@ -417,7 +396,7 @@ class BlockExtractor:
         timings["n_units"] = c.n_units
         timings["groups_per_unit_max"] = c.groups_per_unit_max
         timings["fields_per_unit_max"] = c.fields_per_unit_max
-        timings["n_bands"] = c.n_bands
+        timings["n_spatial_subtrees"] = c.n_spatial_subtrees
         timings["n_gribjump_calls"] = c.n_gribjump_calls
         timings["n_missing_fields"] = c.n_missing_fields
         timings["n_fallbacks"] = c.n_fallbacks
@@ -429,15 +408,14 @@ class BlockExtractor:
             timings[f"units_get_{name}"] = count
         timings["get_ms_max"] = round(c.get_seconds_max * 1000, 3)
         timings["unit_source"] = c.unit_source
-        timings["prepare_mode"] = c.prepare_mode
         timings["request_side"] = c.request_side
         timings["buffered_fields_max"] = c.buffered_fields_max
         timings["max_rss_bytes"] = max_rss_bytes()
         n_cov = getattr(self.encoder, "n_coverages", None)
         timings["n_coverages"] = n_cov if n_cov is not None else c.n_groups
         logger.info(
-            "%s: extracted %d groups in %d units (<= %d groups / %d fields per unit, %d bands,"
-            " %d gribjump calls, %d ranges per field via %s, prepared %s, request side %s);"
+            "%s: extracted %d groups in %d units (<= %d groups / %d fields per unit,"
+            " %d gribjump calls, %d spatial sub-trees, %d ranges per field via %s, request side %s);"
             " estimated <= %.1f MB per unit,"
             " peak RSS %.1f MB; get %.1f ms (max %.1f ms per unit, %s), encode %.1f ms",
             self.pm.id,
@@ -445,11 +423,10 @@ class BlockExtractor:
             c.n_units,
             c.groups_per_unit_max,
             c.fields_per_unit_max,
-            c.n_bands,
             c.n_gribjump_calls,
+            c.n_spatial_subtrees,
             c.n_ranges,
             c.unit_source,
-            c.prepare_mode,
             c.request_side,
             c.estimated_unit_bytes_max / 1e6,
             timings["max_rss_bytes"] / 1e6,
@@ -473,9 +450,16 @@ class BlockExtractor:
         if self.conf.datacube.type != "gribjump":
             raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")
         handle = self.pm.datacube_factory() if self.pm.datacube_factory is not None else self.pm._default_gribjump()
-        api = Polytope(datacube=handle, options=self.conf.options.model_dump(), context=self.pm.log_context)
+        options = self.conf.options.model_dump()
+        # One array-backed node per spatial sub-tree instead of a latitude -> longitude layer per grid row:
+        # the gribjump index ranges come from one sort of the whole field's indexes (hundreds instead of
+        # hundreds of thousands on HEALPix nested) and nothing of the spatial walk is per point
+        # (:mod:`polytope_mars.bulk_tree`).  Required: every tree reader here expects bulk nodes.
+        options["bulk_grid_leaves"] = True
+        api = Polytope(datacube=handle, options=options, context=self.pm.log_context)
         # The block walker reads any number of points per longitude leaf, so polygons and paths can be
-        # sliced into one leaf per latitude line instead of one node per point.
+        # sliced into one leaf per latitude line instead of one node per point (which is also what the
+        # fold above turns into one node per sub-tree).
         api._merge_union_rows = True
         self._count_extract_calls(api.datacube)
         self.pm._add_timing("datacube_init_ms", time.perf_counter() - t0)
@@ -489,8 +473,9 @@ class BlockExtractor:
     def _prepare(self, datacube, tree, **kwargs):
         """``FDBDatacube.prepare``: the points of (a pruned copy of) ``tree`` in their final order.
 
-        ``prepare`` computes a grid index per point, so its transient scales with what is prepared:
-        ``select``/``latitude_range`` keep it down to one band of one field.
+        ``prepare`` also folds each spatial sub-tree into one bulk node and is where the request ranges
+        are planned, so after it the tree holds the exact coordinates, grid indexes and range counts the
+        extraction is sized and emitted from.
         """
         t0 = time.perf_counter()
         try:
@@ -511,7 +496,7 @@ class BlockExtractor:
         logger.debug("%s: %d field groups planned", self.pm.id, len(groups))
         return info, plan, groups
 
-    # -- MultiPoint: one unit per group, or per (param, level) band ---------------------------------------
+    # -- MultiPoint: one unit per group, or one call per (param, level) -----------------------------------
 
     def _sizing(self, datacube, per_field=None) -> UnitSizing:
         """The memory model of one unit, and how this datacube delivers a unit's fields.
@@ -534,7 +519,7 @@ class BlockExtractor:
         """True when this run consumes a unit's fields one at a time (config + datacube support)."""
         return bool(self.conf.limits.per_field_consumption) and has_per_field_consumption(datacube)
 
-    def _field_group(self, plan, g: GroupPlan, index, params, n_points, n_bands) -> FieldGroup:
+    def _field_group(self, plan, g: GroupPlan, index, params, n_points) -> FieldGroup:
         return FieldGroup(
             index=index,
             path={a: str(v) for a, v in g.select.items()},
@@ -542,33 +527,38 @@ class BlockExtractor:
             params=tuple(str(p) for p in params),
             levels=tuple(plan.level_out(lev) for lev in g.levels),
             n_points=n_points,
-            n_bands=n_bands,
+            # A field is never split, so a group is always one block of points (the block IR keeps the
+            # band attributes at their single-band values for the encoders).
+            n_bands=1,
             mars_metadata=g.mars_metadata,
         )
 
     def _group_specs(self, info, plan, groups, sizing: UnitSizing) -> list:
         """One :class:`~polytope_mars.tree_units.GroupSpec` per planned group, in emission order.
 
-        Points, fields and gribjump index ranges come from the tree (prepared or not: ``prepare``
-        only reorders points and drops duplicates); the sizing turns them into the number of groups
-        one ``datacube.get`` may fetch.
+        Points and gribjump index ranges are read off the prepared tree's bulk spatial nodes, one entry
+        per spatial sub-tree (:mod:`polytope_mars.bulk_tree`); the sizing turns them into the number of
+        groups one ``datacube.get`` may fetch.
 
         Whether the groups share a spatial sub-tree decides how often one call pays the request side
         (:meth:`~polytope_mars.sizing.UnitSizing.request_bytes`): the group axes of an EFAS ensemble
-        (``number``, ``step``) are compressed inside one branch, so a unit of any size builds the
-        grid indices once, while climate-dt's merged date/time axis gives every hourly field its own
-        branch, so a unit of ``k`` groups builds them ``k`` times.
+        (``number``, ``step``) are compressed inside one branch, so a unit of any size holds one node's
+        arrays, while climate-dt's merged date/time axis gives every hourly field its own branch, so a
+        unit of ``k`` groups holds ``k`` of them.
         """
         axes = plan.group_axes()
         ranges = self.ranges
         own_branch = self._groups_own_their_branches(groups)
         self.counters.request_side = "per_group" if own_branch else "per_call"
         specs = []
+        subtrees: set = set()
         for g in groups:
-            counts = spatial_counts(info, g.branches)
-            n_points = int(sum(counts))
+            nodes = spatial_nodes(info, g.branches)
+            subtrees.update(id(node) for node in nodes)
+            counts = tuple(bulk_tree.point_count(node) for node in nodes)
+            n_points = sum(counts)
             n_fields = len(g.params) * len(g.levels or [None])
-            range_counts = ranges.counts(info, g.branches, counts) if n_points else []
+            range_counts = tuple(ranges.of(node) for node in nodes) if n_points else ()
             # A group that does not have a value on every group axis cannot be selected together with
             # its neighbours (branches without that axis would come along whole): it stays its own unit.
             key = tuple(g.key) if axes and all(v is not None for v in g.key) else None
@@ -576,13 +566,16 @@ class BlockExtractor:
                 GroupSpec(
                     key=key,
                     shape=(n_points, tuple(g.params), tuple(g.levels)),
-                    max_groups=sizing.max_unit_groups(n_points, n_fields, sum(range_counts), own_branch),
+                    max_groups=sizing.max_unit_groups(
+                        n_points, n_fields, sum(range_counts), n_subtrees=len(counts), own_branch=own_branch
+                    ),
                     counts=counts,
                     range_counts=range_counts,
                     own_branch=own_branch,
                 )
             )
         self.counters.n_ranges = max([s.n_ranges for s in specs], default=0)
+        self.counters.n_spatial_subtrees = len(subtrees)
         return specs
 
     @staticmethod
@@ -597,52 +590,40 @@ class BlockExtractor:
         return True
 
     def _multipoint_source(self, datacube, tree) -> Iterator[Any]:
-        """Plan the units on the sliced tree, then prepare either the whole tree or band by band.
+        """Prepare the whole tree, plan the units on it, and refuse a field that cannot be fetched whole.
 
-        ``prepare`` computes a grid index per point, so on the whole tree of a 26M-point field its
-        transient is larger than the field itself.  The plan does not need a prepared tree (point and
-        range counts are the same before and after, bar duplicates), so it is made first: when every
-        group fits one call the whole tree is prepared as before, and when a group has to be fetched
-        in latitude bands the whole tree is never prepared -- each band prepares its own pruned copy,
-        which is where that band's coordinates come from, and prepare-time memory scales with the
-        band instead of the request.
-
-        One exception: when two latitude nodes ask for the same grid index (a box meeting itself
-        across the longitude seam), only a call holding both can drop the duplicate, so the whole
-        tree is prepared even for a banded request -- bytes first.
+        ``prepare`` is what folds the spatial layers into one bulk node per sub-tree and plans the
+        request ranges, so the point counts and range counts the units are sized from come from the
+        prepared tree.  A field is never split: when a single field does not fit the budget the request
+        is refused (:meth:`_refuse_field`) rather than cut into pieces.
         """
+        tree = self._prepare(datacube, tree)
         info, plan, groups = self._plan(tree)
         sizing = self._sizing(datacube)
         specs = self._group_specs(info, plan, groups, sizing)
-        banded = any(spec.max_groups < 1 for spec in specs)
-        if self._prepare_whole_tree(banded):
-            tree = self._prepare(datacube, tree)
-            info, plan, groups = self._plan(tree)
-            specs = self._group_specs(info, plan, groups, sizing)
-            return self._multipoint_blocks(datacube, tree, info, plan, groups, specs, sizing)
-        self.counters.prepare_mode = "per_band"
+        for spec in specs:
+            if spec.max_groups < 1 and not sizing.fits_field(
+                spec.n_points, spec.n_fields, spec.n_ranges, n_subtrees=spec.n_subtrees
+            ):
+                self._refuse_field(sizing, spec)
         return self._multipoint_blocks(datacube, tree, info, plan, groups, specs, sizing)
 
-    def _prepare_whole_tree(self, banded: bool) -> bool:
-        """Whether to prepare the whole tree up front instead of band by band.
+    def _refuse_field(self, sizing: UnitSizing, spec) -> None:
+        """Refuse a request one field of which does not fit ``limits.memory_budget_bytes``.
 
-        Yes while every group is fetched whole (the tree has to be in its final order before the
-        first coordinate block), and yes for a banded request whose latitude nodes ask for the same
-        grid index twice: only a call holding both can drop such a duplicate, and dropping it is
-        part of the output.  Duplicates *inside* one latitude node (a box meeting itself across the
-        longitude seam) do not count: a band holds whole latitude nodes, so its own prepare drops
-        them exactly as a whole-tree prepare would.
+        A field is fetched whole -- there is no banding left -- so a field larger than the budget cannot
+        be served at all.  ``limits.max_points_per_field`` is the explicit cap that refuses such a
+        request before it is even sliced; this is the backstop for the requests it does not cover.
         """
-        if not banded:
-            return True
-        if self.ranges.cross_node_duplicates:
-            logger.debug("%s: duplicate grid points across latitude nodes: preparing the whole tree", self.pm.id)
-            return True
-        return False
+        needed = sizing.field_bytes(spec.n_points, spec.n_ranges, spec.n_fields, spec.n_subtrees)
+        raise ValueError(
+            f"One field of this request covers {spec.n_points} grid points and needs about "
+            f"{needed / 1e6:.0f} MB to extract, more than the memory budget of {sizing.budget} bytes; "
+            "request a smaller area or fewer parameters per request"
+        )
 
     def _multipoint_blocks(self, datacube, tree, info, plan, groups, specs, sizing) -> Iterator[Any]:
         axes = plan.group_axes()
-        prepared = self.counters.prepare_mode == "whole_tree"
         for start, length in plan_units(specs):
             self.counters.groups_per_unit_max = max(self.counters.groups_per_unit_max, length)
             spec = specs[start]
@@ -656,25 +637,25 @@ class BlockExtractor:
             if spec.n_points == 0:
                 continue
             index = self.counters.n_groups
-            if spec.max_groups >= 1 and prepared:
+            if spec.max_groups >= 1:
                 self._note_estimate(sizing, spec.n_fields, spec)
-                blocks = self._single_unit(datacube, tree, info, plan, g, index, spec.counts, spec.n_fields)
+                blocks = self._single_unit(datacube, tree, info, plan, g, index, spec)
             else:
-                # Per-band prepare: a group that fits is still one band, prepared on its own.
-                ratio = spec.n_ranges / spec.n_points if spec.n_points else 1.0
-                band_points = spec.n_points if spec.max_groups >= 1 else sizing.band_points(spec.n_fields, ratio)
-                self._note_estimate(sizing, spec.n_fields, spec, n_points=min(band_points, spec.n_points))
-                blocks = self._banded(datacube, tree, info, plan, g, index, spec.counts, band_points, prepared=prepared)
+                # The group's fields do not fit one call together: one call per (param, level), each
+                # fetching its field whole (checked to fit by :meth:`_multipoint_source`).
+                self.counters.estimated_unit_bytes_max = max(
+                    self.counters.estimated_unit_bytes_max,
+                    sizing.field_bytes(spec.n_points, spec.n_ranges, spec.n_fields, spec.n_subtrees),
+                )
+                blocks = self._field_units(datacube, tree, info, plan, g, index, spec)
             yield from self._emit_group(blocks)
 
-    def _note_estimate(self, sizing: UnitSizing, n_fields: int, spec, n_points=None, n_groups: int = 1) -> None:
+    def _note_estimate(self, sizing: UnitSizing, n_fields: int, spec, n_groups: int = 1) -> None:
         """Record what the planner thinks the next ``datacube.get`` costs (observability only)."""
-        points = spec.n_points if n_points is None else n_points
-        ranges = spec.n_ranges
-        if points != spec.n_points and spec.n_points:
-            ranges = max(1, round(spec.n_ranges * points / spec.n_points))
-        branches = n_groups if spec.own_branch else 1
-        estimate = sizing.estimate_bytes(n_fields, points, ranges, group_fields=spec.n_fields, n_branches=branches)
+        branches = spec.n_subtrees * (n_groups if spec.own_branch else 1)
+        estimate = sizing.estimate_bytes(
+            n_fields, spec.n_points, spec.n_ranges, group_fields=spec.n_fields, n_branches=branches
+        )
         self.counters.estimated_unit_bytes_max = max(self.counters.estimated_unit_bytes_max, estimate)
 
     def _emit_group(self, blocks) -> Iterator[Any]:
@@ -686,15 +667,15 @@ class BlockExtractor:
         if produced:
             self.counters.n_groups += 1
 
-    def _single_unit(self, datacube, tree, info, plan, g, index, counts, n_fields: int = 0):
-        fields = self._get_fields(datacube, tree, ["param", "levelist"], n_fields=n_fields, select=dict(g.select))
+    def _single_unit(self, datacube, tree, info, plan, g, index, spec):
+        fields = self._get_fields(datacube, tree, ["param", "levelist"], n_fields=spec.n_fields, select=dict(g.select))
         if fields is None:
-            # DataNotFound and some fields exist: re-fetch per (param, level) in one band; the band-0 peek
-            # keeps the fields that exist (only costs extra calls when data is missing).
+            # DataNotFound and some fields exist: re-fetch one (param, level) per call, which is also
+            # what says which fields are missing (only costs extra calls when data is missing).
             self.counters.n_fallbacks += 1
-            yield from self._banded(datacube, tree, info, plan, g, index, counts, int(sum(counts)))
+            yield from self._field_units(datacube, tree, info, plan, g, index, spec)
             return
-        yield from self._group_blocks(info, plan, g, index, counts, fields, ())
+        yield from self._group_blocks(info, plan, g, index, spec.n_points, fields, ())
 
     def _multi_group_unit(
         self, datacube, tree, info, plan, axes, groups, specs, start, length, sizing
@@ -738,16 +719,14 @@ class BlockExtractor:
             self.counters.n_fallbacks += 1
             for i in range(start, start + length):
                 index = self.counters.n_groups
-                yield from self._emit_group(
-                    self._single_unit(datacube, tree, info, plan, groups[i], index, specs[i].counts, specs[i].n_fields)
-                )
+                yield from self._emit_group(self._single_unit(datacube, tree, info, plan, groups[i], index, specs[i]))
             return
         finally:
             self.counters.buffered_fields_max = max(self.counters.buffered_fields_max, assembler.max_buffered_fields)
 
     def _emit_unit_group(self, info, plan, g, spec, fields) -> Iterator[Any]:
         index = self.counters.n_groups
-        yield from self._emit_group(self._group_blocks(info, plan, g, index, spec.counts, fields, tuple(g.key)))
+        yield from self._emit_group(self._group_blocks(info, plan, g, index, spec.n_points, fields, tuple(g.key)))
 
     def _unit_fields(self, datacube, sub, key_axes, label, n_fields: int = 0) -> Iterator:
         """``(key, (values, missing))`` of a unit's fields, from ``get_iter`` when there is one.
@@ -785,13 +764,12 @@ class BlockExtractor:
         finally:
             self.counters.note_get(time.perf_counter() - t0, n_fields)
 
-    def _group_blocks(self, info, plan, g, index, counts, fields, prefix) -> Iterator[Any]:
-        """The blocks of one group whose fields are fetched: one band, params with data only.
+    def _group_blocks(self, info, plan, g, index, n_points, fields, prefix) -> Iterator[Any]:
+        """The blocks of one group whose fields are fetched: one block of points, params with data only.
 
         ``fields`` is a :func:`collect_field_values` result keyed ``prefix + (param, levelist)``, with
         the group's group-axis values as ``prefix`` when the call covered several groups (else empty).
         """
-        n_points = int(sum(counts))
         has_levels = bool(g.levels)
         levels = g.levels or [None]
 
@@ -815,11 +793,8 @@ class BlockExtractor:
         lat, lon = group_coordinates(info, g.branches)
         if len(lat) != n_points:
             raise RuntimeError(f"Group {g.select}: {len(lat)} coordinates for {n_points} points")
-        fg = self._field_group(plan, g, index, params, n_points, 1)
-        self.counters.n_bands += 1
-        logger.debug(
-            "%s: group %d %s: %d points, %d params, one band", self.pm.id, index, g.select, n_points, len(params)
-        )
+        fg = self._field_group(plan, g, index, params, n_points)
+        logger.debug("%s: group %d %s: %d points, %d params", self.pm.id, index, g.select, n_points, len(params))
         yield CoordsBlock(fg, 0, 0, lat, lon)
         for p in params:
             for lev in levels:
@@ -831,127 +806,31 @@ class BlockExtractor:
                 yield ValuesBlock(fg, str(p), plan.level_out(lev) if has_levels else None, 0, 0, arr)
         yield GroupEnd(fg)
 
-    def _prepared_band(self, datacube, tree, g, lo, hi) -> tuple:
-        """``(n_points, lat, lon)`` of one latitude band, from a prepared pruned copy of it.
+    def _field_units(self, datacube, tree, info, plan, g, index, spec) -> Iterator[Any]:
+        """One ``datacube.get`` per (param, level) of a group whose fields do not fit one call together.
 
-        One field is selected, so preparing costs one grid-index lookup per point of the band and
-        nothing of the rest of the request stays behind: the tree is dropped before returning.
+        Each call fetches one whole field -- a field is never split -- so gribjump's own buffer holds one
+        field instead of the group's, while the Python side still holds the group (its params have to be
+        known before the coverage is opened).  A ``DataNotFound`` on such a call therefore says that this
+        one field is missing, which is what the band-0 peek used to establish.
         """
-        select = dict(g.select)
-        select["param"] = g.params[0]
-        if g.levels:
-            select["levelist"] = g.levels[0]
-        band = self._prepare(datacube, tree, select=select, latitude_range=(lo, hi))
-        band_info = analyse_tree(band)
-        branches = range(len(band_info.branches))
-        n_points = sum(spatial_counts(band_info, branches))
-        lat, lon = group_coordinates(band_info, branches)
-        return n_points, lat, lon
-
-    def _banded(self, datacube, tree, info, plan, g, index, counts, band_points, prepared=True):
-        """One (param, level) at a time, in latitude bands of at most ``band_points`` points.
-
-        ``prepared`` says where the band's coordinates come from: the prepared whole tree
-        (``group_coordinates``), or -- when the tree was deliberately left unprepared so that
-        prepare-time memory stays proportional to a band -- a prepared pruned copy of that band
-        alone.  Both give the same points in the same order: a band is a run of whole latitude nodes
-        of the same tree and ``prepare`` only reorders points within a leaf and drops duplicate grid
-        indices, which can only span two bands when two latitude nodes share an index (checked
-        before the mode is chosen, :meth:`_multipoint_source`).
-        """
-        # Consecutive spatial nodes up to band_points points (at least one node per band).
-        bands, start, acc = [], 0, 0
-        for k, n in enumerate(counts):
-            if k > start and acc + n > band_points:
-                bands.append((start, k))
-                start, acc = k, 0
-            acc += n
-        bands.append((start, len(counts)))
-        band_sizes = [sum(counts[lo:hi]) for lo, hi in bands]
-        if not prepared:
-            # What each band holds once prepared (duplicate points inside a latitude node are gone).
-            band_sizes = [self._prepared_band(datacube, tree, g, lo, hi)[0] for lo, hi in bands]
-        offsets = [0]
-        for size in band_sizes:
-            offsets.append(offsets[-1] + size)
-        n_points = offsets[-1]
         has_levels = bool(g.levels)
-
-        def fetch(p, lev, band):
-            sel = dict(g.select)
-            sel["param"] = p
-            if has_levels:
-                sel["levelist"] = lev
-            lo, hi = bands[band]
-            expected = offsets[band + 1] - offsets[band]
-            try:
-                filled = self._get(datacube, tree, n_fields=1, select=sel, latitude_range=(lo, hi))
-            except Exception as exc:
-                # DataNotFound on band 0 (the peek) = the field is missing.  On a later band the field was
-                # found a moment ago: that is an error, re-raised.
-                if band != 0 or not is_data_not_found(exc):
-                    raise
-                return np.full(expected, np.nan), True
-            fields = collect_field_values(filled, [])
-            vals = fields.get(())
-            if vals is None:
-                return np.full(expected, np.nan), True
-            if len(vals[0]) != expected:
-                raise RuntimeError(f"Band {band} of {sel}: {len(vals[0])} values for {expected} points")
-            return vals
-
-        # Band-0 peek: the first unit of every field, before anything of the group is emitted.
-        band0 = {}
-        missing_fields = set()
-        params = []
+        fields: dict = {}
         for p in g.params:
-            present = False
             for lev in g.levels or [None]:
-                arr, missing = fetch(p, lev, 0)
-                if not missing:
-                    present = True
-                else:
-                    missing_fields.add((p, lev))
-                    self._note_missing(g.select, p, lev)
-                band0[(p, lev)] = arr
-            if present:
-                params.append(p)
-            else:
-                for lev in g.levels or [None]:
-                    band0.pop((p, lev), None)
-        if not params:
-            logger.debug("%s: group %s has no data, skipped", self.pm.id, g.select)
-            return
-        fg = self._field_group(plan, g, index, params, n_points, len(bands))
-        self.counters.n_bands += len(bands)
-        logger.debug(
-            "%s: group %d %s: %d points, %d params, %d bands of <= %d points",
-            self.pm.id,
-            index,
-            g.select,
-            n_points,
-            len(params),
-            len(bands),
-            band_points,
-        )
-        for b, (lo, hi) in enumerate(bands):
-            if prepared:
-                lat, lon = group_coordinates(info, g.branches, lo, hi)
-            else:
-                _, lat, lon = self._prepared_band(datacube, tree, g, lo, hi)
-            yield CoordsBlock(fg, b, offsets[b], lat, lon)
-        for p in params:
-            for lev in g.levels or [None]:
-                out_level = plan.level_out(lev) if has_levels else None
-                for b in range(len(bands)):
-                    if b == 0:
-                        arr = band0.pop((p, lev))
-                    elif (p, lev) in missing_fields:  # a missing level of a present param: never re-fetched
-                        arr = np.full(offsets[b + 1] - offsets[b], np.nan)
-                    else:
-                        arr = fetch(p, lev, b)[0]
-                    yield ValuesBlock(fg, str(p), out_level, b, offsets[b], arr)
-        yield GroupEnd(fg)
+                sel = dict(g.select)
+                sel["param"] = p
+                if has_levels:
+                    sel["levelist"] = lev
+                got = self._get_fields(datacube, tree, [], label=sel, n_fields=1, select=sel)
+                # {} (gribjump matched no field of the call) or None (an unreadable DataNotFound message):
+                # with one field per call both mean that this field is missing, and nothing smaller is left
+                # to try.  Leaving the key out is how :meth:`_group_blocks` reports it.
+                if got:
+                    vals = got.get(())
+                    if vals is not None:
+                        fields[(p, lev if has_levels else None)] = vals
+        yield from self._group_blocks(info, plan, g, index, spec.n_points, fields, ())
 
     # -- point features: one get for the whole tree --------------------------------------------------------
 
@@ -959,20 +838,25 @@ class BlockExtractor:
         """Estimate of the one call a point feature makes, and its field count.
 
         Point features fetch the whole tree with one ``datacube.get``, never through ``get_iter``,
-        so this is the whole-unit model whatever ``limits.per_field_consumption`` says.
+        so this is the whole-unit model whatever ``limits.per_field_consumption`` says.  A point
+        feature's fields hold a handful of points each, so this is observability only: there is
+        nothing to refuse and nothing to fetch in smaller pieces.
         """
         sizing = self._sizing(datacube, per_field=False)
-        ranges = RangeCounter()
+        ranges = self.ranges
         n_fields = n_points = n_ranges = 0
+        subtrees: set = set()
         for g in groups:
-            counts = spatial_counts(info, g.branches)
-            points = sum(counts)
+            nodes = spatial_nodes(info, g.branches)
+            points = sum(bulk_tree.point_count(node) for node in nodes)
             if not points:
                 continue
+            subtrees.update(id(node) for node in nodes)
             fields = len(g.params) * len(g.levels or [None])
             n_fields += fields
             n_points += points
-            n_ranges += sum(ranges.counts(info, g.branches, counts))
+            n_ranges += sum(ranges.of(node) for node in nodes)
+        self.counters.n_spatial_subtrees = len(subtrees)
         if not n_fields:
             return 0
         # one call, one "group": per-field points and ranges averaged over the tree
@@ -1000,8 +884,7 @@ class BlockExtractor:
             fields = collect_field_values(filled, key_axes)
         index = 0
         for g in groups:
-            counts = spatial_counts(info, g.branches)
-            n_points = int(sum(counts))
+            n_points = sum(spatial_counts(info, g.branches))
             if n_points == 0:
                 continue
             levels = g.levels or [None]
@@ -1014,9 +897,8 @@ class BlockExtractor:
             params = [p for p in g.params if any((p, lev) in found for lev in levels)]
             if not params:
                 continue
-            fg = self._field_group(plan, g, index, params, n_points, 1)
+            fg = self._field_group(plan, g, index, params, n_points)
             lat, lon = group_coordinates(info, g.branches)
-            self.counters.n_bands += 1
             yield CoordsBlock(fg, 0, 0, lat, lon)
             for p in params:
                 for lev in levels:

@@ -18,11 +18,12 @@ headers plus two heap allocations) per range.  ``n_ranges`` is counted from the 
 (:mod:`polytope_mars.grid_ranges`), so ``bytes_per_range`` is the only approximation in this term.
 ``limits.safety_factor`` multiplies it, and nothing else.
 
-**The request side, once per call.**  ``FDBDatacube`` builds one Python ``int`` per point per leaf
-and sorts ``enumerate(...)`` of those lists before anything is fetched, which is what a call with
-few fields peaks on: ``limits.bytes_per_point_call x n_points``, paid once however many fields the
-call asks for (measured ~220 B/point on HEALPix nested, ~88 B/point on EFAS; see
-``../polytope/MEASUREMENTS.md`` and ``python tools/measure_memory.py calibrate``).
+**The request side, once per spatial sub-tree of the call.**  Each sub-tree of the prepared tree is
+one array-backed bulk node (:mod:`polytope_mars.bulk_tree`) holding ``coordinates`` (16 B/point) and
+``indexes`` (8 B/point), and building the call's index ranges sorts those indexes (a permutation plus
+a sorted copy, 16 B/point, transient).  That is ``limits.bytes_per_point_call x n_points`` per
+sub-tree the call asks for, paid once however many fields it asks for (measured and calibrated in
+MEASUREMENTS.md, ``python tools/measure_memory.py calibrate``).
 
 **The values the Python side holds**: ``limits.bytes_per_value`` per value (~24 B measured: the
 leaf arrays plus the float64 field copy the block walker hands to the encoder).  How many values
@@ -41,7 +42,7 @@ fragment being built while the previous one is still on the wire), independent o
 A unit of ``k`` groups is planned when
 
     ``buffer_cpp(unit) x safety_factor``
-    ``  + bytes_per_point_call x n_points``
+    ``  + bytes_per_point_call x n_points x n_subtrees``
     ``  + bytes_per_value x python_values``
     ``  + fragment_bytes <= memory_budget_bytes``
     ``k x group_fields <= max_fields_per_call``
@@ -49,10 +50,13 @@ A unit of ``k`` groups is planned when
 
 where ``python_values`` is one group's values on the per-field path and the unit's values on the
 whole-unit path.  Without a budget a unit is a single group (Phase 2 behaviour: nothing bounds a
-larger call).  A single group that does not fit is fetched in latitude bands instead
-(:meth:`UnitSizing.band_points`); a band is one field of one call, so its own cost is one field's
-buffer plus the request side of that call plus one band of every field of the group (the band-0
-peek holds them all) plus the fragments.
+larger call).
+
+**A field is never split.**  When the fields of a *single* group do not fit one call, the group is
+fetched one (param, level) at a time: gribjump's buffer then holds one field while the Python side
+still holds the group, which is :meth:`UnitSizing.field_bytes` (and :meth:`UnitSizing.fits_field`).
+A field that does not fit even on its own is refused -- there is no banding to fall back on --
+which ``limits.max_points_per_field`` is the explicit, pre-slicing form of.
 
 The sizing is a pure function of (request, config, prepared tree).  Nothing here reads the process
 RSS, a cgroup or any other runtime signal; ``timings`` *reports* the estimate and the observed peak
@@ -120,9 +124,10 @@ class UnitSizing:
     budget: Optional[int] = None
     #: measured Python-side peak bytes per extracted value (``limits.bytes_per_value``)
     bytes_per_value: int = 32
-    #: measured Python-side peak bytes per point of one call, whatever its number of fields
-    #: (``limits.bytes_per_point_call``: the request-side grid indices)
-    bytes_per_point_call: int = 128
+    #: measured Python-side bytes per point of every spatial sub-tree of one call, whatever its
+    #: number of fields (``limits.bytes_per_point_call``: the bulk nodes' own arrays and the sort
+    #: the call's index ranges come from)
+    bytes_per_point_call: int = 32
     #: bytes one index range costs in gribjump's result (``limits.bytes_per_range``)
     bytes_per_range: int = 96
     #: multiplier on the gribjump buffer term (``limits.safety_factor``)
@@ -167,20 +172,21 @@ class UnitSizing:
         """Bytes the Python side holds for ``n_values`` values (leaf arrays, field copies, blocks)."""
         return n_values * self.bytes_per_value
 
-    def request_bytes(self, n_points: int, n_branches: int = 1) -> int:
-        """Bytes the request side of one call holds: the grid indices of every point it asks for.
+    def request_bytes(self, n_points: int, n_subtrees: int = 1) -> int:
+        """Bytes the request side of one call holds: the arrays of every spatial sub-tree it asks for.
 
-        ``FDBDatacube`` builds those per *spatial sub-tree* (branch) and keeps them for the whole
-        call, and the fields of one branch share them.  A unit whose groups sit in one branch (the
-        group axes compressed, e.g. an EFAS ensemble's ``number``/``step``) therefore pays this once
-        however many groups it fetches, while a unit of ``k`` branches (climate-dt's merged
-        date/time axis puts every hourly field in its own branch) pays it ``k`` times.
+        A sub-tree's points live in one bulk node (coordinates and grid indexes) and building the
+        call's index ranges sorts those indexes; the fields of a sub-tree share all of it.  A unit
+        whose groups sit in one sub-tree (the group axes compressed, e.g. an EFAS ensemble's
+        ``number``/``step``) therefore pays this once however many groups it fetches, while a unit
+        of ``k`` sub-trees (climate-dt's merged date/time axis puts every hourly field in its own
+        branch) pays it ``k`` times.
         """
-        return self.bytes_per_point_call * max(0, n_points) * max(1, n_branches)
+        return self.bytes_per_point_call * max(0, n_points) * max(1, n_subtrees)
 
-    def call_bytes(self, n_points: int, python_values: int, n_branches: int = 1) -> int:
+    def call_bytes(self, n_points: int, python_values: int, n_subtrees: int = 1) -> int:
         """Python-side bytes of one call: its request side, its live values, the encoder's fragments."""
-        return self.request_bytes(n_points, n_branches) + self.python_bytes(python_values) + self.fragment_bytes
+        return self.request_bytes(n_points, n_subtrees) + self.python_bytes(python_values) + self.fragment_bytes
 
     def python_values(self, n_fields: int, group_fields: Optional[int]) -> int:
         """Fields of a unit whose values are live at once: one group, or all of them."""
@@ -203,13 +209,20 @@ class UnitSizing:
 
     # -- what fits -------------------------------------------------------------------------------
 
-    def max_unit_groups(self, n_points: int, group_fields: int, n_ranges: int, own_branch: bool = False) -> int:
+    def max_unit_groups(
+        self,
+        n_points: int,
+        group_fields: int,
+        n_ranges: int,
+        n_subtrees: int = 1,
+        own_branch: bool = False,
+    ) -> int:
         """Groups of this shape one ``datacube.get`` may fetch; 0 when one group does not even fit.
 
         Without a budget every unit is a single group (Phase 2 behaviour: nothing bounds a larger
         call), the hard caps still applying.  With a budget the per-field path is bounded by
-        gribjump's buffer -- plus, when every group brings its own branch (``own_branch``), that
-        branch's request side -- because its live values are one group's whatever the unit's size.
+        gribjump's buffer -- plus, when every group brings its own sub-trees (``own_branch``), their
+        request side -- because its live values are one group's whatever the unit's size.
         """
         group_fields = max(1, group_fields)
         group_values = group_fields * max(0, n_points)
@@ -224,9 +237,9 @@ class UnitSizing:
             per_group = max(self.buffer_bytes(group_fields, n_points, n_ranges), 1)
             shared = self.fragment_bytes
             if own_branch:
-                per_group += self.request_bytes(n_points)
+                per_group += self.request_bytes(n_points, n_subtrees)
             else:
-                shared += self.request_bytes(n_points)
+                shared += self.request_bytes(n_points, n_subtrees)
             if self.per_field_consumption:
                 # the Python side holds one group however many groups the call fetches
                 limits.append(_floor_div(self.budget - shared - self.python_bytes(group_values), per_group))
@@ -234,26 +247,28 @@ class UnitSizing:
                 limits.append(_floor_div(self.budget - shared, per_group + self.python_bytes(group_values)))
         return max(0, min(limits))
 
-    def fits_group(self, n_points: int, group_fields: int, n_ranges: int) -> bool:
-        """True when one group can be fetched in one go (else it is fetched in latitude bands)."""
-        return self.max_unit_groups(n_points, group_fields, n_ranges) >= 1
+    def fits_group(self, n_points: int, group_fields: int, n_ranges: int, n_subtrees: int = 1) -> bool:
+        """True when every field of one group can be fetched by one call.
 
-    def band_points(self, n_fields: int, ranges_per_point: float = 1.0) -> int:
-        """Points per latitude band of a group that does not fit, at least one spatial node's worth.
-
-        A band is one field of one call: it costs that field's gribjump buffer and that call's
-        request side, plus one band of every field of the group and one coordinate block (the
-        band-0 peek holds them all), plus the encoder's fragments.  ``ranges_per_point`` is the
-        group's own ratio, so a band of a HEALPix-nested field (nearly one range per point) is
-        sized for its ranges and an octahedral band is not.
+        When it is not, the group is fetched one (param, level) at a time (:meth:`field_bytes`).
         """
-        n_fields = max(1, n_fields)
-        allowed = []
-        if self.budget is not None:
-            buffer_point = GRIBJUMP_BYTES_PER_VALUE + 0.125 + self.bytes_per_range * max(ranges_per_point, 0.0)
-            python_point = self.bytes_per_point_call + self.bytes_per_value * (n_fields + 1)
-            per_point = buffer_point * max(self.safety_factor, 0.0) + python_point
-            allowed.append(_floor_div(self.budget - self.fragment_bytes, per_point))
-        if self.max_values_per_unit is not None:
-            allowed.append(self.max_values_per_unit // n_fields)
-        return max(1, min(allowed)) if allowed else UNLIMITED
+        return self.max_unit_groups(n_points, group_fields, n_ranges, n_subtrees) >= 1
+
+    def field_bytes(self, n_points: int, n_ranges: int, group_fields: int = 1, n_subtrees: int = 1) -> int:
+        """Estimated peak of fetching one field of a group, one (param, level) per call.
+
+        gribjump's buffer holds the one field the call asks for, but the Python side still holds the
+        whole group: a coverage lists the params that have data, so every field of the group is
+        fetched before the first block of it is emitted.  That is the cost of the smallest unit
+        there is -- a field is never split -- and what :meth:`fits_field` holds against the budget.
+        """
+        live_values = max(1, group_fields) * max(0, n_points)
+        return self.buffer_bytes(1, n_points, n_ranges) + self.call_bytes(n_points, live_values, n_subtrees)
+
+    def fits_field(self, n_points: int, group_fields: int, n_ranges: int, n_subtrees: int = 1) -> bool:
+        """True when one field of this group can be fetched at all; False means the request is refused."""
+        if self.max_values_per_unit is not None and n_points > self.max_values_per_unit:
+            return False
+        if self.budget is None:
+            return True
+        return self.field_bytes(n_points, n_ranges, group_fields, n_subtrees) <= self.budget

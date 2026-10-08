@@ -34,16 +34,20 @@ def expected(name):
     return (GOLDEN / folder / f"{name}.covjson").read_bytes()
 
 
-def run(c, mode="raise", budget=None, fake=None):
+def run(c, mode="raise", budget=None, fake=None, **limits):
     fake = build_fake(c, missing_mode=mode) if fake is None else fake
-    pm, request = make_polytope_mars(c, fake, {"limits": {"memory_budget_bytes": budget}})
+    pm, request = make_polytope_mars(c, fake, {"limits": {"memory_budget_bytes": budget, **limits}})
     return b"".join(pm.extract_stream(request)), pm, fake
 
 
-def both_modes(c, budget=None):
+#: Forces one ``datacube.get`` per (param, level): the path a group that does not fit one call takes.
+PER_FIELD = {"budget": 10**12, "max_fields_per_call": 1}
+
+
+def both_modes(c, budget=None, **limits):
     """(raise-mode run, empty-mode run); asserts the bytes are equal."""
-    raised = run(c, "raise", budget)
-    empty = run(c, "empty", budget)
+    raised = run(c, "raise", budget, **limits)
+    empty = run(c, "empty", budget, **limits)
     assert raised[0] == empty[0]
     return raised, empty
 
@@ -166,31 +170,32 @@ def test_whole_group_fallback_with_a_missing_level():
     assert out != expected("cdt_bbox_levelist")
     assert b"NaN" not in out
     assert pm.timings["n_fallbacks"] == pm.timings["n_groups"] > 0
-    for budget in (1, 10**12):
-        assert run(c, "raise", budget)[0] == out
+    assert run(c, "raise", **PER_FIELD)[0] == out
+    assert run(c, "raise", budget=10**12)[0] == out
 
 
-# --- MultiPoint: bands ---------------------------------------------------------------------------------------
+# --- MultiPoint: one call per (param, level) -----------------------------------------------------------------
 
 
-def test_banded_peek_data_not_found_marks_the_field_missing():
-    # 4 latitude lines -> 4 bands per field; the missing field costs one (failed) call
-    (out, pm, fake), _ = both_modes(case("o1280_bbox_missing_field"), budget=1)
+def test_a_data_not_found_per_field_call_marks_that_field_missing():
+    # 4 groups x 2 params, one call each: the missing field is the call that raises, so nothing is
+    # re-fetched and no peek is needed
+    (out, pm, fake), _ = both_modes(case("o1280_bbox_missing_field"), **PER_FIELD)
     assert out == expected("o1280_bbox_missing_field")
-    assert fake.n_extract_calls == 3 * 2 * 4 + (1 + 4)
+    assert fake.n_extract_calls == 4 * 2
     assert fake.n_data_not_found == 1
     assert pm.timings["n_missing_fields"] == 1 and pm.timings["n_fallbacks"] == 0
 
 
-def test_missing_level_is_not_fetched_after_the_peek():
+def test_a_missing_level_costs_one_call_on_the_per_field_path():
     c = lowest_level_missing("cdt_bbox_levelist")
-    (out, pm, fake), _ = both_modes(c, budget=1)
+    (out, pm, fake), _ = both_modes(c, **PER_FIELD)
     assert fake.n_data_not_found == pm.timings["n_missing_fields"]  # one failed call per missing field
     assert out == run(c, "raise")[0]
 
 
 class _VanishingFake(FakeGribJump):
-    """A field that disappears after its first extraction (band 0 found, band 1 not)."""
+    """A field that disappears after its first extraction (found by one call, gone for the next)."""
 
     def __init__(self, axes_table, vanish: dict):
         super().__init__(axes_table)
@@ -206,13 +211,23 @@ class _VanishingFake(FakeGribJump):
 _VanishingFake.__name__ = "GribJump"  # polytope's Datacube.create dispatches on the class name
 
 
-def test_data_not_found_on_a_later_band_propagates():
+def test_a_field_that_vanishes_between_calls_is_reported_missing():
+    """Every field is fetched by exactly one call, so a field lost after an earlier call is just missing.
+
+    With latitude bands a later band of a field whose band 0 had been found re-raised (the field existed
+    a moment ago).  There are no later bands: a ``DataNotFound`` on a one-field call means that field has
+    no message, which is the empty-result semantics of DESIGN 2.5.
+    """
     c = case("efas_bbox_multiparam")
     fake = _VanishingFake(build_fake(c).cubes, vanish={"param": "240023"})
-    pm, request = make_polytope_mars(c, fake, {"limits": {"memory_budget_bytes": 1}})
-    with pytest.raises(pygribjump.GribJumpException, match="DataNotFound"):
-        b"".join(pm.extract_stream(request))
-    assert fake.n_data_not_found == 1
+    pm, request = make_polytope_mars(c, fake, {"limits": {"memory_budget_bytes": 10**12, "max_fields_per_call": 1}})
+    out = b"".join(pm.extract_stream(request))
+    assert fake.n_data_not_found >= 1
+    assert pm.timings["n_missing_fields"] >= 1 and pm.timings["n_fallbacks"] == 0
+    assert out != expected("efas_bbox_multiparam") and b"NaN" not in out
+    # the param found by the first call keeps its range; the later groups report it missing
+    doc = json.loads(out)
+    assert [sorted(cov["ranges"]) for cov in doc["coverages"]][0] == ["dis06", "dis24"]
 
 
 # --- other errors propagate ----------------------------------------------------------------------------------
@@ -232,11 +247,11 @@ _FailingFake.__name__ = "GribJump"
 
 
 @pytest.mark.parametrize(
-    "name, budget",
+    "name, limits",
     [
-        ("o1280_bbox_missing_field", None),  # whole-group unit
-        ("o1280_bbox_missing_field", 1),  # band-0 peek
-        ("o1280_timeseries_steps", None),  # point feature, whole tree
+        ("o1280_bbox_missing_field", {}),  # whole-group unit
+        ("o1280_bbox_missing_field", PER_FIELD),  # one call per (param, level)
+        ("o1280_timeseries_steps", {}),  # point feature, whole tree
     ],
 )
 @pytest.mark.parametrize(
@@ -251,11 +266,11 @@ _FailingFake.__name__ = "GribJump"
         (ConnectionError("fdbprod:9123 refused"), ConnectionError),
     ],
 )
-def test_other_exceptions_propagate(name, budget, error, raised):
+def test_other_exceptions_propagate(name, limits, error, raised):
     c = case(name)
     fake = _FailingFake(build_fake(c).cubes, error=error)
     with pytest.raises(raised):
-        run(c, budget=budget, fake=fake)
+        run(c, fake=fake, **limits)
     assert fake.n_extract_calls == 1
 
 

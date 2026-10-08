@@ -1,11 +1,11 @@
 """Extraction units of several field groups: the planner, the multi-value tree pruning, and the
 compressed-axes order the per-(group, param, level) split relies on.
 
-The split assumes one rule about ``polytope_feature``: a leaf's ``result`` holds its points once per
-field of the branch, the fields in C-order over the branch's compressed axes in tree order (root to
-leaf).  ``FDBDatacube._gribjump_requests`` builds the requests with ``product()`` over the leaf path's
-keys, which ``get_fdb_requests`` inserts while it descends the tree, and
-``assign_fdb_output_to_nodes`` appends the results in that order.  The first test pins it on real
+The split assumes one rule about ``polytope_feature``: a bulk spatial node's ``result`` holds one array
+of its points per field of the branch, the fields in C-order over the branch's compressed axes in tree
+order (root to leaf).  ``FDBDatacube._gribjump_requests`` builds the requests with ``product()`` over
+the leaf path's keys, which ``get_fdb_requests`` inserts while it descends the tree, and
+``assign_bulk_result`` appends the results in that order.  The first test pins it on real
 ``FDBDatacube`` output instead of trusting the reading.
 """
 
@@ -48,9 +48,10 @@ def prepared(name, monkeypatch, **request_update):
     return holder["api"].datacube, holder["tree"], fake
 
 
-def first_leaf(tree):
+def first_spatial_node(tree):
+    """The first bulk spatial node of a tree: one array-backed node per spatial sub-tree."""
     branch = analyse_tree(tree).branches[0]
-    return spatial_children(branch.node)[0].children[0]
+    return spatial_children(branch.node)[0]
 
 
 # --- the order the fields of one leaf arrive in --------------------------------------------------------
@@ -63,16 +64,16 @@ def test_compressed_axes_expand_as_a_product_in_tree_order(monkeypatch):
     assert [axis for axis, _ in compressed] == ["param", "step"], "tree order: param above step"
 
     filled = datacube.get(tree.prune())
-    leaf = first_leaf(filled)
-    n = len(leaf.values)
+    node = first_spatial_node(filled)
     fields = [(param, step) for param in ("240023", "240024") for step in ("6", "12", "18")]
-    assert len(leaf.result) == len(fields) * n
+    assert len(node.result) == len(fields), "one result array per field of the branch"
 
     got = []
-    for i in range(len(fields)):
-        chunk = np.asarray(leaf.result[i * n : (i + 1) * n], dtype=np.float64)  # noqa: E203
+    for i, values in enumerate(node.result):
+        chunk = np.asarray(values, dtype=np.float64)
+        assert len(chunk) == node.point_count
         ids = {decode_value(v)[0] for v in chunk}
-        assert len(ids) == 1, f"field {i} of the leaf mixes {len(ids)} fields"
+        assert len(ids) == 1, f"field {i} of the node mixes {len(ids)} fields"
         path = fake.fields[ids.pop()]
         got.append((str(path["param"]), str(path["step"])))
     assert got == fields
@@ -200,7 +201,7 @@ def test_prune_values_keeps_the_selected_values_and_leaves_the_tree_untouched(mo
     fields = collect_field_values(datacube.get(sub), ["step", "param"])
     assert sorted(step for step, _ in fields) == [6, 18]
     assert {len(values) for values, _ in fields.values()} == {36}
-    assert all(len(leaf.result) == 0 for leaf in tree.leaves), "the parent tree must stay unfilled"
+    assert len(first_spatial_node(tree).result) == 0, "the parent tree must stay unfilled"
     assert list(dict(analyse_tree(tree).branches[0].path)["step"]) == [6, 12, 18]
 
 

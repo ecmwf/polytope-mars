@@ -106,7 +106,7 @@
         "max_points_per_field": null,
         "memory_budget_bytes": 1610612736,
         "bytes_per_value": 32,
-        "bytes_per_point_call": 128,
+        "bytes_per_point_call": 32,
         "bytes_per_range": 96,
         "safety_factor": 1.5,
         "max_values_per_unit": 256000000,

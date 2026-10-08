@@ -8,23 +8,25 @@ still incomplete (:class:`GroupAssembler`), not the whole unit.
 Where the fields come from is the seam between polytope-mars and polytope-feature:
 
 * :func:`whole_unit_fields` -- **the default path**: one ``FDBDatacube.get`` fills the pruned
-  sub-tree and :func:`~polytope_mars.extract.collect_field_values` splits the leaf results per
+  sub-tree and :func:`~polytope_mars.extract.collect_field_values` splits its results per
   (group, param, level).  Every field of the call is on the Python heap before the first block is
   emitted, so the unit's size is what the budget has to cover
-  (:class:`~polytope_mars.sizing.UnitSizing` with ``per_field_consumption=False``).
+  (:class:`~polytope_mars.sizing.UnitSizing` with ``per_field_consumption=False``).  It is also the
+  path a group that does not fit one call takes, one (param, level) at a time.
 * :func:`lazy_unit_fields` -- ``FDBDatacube.get_iter``, used when the datacube has it *and*
   ``limits.per_field_consumption`` is on: the fields arrive one at a time and are handed on as they
   come, so the Python peak is one group whatever the unit's size.  gribjump's own buffer still holds
   the whole call (the deployed gribjump decodes the reply before returning), which is what the
   8 B/value term of the sizing covers.
 
-``get_iter`` yields ``(field_path, leaf_values)``: ``field_path`` the MARS keys of one field as
-strings, ``leaf_values`` ``[(leaf, float64 values), ...]`` per longitude leaf in tree order, or
-``None`` for a field gribjump has no message for.  Which (group, param, level) an item belongs to is
+``get_iter`` yields ``(field_path, node_values)``: ``field_path`` the MARS keys of one field as
+strings, ``node_values`` ``[(bulk spatial node, float64 values), ...]`` -- one entry per spatial
+sub-tree of the field, in tree order, the values in the node's point order -- or ``None`` for a field
+gribjump has no message for.  Which (group, param, level) an item belongs to is
 *not* read off ``field_path`` -- its values are MARS strings while the tree (and the plan) carry
 typed axis values -- but from the item's position: ``get_iter`` yields one item per (branch, field)
 in tree order, the fields of a branch in the cartesian-product order of its compressed axes,
-exactly the layout ``collect_field_values`` splits a filled leaf's ``result`` into.
+exactly the layout ``collect_field_values`` splits a filled node's ``result`` into.
 :func:`lazy_unit_fields` rebuilds that key sequence from the pruned tree and zips it with the items.
 """
 
@@ -152,7 +154,7 @@ def field_key_sequence(info, key_axes) -> list:
 
     One item per (branch, field): the branches in tree order, a branch's fields in the cartesian
     product of its compressed axes (outermost axis first) -- the layout
-    :func:`~polytope_mars.extract.collect_field_values` splits a filled leaf's ``result`` into.
+    :func:`~polytope_mars.extract.collect_field_values` splits a filled node's ``result`` into.
     """
     keys = []
     for branch in info.branches:
@@ -164,11 +166,15 @@ def field_key_sequence(info, key_axes) -> list:
     return keys
 
 
-def _field_values(leaf_values) -> tuple:
-    """``(float64 array, missing)`` of one item, as ``collect_field_values`` reports a field."""
-    if leaf_values is None:
+def _field_values(node_values) -> tuple:
+    """``(float64 array, missing)`` of one item, as ``collect_field_values`` reports a field.
+
+    The parts are the field's spatial sub-trees in tree order, so concatenating them gives the
+    field's points in output order; each is already a float64 array of its node's points.
+    """
+    if node_values is None:
         return np.empty(0), True  # gribjump has no message for this field
-    arrays = [np.asarray(values, dtype=np.float64) for _, values in leaf_values]
+    arrays = [np.asarray(values, dtype=np.float64) for _, values in node_values]
     if not arrays:
         return np.empty(0), True
     return (arrays[0] if len(arrays) == 1 else np.concatenate(arrays)), False
@@ -186,10 +192,10 @@ def lazy_unit_fields(datacube, tree, key_axes, context=None, **kwargs) -> Iterat
 
     expected = field_key_sequence(analyse_tree(tree), list(key_axes))
     n = 0
-    for _path, leaf_values in datacube.get_iter(tree, context, **kwargs):
+    for _path, node_values in datacube.get_iter(tree, context, **kwargs):
         if n >= len(expected):
             raise RuntimeError(f"datacube.get_iter yielded more than the {len(expected)} fields of the unit")
-        yield expected[n], _field_values(leaf_values)
+        yield expected[n], _field_values(node_values)
         n += 1
     if n != len(expected):
         raise RuntimeError(f"datacube.get_iter yielded {n} of the unit's {len(expected)} fields")
