@@ -72,40 +72,69 @@ class BytesPerPointConfig(ConfigModel):
 
 
 class LimitsConfig(ConfigModel):
+    """What bounds one request: polygon size, and the memory one ``datacube.get`` may cost.
+
+    The unit sizing (:mod:`polytope_mars.sizing`) plans a unit of ``k`` field groups when
+
+        ``buffer_cpp(unit) x safety_factor``
+        ``  + bytes_per_point_call x n_points``
+        ``  + bytes_per_value x python_values``
+        ``  + 2 x the encoder's max_fragment_bytes  <=  memory_budget_bytes``
+
+    with ``buffer_cpp(unit) = n_fields x (8 x n_points + n_points / 8 + bytes_per_range x
+    n_ranges)`` (gribjump's own residency, the only term the safety factor applies to) and
+    ``python_values`` the values the Python side holds at once: **one field group** on the
+    per-field path (``per_field_consumption``, the default) and the whole unit without it.  Two
+    hard caps apply on top, independent of the budget: ``max_fields_per_call`` and
+    ``max_values_per_unit``.  Without a budget a unit is one field group, as in Phase 2.
+
+    ``bytes_per_value``, ``bytes_per_point_call`` and ``bytes_per_range`` are measured
+    (MEASUREMENTS.md, ``python tools/measure_memory.py calibrate``); only
+    ``memory_budget_bytes`` has to be set per deployment.
+    """
+
     #: max number of vertices over all polygons of a request
     max_polygon_points: int = 3600
     #: max points per field, estimated before slicing from the grid density and the feature area (None: off)
     max_points_per_field: Optional[int] = None
     #: memory one ``datacube.get`` may cost; None: one field group per call and no banding
     memory_budget_bytes: Optional[int] = None
-    #: measured Python-side peak bytes per extracted value (results on the tree, float64 field copies,
-    #: encoder buffers), the same constant for every grid: see MEASUREMENTS.md and
-    #: ``python tools/measure_memory.py calibrate``
-    bytes_per_value: int = 128
+    #: measured Python-side peak bytes per value held at once (the leaf arrays plus the float64
+    #: field copy handed to the encoder), the same constant for every grid
+    bytes_per_value: int = 32
+    #: measured Python-side peak bytes per point of one call, paid once however many fields the
+    #: call asks for: the grid indices ``FDBDatacube`` builds per point before fetching anything
+    bytes_per_point_call: int = 128
     #: bytes one gribjump index range costs in an ``ExtractionResult``: two vector headers plus two
     #: heap allocations, for the values and the bitmap of that range
     bytes_per_range: int = 96
     #: multiplier on the estimated gribjump buffer of a unit
     safety_factor: float = 1.5
-    #: hard cap on the values of one ``datacube.get``, independent of the estimate and of the budget
-    max_values_per_unit: Optional[int] = 8_000_000
-    #: consume a unit's fields one at a time (``FDBDatacube.get_iter``) instead of fetching the whole
-    #: unit with ``FDBDatacube.get``: the Python side then holds one field group instead of the whole
-    #: unit, so units may be as large as gribjump's own buffer allows.  Off until the polytope-feature
-    #: API is released and ``bytes_per_value`` re-calibrated against it; ignored by a datacube that
-    #: has no ``get_iter`` (:mod:`polytope_mars.field_stream`).
-    per_field_consumption: bool = False
+    #: hard cap on the values of one ``datacube.get``, independent of the estimate and of the
+    #: budget (256M values ~ 2 GB of gribjump buffer at 8 B/value): a backstop, not a planner
+    max_values_per_unit: Optional[int] = 256_000_000
+    #: hard cap on the fields of one ``datacube.get``: keeps the request list gribjump has to parse
+    #: (and the pruned tree) bounded however large the budget is
+    max_fields_per_call: int = 1024
+    #: consume a unit's fields one at a time (``FDBDatacube.get_iter``) instead of fetching the
+    #: whole unit with ``FDBDatacube.get``: the Python side then holds one field group instead of
+    #: the whole unit, so units may be as large as gribjump's own buffer allows.  On by default;
+    #: turning it off restores the whole-unit ``get`` (and the smaller units that go with it).
+    #: Ignored by a datacube that has no ``get_iter`` (:mod:`polytope_mars.field_stream`).
+    per_field_consumption: bool = True
     #: Deprecated alias of ``bytes_per_value`` (its ``default`` entry).
     bytes_per_point: Optional[BytesPerPointConfig] = None
 
     @model_validator(mode="after")
     def _check_limits(self):
-        for name in ("bytes_per_value", "bytes_per_range", "safety_factor"):
+        for name in ("bytes_per_value", "bytes_per_point_call", "bytes_per_range", "safety_factor"):
             value = getattr(self, name)
             if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
                 raise ValueError(f"limits.{name} must be positive, got {value!r}")
         if self.max_values_per_unit is not None and self.max_values_per_unit < 1:
             raise ValueError(f"limits.max_values_per_unit must be positive or null, got {self.max_values_per_unit!r}")
+        if self.max_fields_per_call < 1:
+            raise ValueError(f"limits.max_fields_per_call must be positive, got {self.max_fields_per_call!r}")
         if self.bytes_per_point is not None and "bytes_per_value" not in self.model_fields_set:
             logging.debug("polytope-mars config: 'limits.bytes_per_point' is deprecated, use 'limits.bytes_per_value'")
             object.__setattr__(self, "bytes_per_value", self.bytes_per_point.default)

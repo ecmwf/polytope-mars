@@ -149,15 +149,25 @@ def expected_bytes(name):
     return (GOLDEN / folder / f"{name}.covjson").read_bytes()
 
 
-def run(name, per_field, budget=10**12, **limits):
+def run(name, per_field, budget=10**12, request_update=None, **limits):
     case = load_case(GOLDEN / "cases" / f"{name}.yaml")
+    case["request"].update(request_update or {})
     fake = build_fake(case)
-    update = {"limits": {"memory_budget_bytes": budget, "per_field_consumption": per_field, **limits}}
-    pm, request = make_polytope_mars(case, fake, update)
+    limits = {"memory_budget_bytes": budget, **limits}
+    if per_field is not None:
+        limits["per_field_consumption"] = per_field
+    pm, request = make_polytope_mars(case, fake, {"limits": limits})
     return b"".join(pm.extract_stream(request)), pm, fake
 
 
-def test_the_whole_unit_path_is_the_default():
+def test_the_per_field_path_is_the_default():
+    """``limits.per_field_consumption`` is on, so a multi-group unit streams its fields."""
+    out, pm, _ = run("efas_bbox_multiparam", per_field=None)
+    assert out == expected_bytes("efas_bbox_multiparam")
+    assert pm.timings["unit_source"] == "get_iter"
+
+
+def test_the_whole_unit_path_is_the_opt_out():
     out, pm, _ = run("efas_bbox_multiparam", per_field=False)
     assert out == expected_bytes("efas_bbox_multiparam")
     assert pm.timings["unit_source"] == "get"
@@ -186,6 +196,50 @@ def test_a_unit_whose_groups_are_separate_branches_buffers_one_group():
     params_per_group = len(str(case["request"]["param"]).split("/"))
     assert pm.timings["n_groups"] == 4
     assert pm.timings["buffered_fields_max"] <= params_per_group
+
+
+def test_only_one_groups_fields_are_alive_at_a_time():
+    """What the sizing of the per-field path rests on: the unit's other groups are not on the heap.
+
+    A ten-group unit (one EFAS step per group) is fetched by one call and every field array handed
+    over by ``get_iter`` is weak-referenced: while the stream runs, only the fields of the group
+    being emitted (plus the one in flight) are ever alive, whatever the unit's size.
+    """
+    import gc
+    import weakref
+
+    from polytope_mars import extract as extract_mod
+
+    live: list = []
+    original = extract_mod.lazy_unit_fields
+
+    def tracking(datacube, tree, key_axes, context=None, **kwargs):
+        for key, (values, missing) in original(datacube, tree, key_axes, context, **kwargs):
+            live.append(weakref.ref(values))
+            yield key, (values, missing)
+
+    steps = "/".join(str(s) for s in range(6, 66, 6))  # ten groups of one field
+    extract_mod.lazy_unit_fields = tracking
+    alive = []
+    try:
+        case = load_case(GOLDEN / "cases" / "efas_bbox_fc_steps.yaml")
+        case["request"]["step"] = steps
+        fake = build_fake(case)
+        update = {"limits": {"memory_budget_bytes": 10**12, "per_field_consumption": True}}
+        pm, request = make_polytope_mars(case, fake, update)
+        for _chunk in pm.extract_stream(request):
+            gc.collect()
+            alive.append(sum(1 for ref in live if ref() is not None))
+    finally:
+        extract_mod.lazy_unit_fields = original
+
+    if pm.timings["unit_source"] == "get":
+        pytest.skip(f"whole-unit path: get_iter is {has_get_iter()}")
+    assert pm.timings["n_groups"] == 10 and fake.n_extract_calls == 1
+    assert len(live) == 10, "one field per group was streamed"
+    assert max(alive) <= 2, f"fields alive at once over the stream: {alive}"
+    gc.collect()
+    assert sum(1 for ref in live if ref() is not None) == 0, "every field is released by the end"
 
 
 @pytest.mark.parametrize("missing_mode", ["raise", "empty"])

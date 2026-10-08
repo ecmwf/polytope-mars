@@ -105,10 +105,12 @@
         "max_polygon_points": 3600,
         "max_points_per_field": null,
         "memory_budget_bytes": 1610612736,
-        "bytes_per_value": 128,
+        "bytes_per_value": 32,
+        "bytes_per_point_call": 128,
         "bytes_per_range": 96,
         "safety_factor": 1.5,
-        "max_values_per_unit": 8000000,
-        "per_field_consumption": false
+        "max_values_per_unit": 256000000,
+        "max_fields_per_call": 1024,
+        "per_field_consumption": true
     }
 }

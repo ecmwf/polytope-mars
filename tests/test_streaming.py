@@ -366,8 +366,10 @@ def test_deprecated_config_keys_map_onto_new_sections():
     assert conf.encoders.covjson.param_db == "ecmwf"  # explicit new section wins
     conf = PolytopeMarsConfig.model_validate({})
     assert conf.limits.max_polygon_points == 3600
-    assert conf.limits.bytes_per_value == 128 and conf.limits.bytes_per_range == 96
-    assert conf.limits.safety_factor == 1.5 and conf.limits.max_values_per_unit == 8_000_000
+    assert conf.limits.bytes_per_value == 32 and conf.limits.bytes_per_range == 96
+    assert conf.limits.bytes_per_point_call == 128 and conf.limits.max_fields_per_call == 1024
+    assert conf.limits.safety_factor == 1.5 and conf.limits.max_values_per_unit == 256_000_000
+    assert conf.limits.per_field_consumption
 
 
 def test_deprecated_bytes_per_point_becomes_bytes_per_value():

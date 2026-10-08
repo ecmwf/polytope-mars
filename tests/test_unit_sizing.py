@@ -1,32 +1,35 @@
-"""What the planner pays for: the two terms of :class:`polytope_mars.sizing.UnitSizing`.
+"""What the planner pays for: the four terms of :class:`polytope_mars.sizing.UnitSizing`.
 
-The shapes below are the measured ones (MEASUREMENTS.md, ``tools/measure_memory.py ranges``), so
-these tests state what a deployed worker will do with a given budget, not only that the arithmetic
-is self-consistent.
+The shapes below are the measured ones (MEASUREMENTS.md, ``tools/measure_memory.py ranges
+calibrate targets``), so these tests state what a deployed worker will do with a given budget, not
+only that the arithmetic is self-consistent.
 """
 
 import pytest
 
 from polytope_mars.config import PolytopeMarsConfig
-from polytope_mars.sizing import MAX_FIELDS_PER_UNIT, UnitSizing
+from polytope_mars.sizing import DEFAULT_FRAGMENT_BYTES, UnitSizing
 from polytope_mars.tree_units import GroupSpec, plan_units
 
 GiB = 1024**3
-BUDGET_1_5_GiB = 3 * GiB // 2  # the fe pool's budget on LUMI
+BUDGET_1_5_GiB = 3 * GiB // 2  # a 3 GiB fe pod, half of it
+BUDGET_1_8_GiB = 9 * GiB // 5  # a 3.6 GiB fe pod, half of it
 
-#: (points, index ranges per field) of one field, from ``tools/measure_memory.py ranges``
+#: (points, index ranges per field) of one field, from ``tools/measure_memory.py ranges targets``
 SHAPES = {
     "efas_danube": (634_550, 490),  # local_regular, 1295 points per range
+    "efas_volga": (609_851, 1_131),  # local_regular polygon, 539 points per range
+    "efas_switzerland": (18_834, 151),  # local_regular polygon, 125 points per range
     "healpix1024_europe": (479_865, 300_315),  # healpix nested, 1.6 points per range
     "o1280_europe": (222_960, 1_080),  # octahedral, 206 points per range
     "healpix1024_global": (12_583_936, 6_291_968),  # whole world, 2 points per range
 }
 
 
-def sizing(budget, **kwargs) -> UnitSizing:
+def sizing(budget, per_field_consumption=True, **kwargs) -> UnitSizing:
     """The default limits with one budget: what a deployed worker is configured with."""
-    conf = PolytopeMarsConfig.model_validate({"limits": {"memory_budget_bytes": budget}})
-    return UnitSizing.from_limits(conf.limits, **kwargs)
+    conf = PolytopeMarsConfig.model_validate({"limits": {"memory_budget_bytes": budget, **kwargs}})
+    return UnitSizing.from_limits(conf.limits, per_field_consumption=per_field_consumption)
 
 
 def spec(shape, n_fields=1, key=(0,), max_groups=1) -> GroupSpec:
@@ -40,7 +43,7 @@ def spec(shape, n_fields=1, key=(0,), max_groups=1) -> GroupSpec:
     )
 
 
-# --- the two terms ----------------------------------------------------------------------------------
+# --- the terms ----------------------------------------------------------------------------------
 
 
 def test_the_gribjump_term_is_values_mask_and_one_vector_pair_per_range():
@@ -63,77 +66,137 @@ def test_ranges_dominate_the_gribjump_term_on_healpix_nested_only():
     assert per_value["healpix1024_europe"] > 65  # ~0.63 ranges per point: 8x the values themselves
 
 
-def test_the_python_term_is_one_constant_for_every_grid():
-    s = UnitSizing(bytes_per_value=128)
-    assert s.python_bytes(1_000) == 128_000
-    assert s.estimate_bytes(2, 1_000, 10) == s.buffer_bytes(2, 1_000, 10) + 128 * 2_000
+def test_the_python_side_is_per_call_points_plus_one_groups_values_plus_the_fragments():
+    s = UnitSizing(
+        bytes_per_value=32,
+        bytes_per_point_call=256,
+        safety_factor=1.0,
+        fragment_bytes=1_000,
+        per_field_consumption=True,
+    )
+    # four fields of a two-field group: the request side is paid once, the values of one group
+    estimate = s.estimate_bytes(4, 1_000, 10, group_fields=2)
+    assert estimate == s.buffer_bytes(4, 1_000, 10) + 256 * 1_000 + 32 * 2_000 + 1_000
+    # the whole-unit path pays the values of every field of the call instead
+    whole = UnitSizing(
+        bytes_per_value=32,
+        bytes_per_point_call=256,
+        safety_factor=1.0,
+        fragment_bytes=1_000,
+        per_field_consumption=False,
+    )
+    assert whole.estimate_bytes(4, 1_000, 10, group_fields=2) == estimate + 32 * 2_000
+
+
+def test_the_request_side_is_paid_once_per_branch_of_the_unit():
+    """Measured: the grid indices are built per spatial sub-tree and kept for the whole call.
+
+    An EFAS ensemble compresses ``number``/``step`` inside one branch (paid once); climate-dt's
+    merged date/time axis gives every hourly field its own branch (paid per group).
+    """
+    s = UnitSizing(bytes_per_point_call=256, per_field_consumption=True)
+    assert s.request_bytes(1_000) == 256_000
+    assert s.request_bytes(1_000, 4) == 4 * 256_000
+    shared = s.estimate_bytes(4, 1_000, 10, group_fields=1, n_branches=1)
+    per_group = s.estimate_bytes(4, 1_000, 10, group_fields=1, n_branches=4)
+    assert per_group - shared == 3 * 256_000
+    # ... and a group that brings its own branch therefore makes smaller units
+    points, ranges = SHAPES["healpix1024_europe"]
+    budget = BUDGET_1_5_GiB
+    assert sizing(budget).max_unit_groups(points, 1, ranges, own_branch=True) < sizing(budget).max_unit_groups(
+        points, 1, ranges
+    )
+
+
+def test_the_fragment_term_is_twice_the_encoders_limit():
+    """covjsonkit builds one fragment while the previous one is still referenced (8 MiB each)."""
+    assert DEFAULT_FRAGMENT_BYTES == 2 * 8 * 1024 * 1024
+    limits = PolytopeMarsConfig().limits
+    assert UnitSizing.from_limits(limits).fragment_bytes == DEFAULT_FRAGMENT_BYTES
+    assert UnitSizing.from_limits(limits, fragment_bytes=2 * 1_000_000).fragment_bytes == 2_000_000
+    # an encoder that does not report a limit, or reports nonsense, falls back to the default
+    assert UnitSizing.from_limits(limits, fragment_bytes="no").fragment_bytes == DEFAULT_FRAGMENT_BYTES
 
 
 # --- what fits --------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "shape, n_fields, budget, expected_k",
+    "shape, n_fields, budget, expected_fields",
     [
-        # the LUMI case: a HEALPix Europe box x 24 hourly fields against a 1.5 GiB budget
-        ("healpix1024_europe", 1, BUDGET_1_5_GiB, 14),
-        # EFAS Danube x 40 steps against 1 GiB: the Python term binds (81 MB per field)
-        ("efas_danube", 1, GiB, 12),
-        # an O1280 Europe box is small: the cap on values decides, not the budget
-        ("o1280_europe", 1, 10 * GiB, 35),
-        # several params per group: a unit holds fewer groups
-        ("o1280_europe", 4, 10 * GiB, 8),
+        # the Volga ensemble (4 params per group) at the two budgets under discussion
+        ("efas_volga", 4, BUDGET_1_5_GiB, 188),
+        ("efas_volga", 4, BUDGET_1_8_GiB, 228),
+        # the Switzerland ensemble: small fields, so the per-call field cap decides
+        ("efas_switzerland", 1, BUDGET_1_5_GiB, 1024),
+        # EFAS Danube x 40 steps against 1 GiB
+        ("efas_danube", 1, GiB, 122),
     ],
 )
-def test_groups_per_call_for_the_measured_shapes(shape, n_fields, budget, expected_k):
+def test_fields_per_call_for_the_measured_shapes(shape, n_fields, budget, expected_fields):
     points, ranges = SHAPES[shape]
     s = sizing(budget)
-    assert s.max_unit_groups(points, n_fields, ranges) == expected_k
+    k = s.max_unit_groups(points, n_fields, ranges)  # one branch: number/step compressed
+    assert k * n_fields == expected_fields
     # the estimate of such a unit stays inside the budget, and one group more does not
-    assert s.estimate_bytes(expected_k * n_fields, points, ranges) <= budget
-    over_budget = s.estimate_bytes((expected_k + 1) * n_fields, points, ranges) > budget
-    over_cap = (expected_k + 1) * n_fields * points > (s.max_values_per_unit or 0)
+    assert s.estimate_bytes(k * n_fields, points, ranges, group_fields=n_fields) <= budget
+    over_budget = s.estimate_bytes((k + 1) * n_fields, points, ranges, group_fields=n_fields) > budget
+    over_cap = (k + 1) * n_fields > s.max_fields_per_call
     assert over_budget or over_cap
 
 
+def test_the_per_field_path_plans_larger_units_than_the_whole_unit_path():
+    """The opt-out pays ``bytes_per_value`` for every field of the call, not for one group."""
+    points, ranges = SHAPES["efas_volga"]
+    lazy = sizing(BUDGET_1_5_GiB).max_unit_groups(points, 4, ranges)
+    whole = sizing(BUDGET_1_5_GiB, per_field_consumption=False).max_unit_groups(points, 4, ranges)
+    assert lazy > whole >= 1
+
+
 def test_the_planner_turns_that_into_units():
-    """24 hourly HEALPix groups against 1.5 GiB: 14 fields in the first call, 10 in the second."""
+    """The LUMI case: 24 hourly HEALPix groups, each its own branch, against 1.5 GiB."""
     s = sizing(BUDGET_1_5_GiB)
     points, ranges = SHAPES["healpix1024_europe"]
-    k = s.max_unit_groups(points, 1, ranges)
+    k = s.max_unit_groups(points, 1, ranges, own_branch=True)
+    assert k == 14
     specs = [spec("healpix1024_europe", key=(hour,), max_groups=k) for hour in range(24)]
     assert [length for _, length in plan_units(specs)] == [14, 10]
+    assert s.estimate_bytes(k, points, ranges, group_fields=1, n_branches=k) <= BUDGET_1_5_GiB
+    assert s.estimate_bytes(k + 1, points, ranges, group_fields=1, n_branches=k + 1) > BUDGET_1_5_GiB
 
 
-def test_without_a_budget_a_unit_is_one_group_but_the_cap_still_holds():
+def test_without_a_budget_a_unit_is_one_group():
+    """Phase 2 behaviour: nothing bounds a larger call, so every call is one coverage."""
     s = sizing(None)
     points, ranges = SHAPES["efas_danube"]
     assert s.max_unit_groups(points, 1, ranges) == 1
-    # a single group over the hard cap does not fit at all: it is fetched in bands
+    assert s.fits_group(points, 1, ranges)
+    # ... and a single group is never refused: 12.6M points fit the raised cap
     global_points, global_ranges = SHAPES["healpix1024_global"]
-    assert s.max_unit_groups(global_points, 1, global_ranges) == 0
-    assert not s.fits_group(global_points, 1, global_ranges)
+    assert s.max_unit_groups(global_points, 1, global_ranges) == 1
 
 
-def test_the_hard_cap_is_independent_of_the_budget_and_the_estimate():
+def test_the_hard_caps_are_independent_of_the_budget_and_the_estimate():
     s = sizing(10**15)  # a budget nothing can exhaust
     points, ranges = SHAPES["o1280_europe"]
-    assert s.max_values_per_unit == 8_000_000
-    assert s.max_unit_groups(points, 1, ranges) == 8_000_000 // points == 35
-    assert sizing(10**15, per_field_consumption=True).max_unit_groups(points, 1, ranges) == 35
+    assert s.max_values_per_unit == 256_000_000 and s.max_fields_per_call == 1024
+    # 256M values is ~2 GB of gribjump buffer at 8 B/value: it no longer binds before the budget
+    assert s.max_unit_groups(points, 1, ranges) == 1024
+    assert s.max_unit_groups(points, 4, ranges) == 1024 // 4
+    assert sizing(10**15, max_fields_per_call=8).max_unit_groups(points, 1, ranges) == 8
+    assert sizing(10**15, max_values_per_unit=10 * points).max_unit_groups(points, 1, ranges) == 10
 
 
-def test_a_whole_world_field_is_served_by_bands_at_any_budget():
-    """No cap and no budget can refuse a single field: it is cut into latitude bands instead."""
+def test_a_whole_world_healpix_field_is_served_by_bands_under_a_budget():
+    """No budget can refuse a single field: it is cut into latitude bands instead."""
     points, ranges = SHAPES["healpix1024_global"]
-    for budget in (None, 100_000_000, BUDGET_1_5_GiB):
+    for budget in (100_000_000, BUDGET_1_5_GiB):
         s = sizing(budget)
         assert not s.fits_group(points, 1, ranges)
         band = s.band_points(1, ranges / points)
         assert 1 <= band < points
-        if budget is not None:
-            # one band of one field fits both terms
-            assert s.estimate_bytes(1, band, round(band * ranges / points)) <= budget
+        # one band of one field fits every term
+        assert s.estimate_bytes(1, band, round(band * ranges / points), group_fields=1) <= budget
 
 
 def test_bands_are_smaller_on_a_grid_that_needs_more_ranges():
@@ -145,26 +208,23 @@ def test_bands_are_smaller_on_a_grid_that_needs_more_ranges():
     assert s.band_points(16, 0.0) < s.band_points(1, 0.0)
 
 
-# --- per-field consumption ---------------------------------------------------------------------------
-
-
-def test_per_field_consumption_sizes_the_python_side_by_the_group():
-    points, ranges = SHAPES["healpix1024_europe"]
-    budget = BUDGET_1_5_GiB
-    whole = sizing(budget)
-    lazy = sizing(budget, per_field_consumption=True)
-    assert lazy.max_unit_groups(points, 1, ranges) > whole.max_unit_groups(points, 1, ranges)
-    # ... and never more than one call's worth of fields
-    assert sizing(10**15, per_field_consumption=True).max_unit_groups(10, 1, 1) == MAX_FIELDS_PER_UNIT
-    assert lazy.estimate_bytes(10, points, ranges, group_fields=1) < whole.estimate_bytes(10, points, ranges)
-
-
 def test_sizing_reads_the_config():
     conf = PolytopeMarsConfig.model_validate(
-        {"limits": {"memory_budget_bytes": 1000, "bytes_per_value": 10, "bytes_per_range": 2, "safety_factor": 2.0}}
+        {
+            "limits": {
+                "memory_budget_bytes": 1000,
+                "bytes_per_value": 10,
+                "bytes_per_point_call": 20,
+                "bytes_per_range": 2,
+                "safety_factor": 2.0,
+                "max_fields_per_call": 7,
+            }
+        }
     )
     s = UnitSizing.from_limits(conf.limits)
-    assert s.budget == 1000 and s.bytes_per_value == 10
-    assert s.bytes_per_range == 2 and s.safety_factor == 2.0
+    assert s.budget == 1000 and s.bytes_per_value == 10 and s.bytes_per_point_call == 20
+    assert s.bytes_per_range == 2 and s.safety_factor == 2.0 and s.max_fields_per_call == 7
     assert not s.per_field_consumption
     assert UnitSizing.from_limits(conf.limits, per_field_consumption=True).per_field_consumption
+    # the default config is the production path
+    assert PolytopeMarsConfig().limits.per_field_consumption

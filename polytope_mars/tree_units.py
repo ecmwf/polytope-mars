@@ -12,10 +12,10 @@ afterwards (``polytope_mars.extract.collect_field_values``).
 Two things bound a unit:
 
 * how much memory it costs: :class:`~polytope_mars.sizing.UnitSizing` turns the budget, the hard
-  cap and the group's shape (points, fields, gribjump index ranges) into ``GroupSpec.max_groups``,
-  the number of groups of that shape one ``datacube.get`` may fetch; ``MAX_GROUPS_PER_UNIT`` keeps
-  one call's request list bounded whatever the budget.  Without a budget every unit is a single
-  group, as in Phase 2 (``UnitSizing`` returns 1);
+  caps (``limits.max_fields_per_call``, ``limits.max_values_per_unit``) and the group's shape
+  (points, fields, gribjump index ranges) into ``GroupSpec.max_groups``, the number of groups of
+  that shape one ``datacube.get`` may fetch.  Without a budget every unit is a single group, as in
+  Phase 2 (``UnitSizing`` returns 1);
 * what one tree can express: the group-axis values of a unit must form a cartesian product (a
   "rectangle"), because the compressed axes of a request tree expand to the *product* of their values
   (``FDBDatacube._gribjump_requests``).  Groups of one unit must also agree on their point count,
@@ -40,11 +40,7 @@ _copy_node = tree_pruning._copy_node
 _copy_subtree = tree_pruning._copy_subtree
 _value_matches = tree_pruning._value_matches
 
-__all__ = ["MAX_GROUPS_PER_UNIT", "GroupSpec", "plan_units", "prune_values", "unit_select"]
-
-#: Most field groups fetched by one ``datacube.get``: bounds the size of the request list gribjump
-#: has to parse (and of the tree pruned for the call) however large the budget is.
-MAX_GROUPS_PER_UNIT = 1024
+__all__ = ["GroupSpec", "plan_units", "prune_values", "unit_select"]
 
 LATITUDE = "latitude"
 
@@ -64,6 +60,9 @@ class GroupSpec:
     counts: Any = ()
     #: gribjump index ranges per field, per spatial node (parallel to ``counts``)
     range_counts: Any = ()
+    #: True when this group has a spatial sub-tree of its own, so a unit of k groups builds the
+    #: gribjump request ranges k times (:meth:`polytope_mars.sizing.UnitSizing.request_bytes`)
+    own_branch: bool = False
 
     @property
     def n_points(self) -> int:
@@ -94,12 +93,13 @@ def _same(a, b) -> bool:
         return False
 
 
-def plan_units(specs, max_groups: int = MAX_GROUPS_PER_UNIT) -> list:
+def plan_units(specs, max_groups=None) -> list:
     """``[(start, length), ...]`` of the units covering ``specs`` (a list of :class:`GroupSpec`).
 
     Greedy and in emission order: every unit is the longest run of consecutive groups that its
-    first group's ``max_groups`` allows (what the memory model pays for), is at most ``max_groups``
-    groups long, has the same shape throughout and whose group-axis values form a cartesian product.
+    first group's ``max_groups`` allows (what the memory model and the hard caps pay for), has the
+    same shape throughout and whose group-axis values form a cartesian product.  ``max_groups``
+    caps the run further (tests; the per-call field cap lives in ``GroupSpec.max_groups``).
     """
     units, start, n = [], 0, len(specs)
     while start < n:
@@ -109,11 +109,13 @@ def plan_units(specs, max_groups: int = MAX_GROUPS_PER_UNIT) -> list:
     return units
 
 
-def _unit_length(specs, start: int, max_groups: int) -> int:
+def _unit_length(specs, start: int, max_groups) -> int:
     first = specs[start]
     if first.key is None:
         return 1
-    limit = min(max_groups, len(specs) - start, max(1, first.max_groups))
+    limit = min(len(specs) - start, max(1, first.max_groups))
+    if max_groups is not None:
+        limit = min(limit, max_groups)
     if limit < 2:
         return 1
     distinct = [[v] for v in first.key]
