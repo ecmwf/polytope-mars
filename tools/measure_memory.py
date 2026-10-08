@@ -16,6 +16,11 @@ Groups:
   fe-worker's buffered path; with the Phase 0 code this measured the legacy pipeline).
 * ``stream``: peak RSS growth of ``PolytopeMars.extract_stream`` with the output discarded, for
   several ``limits.memory_budget_bytes``.  ``--budget N`` (bytes, or ``none``) overrides the budget.
+* ``ranges``: points and gribjump index ranges of one field, and what they cost in gribjump's buffer.
+* ``calibrate``: peak of one unit of n fields on the per-field path, against the exact gribjump
+  term, plus the least-squares fit of ``limits.bytes_per_point_call`` and ``limits.bytes_per_value``.
+* ``targets``: what the planner does with the requests of REQUESTS.md at the budgets under
+  discussion -- fields per call and call count, without fetching anything.
 """
 
 import copy
@@ -137,6 +142,48 @@ EUROPE_BBOX = bbox([[72, -25], [34, 45]])
 EUROPE_BBOX_NARROW = bbox([[72, -25], [34, 10]])
 DANUBE_BBOX = bbox([[50.25, 8.15], [42.08, 29.73]])
 GLOBAL_BBOX = bbox([[90, -180], [-90, 180]])
+#: the Volga catchment of `fe-oom-efas-pf-volga-ensemble-4param` (REQUESTS.md): 18 vertices, ~610k
+#: EFAS points, the largest EFAS forecast request in the corpus (4 params x 50 members x 60 steps)
+VOLGA_POLYGON = {
+    "type": "polygon",
+    "shape": [
+        [59.10000000998955, 33.68333332332998],
+        [59.75000000999007, 47.033333343329225],
+        [56.26666667665396, 50.25000000999571],
+        [40.899999989975065, 49.26666667666243],
+        [43.83333332331073, 42.01666665666284],
+        [45.700000009978886, 43.483333323329425],
+        [45.716666676645566, 44.78333332332935],
+        [46.54999998997956, 43.86666665666274],
+        [48.733333343314634, 44.266666656662714],
+        [52.31666665665082, 46.249999989995935],
+        [52.3333333233175, 35.966666656663186],
+        [54.39999998998581, 33.283333323330005],
+        [57.0666666766546, 31.98333332333008],
+        [57.900000009988595, 35.21666665666323],
+        [58.16666665665547, 35.033333323329906],
+        [58.33333332332227, 35.1833333233299],
+        [58.79999998998931, 33.73333332332998],
+        [59.10000000998955, 33.68333332332998],
+    ],
+}
+#: the Switzerland catchment of `fe-oom-efas-pf-switzerland-ensemble`: ~18.8k points, 1 param,
+#: 50 members x 60 steps (3,000 coverages), where the per-call field cap decides the call count
+SWITZERLAND_POLYGON = {
+    "type": "polygon",
+    "shape": [
+        [46.864427389000056, 10.453811076000136],
+        [45.82071848599999, 9.002426798000073],
+        [46.45217865000005, 8.399156128000072],
+        [45.914459534000045, 7.831232137000143],
+        [46.13046702100003, 5.958839966000113],
+        [47.48909210300009, 6.9733000080001375],
+        [47.80116607700008, 8.558216187000085],
+        [46.864427389000056, 10.453811076000136],
+    ],
+}
+#: the four EFAS ensemble parameters of the Volga request
+VOLGA_PARAMS = "228141/231002/231026/240023"
 
 
 def cdt(feature, **keys):
@@ -161,15 +208,73 @@ RANGE_SCENARIOS = {
     "ranges_efas_danube_bbox": ("efas_local_regular", efas(DANUBE_BBOX)),
 }
 
-#: calibration of ``limits.bytes_per_value``: one ``datacube.get`` + block emission of n fields
+#: calibration of ``limits.bytes_per_point_call`` and ``limits.bytes_per_value``: one unit of n
+#: fields, consumed field by field (the production path), per request shape.  ``axes`` are the group
+#: axes a unit may batch, outermost first: the builder fills the first one, then multiplies by the
+#: next, so "48 fields" is 48 hourly HEALPix groups (24 times x 2 dates) or 12 Volga groups of 4
+#: params.  ``group_fields`` is params x levels of one group (the values the lazy path holds).
 CALIBRATE_SHAPES = {
-    "efas_danube": ("efas_local_regular", DANUBE_BBOX, "step", [str(s) for s in range(6, 6 * 17, 6)]),
-    "healpix1024_europe": ("healpix_1024", EUROPE_BBOX, "time", [f"{h:02d}00" for h in range(24)]),
-    "o1280_europe": ("octahedral_1280", EUROPE_BBOX, "step", [str(s) for s in range(0, 72, 6)]),
+    "efas_danube": {
+        "grid": "efas_local_regular",
+        "builder": "efas",
+        "feature": DANUBE_BBOX,
+        "axes": [("step", [str(s) for s in range(6, 361, 6)])],
+        "group_fields": 1,
+    },
+    "efas_volga": {
+        "grid": "efas_local_regular",
+        "builder": "efas",
+        "feature": VOLGA_POLYGON,
+        "axes": [("step", [str(s) for s in range(6, 361, 6)]), ("number", [str(n) for n in range(1, 51)])],
+        "keys": {"type": "pf", "param": VOLGA_PARAMS, "number": "1"},
+        "group_fields": 4,
+    },
+    "healpix1024_europe": {
+        "grid": "healpix_1024",
+        "builder": "cdt",
+        "feature": EUROPE_BBOX,
+        "axes": [("time", [f"{h:02d}00" for h in range(24)]), ("date", ["20200101", "20200102", "20200103"])],
+        "group_fields": 1,
+    },
+    "o1280_europe": {
+        "grid": "octahedral_1280",
+        "builder": "od",
+        "feature": EUROPE_BBOX,
+        "axes": [("step", [str(s) for s in range(0, 91, 1)])],
+        "group_fields": 1,
+    },
 }
-CALIBRATE_FIELDS = (1, 4, 12)
+CALIBRATE_FIELDS = (1, 4, 12, 48)
+
+
+def calibrate_request(shape: dict, n_fields: int):
+    """The request of ``n_fields`` fields of ``shape``, or None when the fake's axes cannot express it."""
+    group_fields = shape["group_fields"]
+    if n_fields % group_fields:
+        return None
+    remaining = n_fields // group_fields
+    selection = {}
+    for axis, values in shape["axes"]:
+        take = min(len(values), remaining)
+        if remaining % take:
+            return None
+        selection[axis] = "/".join(values[:take])
+        remaining //= take
+        if remaining == 1:
+            break
+    if remaining != 1:
+        return None
+    builder = {"cdt": cdt, "od": od, "efas": efas}[shape["builder"]]
+    return builder(shape["feature"], **{**shape.get("keys", {}), **selection})
+
+
 #: scenario name -> (shape, number of fields)
-CALIBRATE_SCENARIOS = {f"calibrate_{shape}_{n}": (shape, n) for shape in CALIBRATE_SHAPES for n in CALIBRATE_FIELDS}
+CALIBRATE_SCENARIOS = {
+    f"calibrate_{shape}_{n}": (shape, n)
+    for shape in CALIBRATE_SHAPES
+    for n in CALIBRATE_FIELDS
+    if calibrate_request(CALIBRATE_SHAPES[shape], n) is not None
+}
 
 DANUBE_10_STEPS = {**EFAS, "step": "6/to/60/by/6", "param": "240023", "feature": bbox([[50.25, 8.15], [42.08, 29.73]])}
 # -- stream: extract_stream, output discarded; (kind, grid, request, memory_budget_bytes)
@@ -183,6 +288,31 @@ HEALPIX_EUROPE_24H = {
     "feature": EUROPE_BBOX,
 }
 DANUBE_40_STEPS = {**EFAS, "step": "6/to/240/by/6", "param": "240023", "feature": DANUBE_BBOX}
+#: the three requests Phase 2f has to plan well, at the two budgets under discussion (3 GiB and
+#: 3.6 GiB pods, half of each): (grid, request, budgets)
+BUDGETS = (3 * 1024**3 // 2, 9 * 1024**3 // 5)
+VOLGA_ENSEMBLE_4PARAM = {
+    **EFAS,
+    "type": "pf",
+    "param": VOLGA_PARAMS,
+    "number": "/".join(str(n) for n in range(1, 51)),
+    "step": "/".join(str(s) for s in range(6, 361, 6)),
+    "feature": VOLGA_POLYGON,
+}
+SWITZERLAND_ENSEMBLE = {
+    **EFAS,
+    "type": "pf",
+    "param": "240023",
+    "number": "/".join(str(n) for n in range(1, 51)),
+    "step": "/".join(str(s) for s in range(6, 361, 6)),
+    "feature": SWITZERLAND_POLYGON,
+}
+TARGET_SCENARIOS = {
+    "targets_efas_volga_ensemble_4param": ("efas_local_regular", VOLGA_ENSEMBLE_4PARAM, BUDGETS),
+    "targets_efas_switzerland_ensemble": ("efas_local_regular", SWITZERLAND_ENSEMBLE, BUDGETS),
+    "targets_healpix1024_europe_24h": ("healpix_1024", HEALPIX_EUROPE_24H, BUDGETS),
+}
+
 STREAM_SCENARIOS = {
     "stream_healpix1024_europe_24fields_1_5GiB": ("stream", "healpix_1024", HEALPIX_EUROPE_24H, 3 * 1024**3 // 2),
     "stream_efas_danube_40steps_1GiB": ("stream", "efas_local_regular", DANUBE_40_STEPS, 1024**3),
@@ -444,24 +574,36 @@ def run_ranges(grid, request):
 
 
 def run_calibrate(name, n_fields):
-    """Peak RSS growth of one ``datacube.get`` + block emission of ``n_fields`` fields of one shape.
+    """Peak RSS growth of one unit of ``n_fields`` fields of one shape, consumed field by field.
 
-    The budget and the cap are set out of the way so that the whole request is one unit (one call,
-    all fields), and the peak is measured from the moment the tree is sliced and prepared: what is
-    left is what the unit itself costs on the Python heap, which is what ``limits.bytes_per_value``
-    has to cover.  Re-run after polytope-feature changes how results are consumed
-    (``values_flat``, ``get_iter``).
+    The budget and the caps are set out of the way so that the whole request is one unit (one
+    gribjump call, all fields) on the production path (``per_field_consumption``), and the peak is
+    measured from the moment the tree is sliced and prepared: what is left is what the call itself
+    costs, i.e. gribjump's buffer plus the Python terms the sizing has to cover.
+
+    ``cpp_mb`` is the exact gribjump term of that call (no safety factor) and ``residual_mb`` what
+    the Python terms (``bytes_per_point_call`` x points + ``bytes_per_value`` x one group's values
+    + the encoder's fragments) must account for.  Re-run after polytope-feature changes how
+    requests are built or results consumed, and after covjsonkit changes its fragment size.
     """
     from polytope_mars.api import PolytopeMars
     from polytope_mars.extract import BlockExtractor
+    from polytope_mars.sizing import UnitSizing
     from polytope_mars.testing import fake_gribjump_config_dict, make_fake_gribjump
 
-    grid, feature, axis, values = CALIBRATE_SHAPES[name]
-    builder = {"healpix_1024": cdt, "octahedral_1280": od, "efas_local_regular": efas}[grid]
-    request = builder(feature, **{axis: "/".join(values[:n_fields])})
+    shape = CALIBRATE_SHAPES[name]
+    grid = shape["grid"]
+    request = calibrate_request(shape, n_fields)
+    if request is None:
+        raise SystemExit(f"{name}: the fake's axes cannot express {n_fields} fields")
     fake = make_fake_gribjump(grid)
     config = fake_gribjump_config_dict(grid, request)
-    config["limits"] = {"memory_budget_bytes": 10**12, "max_values_per_unit": None}
+    config["limits"] = {
+        "memory_budget_bytes": 10**12,
+        "max_values_per_unit": None,
+        "max_fields_per_call": 4096,
+        "per_field_consumption": True,
+    }
     pm = PolytopeMars(config, datacube_factory=lambda: fake)
 
     # The peak is measured from after the tree is prepared, so that slicing and preparing (which do
@@ -491,13 +633,23 @@ def run_calibrate(name, n_fields):
     n_vals = fake.n_values
     points = n_vals // max(n_fields, 1)
     growth = peak - marks["rss"]
+    group_fields = min(shape["group_fields"], n_fields)
+    sizing = UnitSizing(safety_factor=1.0)
+    cpp = sizing.buffer_bytes(n_fields, points, pm.timings["n_ranges"])
+    # how often this call pays the request side: once, or once per group (groups in own branches)
+    branches = n_fields // group_fields if pm.timings["request_side"] == "per_group" else 1
     return {
         "shape": name,
         "fields": n_fields,
+        "group_fields": group_fields,
         "points": points,
         "values": n_vals,
+        "group_values": group_fields * points,
+        "branches": branches,
+        "request_side": pm.timings["request_side"],
         "n_ranges": pm.timings["n_ranges"],
         "n_units": pm.timings["n_units"],
+        "unit_source": pm.timings["unit_source"],
         "estimated_unit_mb": round(pm.timings["estimated_unit_bytes_max"] / 1e6, 1),
         "output_mib": round(n_bytes / MiB, 1),
         "max_chunk_mib": round(max_chunk / MiB, 2),
@@ -506,8 +658,104 @@ def run_calibrate(name, n_fields):
         "rss_after_prepare_mib": round(marks["rss"] / MiB, 1),
         "peak_rss_mib": round(peak / MiB, 1),
         "growth_mb": round(growth / 1e6, 1),
-        "python_b_per_value": round(growth / max(n_vals, 1), 1),
+        "cpp_mb": round(cpp / 1e6, 1),
+        "residual_mb": round((growth - cpp) / 1e6, 1),
         "max_rss_mb": round(pm.timings["max_rss_bytes"] / 1e6, 1),
+    }
+
+
+class _Planned(Exception):
+    """Raised by the planner spy of :func:`run_targets` once the units are known."""
+
+
+def _group_specs_of(grid, request):
+    """``(specs, group_fields)`` of a request: what the extractor plans its units from.
+
+    The real planning path (slice, prepare, plan, count ranges), stopped before the first
+    ``datacube.get``: the numbers below are the ones a worker would use.
+    """
+    from polytope_mars.api import PolytopeMars
+    from polytope_mars.extract import BlockExtractor
+    from polytope_mars.testing import fake_gribjump_config_dict, make_fake_gribjump
+
+    fake = make_fake_gribjump(grid)
+    config = fake_gribjump_config_dict(grid, request)
+    config["limits"] = {"memory_budget_bytes": 3 * 1024**3 // 2}
+    pm = PolytopeMars(config, datacube_factory=lambda: fake)
+    captured = {}
+    original = BlockExtractor._multipoint_blocks
+
+    def spy(self, datacube, tree, info, plan, groups, specs, sizing):
+        captured["specs"] = specs
+        captured["prepare_mode"] = self.counters.prepare_mode
+        raise _Planned
+
+    BlockExtractor._multipoint_blocks = spy
+    try:
+        for _ in pm.extract_stream(copy.deepcopy(request)):
+            pass
+    except _Planned:
+        pass
+    finally:
+        BlockExtractor._multipoint_blocks = original
+    specs = captured.get("specs")
+    if not specs:
+        raise SystemExit("the planner was never reached")
+    return specs, captured
+
+
+def run_targets(name):
+    """What the planner does with one request at several budgets: fields per call and call count.
+
+    No data is fetched: the request is sliced, prepared and planned, and the units are replanned
+    for each budget with the deployed defaults (:class:`polytope_mars.sizing.UnitSizing`).
+    """
+    import dataclasses
+
+    from polytope_mars.config import PolytopeMarsConfig
+    from polytope_mars.sizing import UnitSizing
+    from polytope_mars.tree_units import plan_units
+
+    grid, request, budgets = TARGET_SCENARIOS[name]
+    t0 = time.perf_counter()
+    specs, captured = _group_specs_of(grid, request)
+    t_plan = time.perf_counter() - t0
+    first = specs[0]
+    plans = {}
+    for budget in budgets:
+        conf = PolytopeMarsConfig.model_validate({"limits": {"memory_budget_bytes": budget}})
+        sizing = UnitSizing.from_limits(conf.limits, per_field_consumption=True)
+        sized = [
+            dataclasses.replace(s, max_groups=sizing.max_unit_groups(s.n_points, s.n_fields, s.n_ranges, s.own_branch))
+            for s in specs
+        ]
+        units = plan_units(sized)
+        groups_max = max(length for _, length in units)
+        fields_max = groups_max * first.n_fields
+        estimate = sizing.estimate_bytes(
+            fields_max,
+            first.n_points,
+            first.n_ranges,
+            group_fields=first.n_fields,
+            n_branches=groups_max if first.own_branch else 1,
+        )
+        plans[f"{budget / 1024 ** 3:.2f}GiB"] = {
+            "groups_per_call": groups_max,
+            "fields_per_call": fields_max,
+            "calls": len(units),
+            "estimated_unit_mb": round(estimate / 1e6, 1),
+        }
+    return {
+        "groups": len(specs),
+        "points": first.n_points,
+        "ranges": first.n_ranges,
+        "fields_per_group": first.n_fields,
+        "fields": len(specs) * first.n_fields,
+        "plan_s": round(t_plan, 1),
+        "prepare_mode": captured["prepare_mode"],
+        "request_side": "per_group" if first.own_branch else "per_call",
+        "plans": plans,
+        "peak_rss_mib": round(peak_rss() / MiB, 1),
     }
 
 
@@ -515,6 +763,8 @@ def run_one(name, budget: object = "default"):
     if name in RANGE_SCENARIOS:
         grid, request = RANGE_SCENARIOS[name]
         return run_ranges(grid, request)
+    if name in TARGET_SCENARIOS:
+        return run_targets(name)
     if name in CALIBRATE_SCENARIOS:
         return run_calibrate(*CALIBRATE_SCENARIOS[name])
     if name in STREAM_SCENARIOS:
@@ -595,19 +845,87 @@ TABLE_COLUMNS = {
     ],
     "calibrate": [
         "fields",
+        "group_fields",
         "points",
         "values",
         "n_ranges",
+        "unit_source",
         "estimated_unit_mb",
         "max_chunk_mib",
-        "max_chunk_b_per_point",
         "stream_s",
         "rss_after_prepare_mib",
         "peak_rss_mib",
         "growth_mb",
-        "python_b_per_value",
+        "cpp_mb",
+        "residual_mb",
+    ],
+    "targets": [
+        "groups",
+        "fields",
+        "points",
+        "ranges",
+        "fields_per_group",
+        "request_side",
+        "prepare_mode",
+        "plan_s",
+        "plans",
     ],
 }
+
+
+def _fit_calibration(rows) -> str:
+    """Least squares of ``peak growth - the exact gribjump term`` over the Python-side terms.
+
+    Model: ``residual = bytes_per_point_call x points + bytes_per_value x group_values +
+    fragment_bytes``, with ``fragment_bytes`` fixed at the encoder's (2 x 8 MiB), so the fit has
+    the two unknowns the config has.  Also reports, per row, what the measured growth demands of
+    each constant when the other one is at its default -- the defaults must cover the worst row.
+    """
+    import numpy as np
+
+    from polytope_mars.config import PolytopeMarsConfig
+    from polytope_mars.sizing import DEFAULT_FRAGMENT_BYTES, UnitSizing
+
+    usable = [r for _, r in rows if "residual_mb" in r]
+    if not usable:
+        return ""
+    # The request side is paid once per branch of the call (MEASUREMENTS.md), so that is the column
+    # of the design matrix, not the points of the call.
+    points = np.array([r["points"] * r.get("branches", 1) for r in usable], dtype=float)
+    group_values = np.array([r["group_values"] for r in usable], dtype=float)
+    residual = np.array([r["residual_mb"] * 1e6 - DEFAULT_FRAGMENT_BYTES for r in usable], dtype=float)
+    design = np.stack([points, group_values], axis=1)
+    (bpc, bpv), *_ = np.linalg.lstsq(design, residual, rcond=None)
+
+    limits = PolytopeMarsConfig().limits
+    default = UnitSizing.from_limits(limits, per_field_consumption=True)
+    lines = [
+        f"Least squares over {len(usable)} runs (residual = growth - exact gribjump term - 16 MiB of"
+        f" fragments): bytes_per_point_call = {bpc:.1f}, bytes_per_value = {bpv:.1f}",
+        "",
+        "| run | request points | group values | residual MB | needs B/point_call | needs B/value |"
+        " estimate MB | covered |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for (name, _), r in zip([row for row in rows if "residual_mb" in row[1]], usable):
+        request_points = r["points"] * r.get("branches", 1)
+        rest_value = default.bytes_per_value * r["group_values"] + DEFAULT_FRAGMENT_BYTES
+        rest_point = default.bytes_per_point_call * request_points + DEFAULT_FRAGMENT_BYTES
+        need_point = (r["residual_mb"] * 1e6 - rest_value) / max(request_points, 1)
+        need_value = (r["residual_mb"] * 1e6 - rest_point) / max(r["group_values"], 1)
+        estimate = default.estimate_bytes(
+            r["fields"],
+            r["points"],
+            r["n_ranges"],
+            group_fields=r["group_fields"],
+            n_branches=r.get("branches", 1),
+        )
+        lines.append(
+            f"| {name} | {request_points:,} | {r['group_values']:,} | {r['residual_mb']} |"
+            f" {need_point:.1f} | {need_value:.1f} | {estimate / 1e6:.1f} |"
+            f" {'yes' if estimate >= r['growth_mb'] * 1e6 else 'NO'} |"
+        )
+    return "\n".join(lines)
 
 
 def _parse_result(proc):
@@ -643,6 +961,7 @@ def main(argv):
     kinds = {name: spec[0] for name, spec in {**SCENARIOS, **STREAM_SCENARIOS}.items()}
     kinds.update({name: "ranges" for name in RANGE_SCENARIOS})
     kinds.update({name: "calibrate" for name in CALIBRATE_SCENARIOS})
+    kinds.update({name: "targets" for name in TARGET_SCENARIOS})
     results = {}
     for name, kind in kinds.items():
         if kind not in groups:
@@ -654,11 +973,14 @@ def main(argv):
         results[name] = _parse_result(proc)
         results[name]["wall_s"] = round(time.perf_counter() - t0, 1)
         print(f"{name}: {results[name]}", file=sys.stderr, flush=True)
-    order = ("slice", "get", "e2e", "stream", "ranges", "calibrate")
+    order = ("slice", "get", "e2e", "stream", "ranges", "calibrate", "targets")
     by_kind = {k: [(n, results[n]) for n in results if kinds[n] == k] for k in order}
     for kind, rows in by_kind.items():
-        if rows:
-            print(_table(rows, TABLE_COLUMNS[kind]) + "\n")
+        if not rows:
+            continue
+        print(_table(rows, TABLE_COLUMNS[kind]) + "\n")
+        if kind == "calibrate":
+            print(_fit_calibration(rows) + "\n")
 
 
 if __name__ == "__main__":
