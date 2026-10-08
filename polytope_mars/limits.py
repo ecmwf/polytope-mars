@@ -121,7 +121,8 @@ def estimate_points_per_field(feature, options) -> float | None:
 
     Point features (timeseries, position, vertical profile) count their points; area features
     (bounding box, polygon, circle) use their area in km² times the grid density.  None when either is
-    unknown (trajectory, shapefile, irregular grids): the limit is then not enforced.
+    unknown (trajectory, shapefile, irregular grids) or not a finite number (``get_boundingbox_area``
+    returns NaN for a pole-to-pole box): every limit built on this estimate is then not enforced.
     """
     name = feature.name()
     if name in ("Time Series", "Position", "Vertical Profile"):
@@ -131,7 +132,7 @@ def estimate_points_per_field(feature, options) -> float | None:
         area = getattr(feature, "area_bb", None)
     elif name in ("Polygon", "Circle"):
         area = getattr(feature, "area", None)
-    if not isinstance(area, (int, float)) or area <= 0:
+    if not isinstance(area, (int, float)) or not math.isfinite(area) or area <= 0:
         return None
     density = grid_density(options, _centre_latitude(feature))
     if density is None:

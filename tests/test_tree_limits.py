@@ -131,6 +131,13 @@ def test_estimated_tree_bytes_is_branches_times_points_times_the_constant():
     assert many / 1e6 > 800  # most of a GB of tree for a request that has fetched nothing yet
 
 
+def test_a_pole_to_pole_box_has_no_estimate_and_is_not_refused_by_one():
+    # get_boundingbox_area returns NaN for [[90, -180], [-90, 180]]: unknown, so neither limit binds
+    # (the exact post-prepare check is what covers a whole-world request).
+    box = _Box(area_bb=float("nan"), points=[[90, -180], [-90, 180]])
+    assert estimate_tree_bytes(HOURLY_MONTH, box, CDT_OPTIONS, 40) is None
+
+
 def test_estimated_tree_bytes_is_unknown_when_the_points_per_field_are():
     class Trajectory:
         def name(self):
