@@ -42,7 +42,7 @@ class BytesPerPointConfig(ConfigModel):
     Phase 2 sized an extraction unit with one constant per grid mapper family, because HEALPix nested
     cost ~2.5x more per value than the other grids.  That difference is not a property of the grid but
     of the number of gribjump index *ranges* a field needs, which the sizing now counts from the
-    prepared tree (:mod:`polytope_mars.sizing`, :mod:`polytope_mars.grid_ranges`).  A config that still
+    prepared tree (:mod:`polytope_mars.sizing`, :mod:`polytope_mars.bulk_tree`).  A config that still
     sets this key has its ``default`` entry used as ``limits.bytes_per_value``; the per-mapper entries
     are ignored.
     """

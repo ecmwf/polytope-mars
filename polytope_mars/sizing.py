@@ -15,7 +15,7 @@ exists upstream but is unreleased, so sizing is done against what is deployed.) 
 
 8 B per value, one mask bit per value, and ``limits.bytes_per_range`` (default 96 B: two vector
 headers plus two heap allocations) per range.  ``n_ranges`` is counted from the prepared tree
-(:mod:`polytope_mars.grid_ranges`), so ``bytes_per_range`` is the only approximation in this term.
+(:mod:`polytope_mars.bulk_tree`), so ``bytes_per_range`` is the only approximation in this term.
 ``limits.safety_factor`` multiplies it, and nothing else.
 
 **The request side, once per spatial sub-tree of the call.**  Each sub-tree of the prepared tree is

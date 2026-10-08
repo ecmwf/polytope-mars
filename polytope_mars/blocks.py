@@ -8,14 +8,16 @@ structurally).
 
 Emission order per field group (one output coverage for MultiPoint domains)::
 
-    CoordsBlock(band=0) ... CoordsBlock(band=B-1)
+    CoordsBlock
     for param in group.params:
         for level in group.levels (or [None] when group.levels == ()):
-            ValuesBlock(band=0) ... ValuesBlock(band=B-1)
+            ValuesBlock
     GroupEnd
 
-Bands partition the group's points in output order, so concatenating the ``lat``/``lon``/``values``
-of consecutive blocks reproduces the full field.
+A group is one block of points: a field is fetched whole, so the ``band`` / ``offset`` / ``n_bands``
+attributes below are always 0, 0 and 1.  They are kept because covjsonkit's stream encoder reads them
+structurally (it groups by ``n_bands`` and places a block by its ``band`` and ``offset``); they can be
+dropped from the IR and from the encoder together, in one change on both sides.
 """
 
 from __future__ import annotations
@@ -61,12 +63,13 @@ class FieldGroup:
     path: dict[str, str]
     #: ISO-8601 'Z' datetimes for the coverage t axis, computed by polytope-mars
     t: tuple[str, ...]
-    #: param ids PRESENT in this group (after the band-0 peek), emission order
+    #: param ids PRESENT in this group (the ones gribjump has a message for), emission order
     params: tuple[str, ...]
     #: levelist values, () when none (encoders treat () as one implicit level 0 where legacy did)
     levels: tuple[Any, ...]
     #: points per (param, level)
     n_points: int
+    #: always 1: a field is never split (see the module doc)
     n_bands: int
     #: per-coverage mars:metadata exactly as legacy produced it (keys + order)
     mars_metadata: dict[str, Any]
@@ -75,8 +78,9 @@ class FieldGroup:
 @dataclass(frozen=True)
 class CoordsBlock:
     group: FieldGroup
+    #: always 0 (see the module doc)
     band: int
-    #: point offset within the field (0 for band 0)
+    #: point offset within the field, always 0
     offset: int
     #: float64 [n]
     lat: np.ndarray
@@ -90,6 +94,7 @@ class ValuesBlock:
     param: str
     #: one of group.levels, or None when levels == ()
     level: Any
+    #: always 0, as on CoordsBlock
     band: int
     offset: int
     #: float64 [n]; NaN where missing
