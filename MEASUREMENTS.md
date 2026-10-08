@@ -361,6 +361,42 @@ transients are in it, which is why it exceeds the planner's estimate for the uni
 wall time is `prepare` on the whole tree (11.5M grid-index lookups); preparing per unit would cut
 that, as the banded path already does per band.
 
+## 3b. The same requests on the dev clusters (real gribjump, fe-worker pods at 3 GiB)
+
+Phase 2f worker image (`polytope-mars` `ce8482eb4021`, `limits.memory_budget_bytes` 1,610,612,736),
+`timings` from the worker's `request completed` line. `max_rss_bytes` is the whole process
+(interpreter, imports, the sliced tree, the Rust side), not the unit alone.
+
+LUMI, climate-dt HEALPix-1024 Europe box (479,865 points, 300,315 ranges per field, one branch per
+hourly field), one call each, **fresh pod per run** (`rollout restart` before each):
+
+| fields in the call | planner's unit estimate | peak RSS | RSS after the request |
+| ---: | ---: | ---: | ---: |
+| 1 | 143 MB | 393 MB | 287 MB |
+| 4 | 474 MB | 784 MB | 534 MB |
+| 14 | 1,579 MB | 1,995 MB | 977 MB |
+
+A straight line: **peak = 265 MB + 123 MB per field**. The model's slope with the safety factor is
+110 MB per field (`cpp` 32.7 MB x 1.5 + 128 B/point x 479,865), so the per-field cost of the real
+pygribjump/remote path is ~11% above the fitted one, and the 265 MB intercept is the process
+baseline the unit estimate deliberately leaves to the other half of the pod. The 24-hour request
+(2 calls, 14 + 10 fields) peaked at 1,995 MB in a fresh pod and at 2,279 MB in a pod that had
+served a 944 MB request first (memory the allocator keeps), both under the 3 GiB limit.
+
+Bologna (`fdbtest`, EFAS as expver 0099):
+
+| request | calls | fields per call | unit estimate | peak RSS | wall | get (max per call) |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| EFAS Danube bbox, 40 steps (1.28 GB out) | **1** (Phase 2d: 4) | 40 | 430 MB | 528 MB | 33 s | 21 s |
+| EFAS Switzerland ensemble, 50 x 60 (2.97 GB out), cold | **3** (Phase 2d: 8) | 1,000 | 271 MB | 528 MB | 698 s | 696 s (243 s) |
+| the same request again, 9 min later | 3 | 1,000 | 271 MB | 528 MB | 265 s | 262 s (96 s) |
+| IFS enfo Volga polygon ensemble, O1280, 7,250 coverages (5.97 GB out) | **8** (Phase 2d: 17) | 1,015 | 235 MB | 437 MB | 195 s | 187 s (68 s) |
+
+The wall time of the ensemble requests is gribjump's, whatever the batching: Switzerland costs the
+server 0.23 s per field cold and 0.09 s warm (the second run found the GRIB files in the page
+cache), so the fewer calls buy the fixed per-call cost back (~2 s here) and nothing else. Peak RSS
+never moved from the 528 MB the 40-field Danube unit had set on that pod.
+
 ## 4. Largest fragment the CovJSON encoder emits per block
 
 `max_chunk_mib` of the calibration runs: **5.4-5.5 MiB** on every shape and field count, against
