@@ -105,3 +105,98 @@ the fe-worker will stream it). Growth = peak RSS (`VmHWM`, reset at the start) m
   20 ms (before slicing).
 - The buffered `extract()` is kept for compatibility only (the fe-worker still calls it until Phase 3); it holds
   the whole document as Python objects (`json.loads`), 2.5x less than legacy but still ~320 B/value.
+
+# Phase 2d measurements (sizing an extraction unit)
+
+Same machine and fake gribjump as above, `.venv` with polytope-feature `53ccb1fe` (flat per-field result
+assignment) and the Phase 2d polytope-mars. Re-runnable:
+
+    python tools/measure_memory.py ranges      # points and index ranges per field, and what they cost
+    python tools/measure_memory.py calibrate   # limits.bytes_per_value
+
+Re-run both after polytope-feature changes how results are fetched or consumed (`get_iter`), and after
+covjsonkit changes its fragment sizes.
+
+## 1. Points, index ranges and gribjump's residency (one field)
+
+Counted from the prepared tree by `polytope_mars.grid_ranges` (the same ranges `_gribjump_requests` builds,
+pinned against the fake's received requests in `tests/test_grid_ranges.py`). gribjump MB =
+`8 x points + points/8 + 96 x ranges` (`ExtractionData.h`: one values vector and one bitmap vector per
+range), without the safety factor. Python MB = `128 x points`.
+
+| request | grid | lat nodes | points | ranges | points/range | gribjump MB | B/value | of which ranges | Python MB |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| global bbox `[[90,-180],[-90,180]]` | HEALPix nested 1024 | 4,095 | 12,582,912 | 7,864,320 | 1.60 | **857.2** | 68.1 | 755.0 | 1,610.6 |
+| global bbox | octahedral 1280 | 2,560 | 6,599,680 | 2,560 | 2578.0 | **53.9** | 8.2 | 0.2 | 844.8 |
+| Europe bbox `[[72,-25],[34,45]]` | HEALPix nested 1024 | 1,595 | 479,865 | 300,315 | 1.60 | 32.7 | 68.2 | 28.8 | 61.4 |
+| Europe bbox, half as wide (`34..72N, 25W..10E`) | HEALPix nested 1024 | 797 | 239,821 | 150,209 | 1.60 | 16.4 | 68.3 | 14.4 | 30.7 |
+| Europe bbox | octahedral 1280 | 540 | 222,960 | 1,080 | 206.4 | 1.9 | 8.6 | 0.1 | 28.5 |
+| Danube bbox `[[50.25,8.15],[42.08,29.73]]` | EFAS local_regular | 490 | 634,550 | 490 | 1295.0 | 5.2 | 8.2 | 0.0 | 81.2 |
+
+- **HEALPix nested does not merge into runs, at any size**: 1.6 points per range for the Europe box and
+  for the whole world alike. A single global HEALPix-1024 field is **7.86M ranges**, whose vector pairs are
+  **755 MB of the 857 MB** gribjump holds -- 7.5x the 101 MB of values. Everything else measured here is
+  within 8.6 B/value of the bare values. A range-merge (or a mask/stride request) in gribjump or
+  polytope-feature would take a global HEALPix field from 857 MB to ~102 MB: **a required follow-up** if
+  whole-world HEALPix fields are to be served in one call.
+- No request measured here asks for the same grid index from two different latitude nodes
+  (`cross_node_duplicates` false), including boxes that wrap past the longitude seam, so latitude bands can
+  be prepared independently (see Phase 2d in CHANGES.md).
+- Counting the ranges walks every point once, like `prepare`: 0.4 s for the Danube box, 7 s for the HEALPix
+  Europe box, **398 s for a global HEALPix field** (`prepare` itself takes 402 s for it). Planning a
+  whole-world HEALPix request therefore doubles its slice-time cost; polytope-feature returning the counts
+  it already computes in `prepare` would remove that.
+
+## 2. `limits.bytes_per_value`: the Python side of one `datacube.get`
+
+Peak RSS growth of one `datacube.get` + block emission (`python tools/measure_memory.py calibrate`), the
+peak measured from after the tree is sliced and prepared, with the budget and the cap set out of the way so
+that the whole request is one unit. Required B/value = `(growth - gribjump term) / values`, i.e. what
+`bytes_per_value` must be for the estimate to cover the measurement.
+
+| shape | fields | points | values | ranges/field | growth MB | B/value | estimate MB | required B/value |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| EFAS Danube | 1 | 634,550 | 634,550 | 490 | 73.8 | 116.3 | 89.0 | 104.0 |
+| EFAS Danube | 4 | 634,550 | 2,538,200 | 490 | 81.9 | 32.3 | 356.1 | 20.0 |
+| EFAS Danube | 12 | 634,550 | 7,614,600 | 490 | 162.9 | 21.4 | 1,068.3 | 9.1 |
+| HEALPix-1024 Europe | 1 | 479,865 | 479,865 | 300,315 | 101.5 | 211.6 | 110.5 | **109.2** |
+| HEALPix-1024 Europe | 4 | 479,865 | 1,919,460 | 300,315 | 295.5 | 154.0 | 442.1 | 51.6 |
+| HEALPix-1024 Europe | 12 | 479,865 | 5,758,380 | 300,315 | 830.8 | 144.3 | 1,326.2 | 42.0 |
+| O1280 Europe | 1 | 222,960 | 222,960 | 1,080 | 19.5 | 87.5 | 31.4 | 74.5 |
+| O1280 Europe | 4 | 222,960 | 891,840 | 1,080 | 21.3 | 23.9 | 125.6 | 11.0 |
+| O1280 Europe | 12 | 222,960 | 2,675,520 | 1,080 | 48.4 | 18.1 | 376.9 | 5.2 |
+
+**Default: `bytes_per_value = 128`** -- the worst measured case needs 109.2 (HEALPix, one field), and every
+row's estimate is above its growth. Least squares per shape (`growth = intercept + slope x values`):
+
+| shape | slope B/value | intercept MB |
+| --- | ---: | ---: |
+| EFAS Danube | 13.4 | 58.0 |
+| O1280 Europe | 12.5 | 14.0 |
+| HEALPix-1024 Europe | 138.4 | 32.9 |
+
+- The per-value cost itself is ~13 B/value on both grids whose fields are few ranges; the rest is per
+  *call*, which is why one field costs 5-10x more per value than twelve.
+- The HEALPix slope is mostly **an artefact of the fake**: it synthesises one numpy array per range before
+  concatenating them into `values_flat` (300,315 arrays per field, ~33 MB), while real gribjump fills
+  `values_flat` in C++ and `polytope_feature.datacube.fdb_assign.field_values_flat` reads it without
+  building any per-range object. The fake was changed in this phase to expose `values_flat` with lazy
+  per-range views, which removed ~150 MB from the 4-field HEALPix run; what remains is its own synthesis.
+  Production's HEALPix cost is the ~13 B/value of the other grids plus the per-call cost of building 300k
+  request ranges in `_gribjump_requests` (~90 MB for this shape, independent of the number of fields).
+- So 128 B/value is conservative for everything except a single-field HEALPix call, which is what it is
+  calibrated on. Re-measure against real gribjump before lowering it: at 32 B/value the units of the two
+  cases below would be ~4x larger.
+
+## 3. The two requests Phase 2d has to get right
+
+`python tools/measure_memory.py stream`, budget as the chart injects it.
+
+| request | budget | groups | planned k | units | estimated unit MB | measured peak RSS MB | growth MB | B/value |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| HEALPix-1024 Europe box x 24 hourly fields (11.5M values) | 1.5 GiB | 24 | 14 | 2 | 1,547 | see below | | |
+| EFAS Danube bbox x 40 steps (25.4M values) | 1 GiB | 40 | 12 | 4 | 1,068 | 452.7 | 288.9 | 11.4 |
+
+- The HEALPix case is the request that was OOM-killed at 3 GiB on LUMI with Phase 2c's 19-field units.
+- The EFAS case was 2 units in Phase 2c (k=26 at 64 B/point, no gribjump term); the new model halves it to
+  12 groups per call, i.e. 4 calls instead of 2 -- about 1 s more at ~480 ms per call.

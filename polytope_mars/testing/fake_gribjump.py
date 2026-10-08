@@ -97,12 +97,37 @@ def decode_value(value: float) -> tuple[int, int]:
 
 
 class FakeExtractResult:
-    """Mimics ``pygribjump.ExtractionResult``: ``values`` is a list of arrays, one per requested range."""
+    """Mimics ``pygribjump.ExtractionResult`` (0.12.0.26).
 
-    __slots__ = ("values",)
+    ``values_flat`` is one contiguous float64 buffer for the whole field and ``values`` is a list of
+    *views* into it, one per requested range -- the layout pygribjump exposes, and the reason a
+    consumer reading ``values_flat``
+    (``polytope_feature.datacube.fdb_assign.field_values_flat``) pays nothing per range while one
+    reading ``values`` pays a numpy object per range.  A field gribjump has no message for has an
+    empty buffer and no views.
+    """
+
+    __slots__ = ("_lengths", "_views", "values_flat")
 
     def __init__(self, values: list):
-        self.values = values
+        self._views = None
+        if len(values) == 0:
+            self.values_flat = np.empty(0, dtype=np.float64)
+            self._lengths = []
+            return
+        self.values_flat = np.concatenate(values) if len(values) > 1 else np.asarray(values[0], dtype=np.float64)
+        self._lengths = [len(chunk) for chunk in values]
+
+    @property
+    def values(self) -> list:
+        """The per-range views, built on first access (pygribjump builds them on access too)."""
+        if self._views is None:
+            views, at = [], 0
+            for n in self._lengths:
+                views.append(self.values_flat[at : at + n])  # noqa: E203
+                at += n
+            self._views = views
+        return self._views
 
 
 def _matches(path: Mapping, partial: Mapping) -> bool:

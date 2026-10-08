@@ -130,8 +130,9 @@ SCENARIOS = {
     ),
 }
 
+#: the climate-dt Europe box that was OOM-killed on LUMI at 24 hourly fields (~480k HEALPix points)
 EUROPE_BBOX = bbox([[72, -25], [34, 45]])
-#: ~480k HEALPix-1024 points: the climate-dt Europe box that was OOM-killed on LUMI at 24 fields
+#: half of EUROPE_BBOX (~240k HEALPix-1024 points), to show the range ratio does not depend on size
 EUROPE_BBOX_NARROW = bbox([[72, -25], [34, 10]])
 DANUBE_BBOX = bbox([[50.25, 8.15], [42.08, 29.73]])
 GLOBAL_BBOX = bbox([[90, -180], [-90, 180]])
@@ -153,22 +154,35 @@ def efas(feature, **keys):
 RANGE_SCENARIOS = {
     "ranges_healpix1024_global_bbox": ("healpix_1024", cdt(GLOBAL_BBOX)),
     "ranges_o1280_global_bbox": ("octahedral_1280", od(GLOBAL_BBOX)),
-    "ranges_healpix1024_europe_bbox": ("healpix_1024", cdt(EUROPE_BBOX_NARROW)),
+    "ranges_healpix1024_europe_bbox": ("healpix_1024", cdt(EUROPE_BBOX)),
+    "ranges_healpix1024_europe_narrow_bbox": ("healpix_1024", cdt(EUROPE_BBOX_NARROW)),
     "ranges_o1280_europe_bbox": ("octahedral_1280", od(EUROPE_BBOX)),
     "ranges_efas_danube_bbox": ("efas_local_regular", efas(DANUBE_BBOX)),
 }
 
 #: calibration of ``limits.bytes_per_value``: one ``datacube.get`` + block emission of n fields
 CALIBRATE_SHAPES = {
-    "efas_danube": ("efas_local_regular", DANUBE_BBOX, "step", ["6", "12", "18", "24", "30", "36", "42", "48"]),
-    "healpix1024_europe": ("healpix_1024", EUROPE_BBOX_NARROW, "time", [f"{h:02d}00" for h in range(24)]),
+    "efas_danube": ("efas_local_regular", DANUBE_BBOX, "step", [str(s) for s in range(6, 6 * 17, 6)]),
+    "healpix1024_europe": ("healpix_1024", EUROPE_BBOX, "time", [f"{h:02d}00" for h in range(24)]),
     "o1280_europe": ("octahedral_1280", EUROPE_BBOX, "step", [str(s) for s in range(0, 72, 6)]),
 }
 CALIBRATE_FIELDS = (1, 4, 12)
 
 DANUBE_10_STEPS = {**EFAS, "step": "6/to/60/by/6", "param": "240023", "feature": bbox([[50.25, 8.15], [42.08, 29.73]])}
 # -- stream: extract_stream, output discarded; (kind, grid, request, memory_budget_bytes)
+#: the two cases Phase 2d has to get right: the request that was OOM-killed on LUMI, and the one
+#: Phase 2c batched into 2 calls
+HEALPIX_EUROPE_24H = {
+    **CDT,
+    "date": "20200101",
+    "time": "/".join(f"{h:02d}00" for h in range(24)),
+    "param": "167",
+    "feature": EUROPE_BBOX,
+}
+DANUBE_40_STEPS = {**EFAS, "step": "6/to/240/by/6", "param": "240023", "feature": DANUBE_BBOX}
 STREAM_SCENARIOS = {
+    "stream_healpix1024_europe_24fields_1_5GiB": ("stream", "healpix_1024", HEALPIX_EUROPE_24H, 3 * 1024**3 // 2),
+    "stream_efas_danube_40steps_1GiB": ("stream", "efas_local_regular", DANUBE_40_STEPS, 1024**3),
     "stream_efas_danube_10steps_budget200MB": ("stream", "efas_local_regular", DANUBE_10_STEPS, 200_000_000),
     "stream_efas_danube_10steps_budget20MB": ("stream", "efas_local_regular", DANUBE_10_STEPS, 20_000_000),
     "stream_efas_danube_10steps_nobudget": ("stream", "efas_local_regular", DANUBE_10_STEPS, None),
@@ -347,6 +361,10 @@ def run_stream(grid, request, budget):
         "n_units": pm.timings["n_units"],
         "groups_per_unit_max": pm.timings["groups_per_unit_max"],
         "n_bands": pm.timings["n_bands"],
+        "estimated_unit_mb": round(pm.timings["estimated_unit_bytes_max"] / 1e6, 1),
+        "n_ranges": pm.timings["n_ranges"],
+        "prepare_mode": pm.timings["prepare_mode"],
+        "max_rss_mb": round(pm.timings["max_rss_bytes"] / 1e6, 1),
         "output_mib": round(n_bytes / MiB, 1),
         "chunks": n_chunks,
         "max_chunk_mib": round(max_chunk / MiB, 1),
@@ -433,17 +451,20 @@ def run_calibrate(name, n_fields):
     config["limits"] = {"memory_budget_bytes": 10**12, "max_values_per_unit": None}
     pm = PolytopeMars(config, datacube_factory=lambda: fake)
 
+    # The peak is measured from after the tree is prepared, so that slicing and preparing (which do
+    # not scale with the number of fields) are not counted in the unit's own cost.  The budget above
+    # keeps the request to one whole-tree prepare.
     marks = {}
-    original = BlockExtractor._slice_and_prepare
+    original = BlockExtractor._prepare
 
-    def spy(self):
-        api, tree = original(self)
+    def spy(self, datacube, tree, **kwargs):
+        prepared = original(self, datacube, tree, **kwargs)
         marks["rss"] = rss()
         reset_peak_rss()
         marks["peak0"] = peak_rss()
-        return api, tree
+        return prepared
 
-    BlockExtractor._slice_and_prepare = spy
+    BlockExtractor._prepare = spy
     try:
         t0 = time.perf_counter()
         n_bytes = max_chunk = 0
@@ -452,7 +473,7 @@ def run_calibrate(name, n_fields):
             max_chunk = max(max_chunk, len(chunk))
         t_stream = time.perf_counter() - t0
     finally:
-        BlockExtractor._slice_and_prepare = original
+        BlockExtractor._prepare = original
     peak = peak_rss()
     n_vals = fake.n_values
     points = n_vals // max(n_fields, 1)
@@ -532,12 +553,16 @@ TABLE_COLUMNS = {
         "n_units",
         "groups_per_unit_max",
         "n_bands",
+        "estimated_unit_mb",
+        "n_ranges",
+        "prepare_mode",
         "output_mib",
         "max_chunk_mib",
         "stream_s",
         "rss_before_mib",
         "peak_rss_mib",
         "rss_growth_mb",
+        "max_rss_mb",
         "peak_bytes_per_value",
         "timings_ms",
     ],

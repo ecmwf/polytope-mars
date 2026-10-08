@@ -307,3 +307,107 @@ Predicted calls for the requests that motivated this (budget / `bytes_per_point`
 
 The Switzerland unit is cut from 892 to 840 groups by the product rule (units must be whole numbers x all
 steps); at ~480 ms per call the fixed cost drops from ~24 min to ~2 s.
+
+# Phase 2d: sizing a unit from what it actually costs
+
+## Why
+
+Phase 2/2c sized an extraction unit with one constant per grid mapper family
+(`limits.bytes_per_point`: 64 B/value, 160 for `healpix_nested`).  On the LUMI dev cluster a
+480k-point HEALPix-1024 Europe box x 24 hourly fields was therefore batched into units of 19 fields
+(`480k x 160 x 19 = 1.46 GB` against a 1.5 GiB budget) and the worker was OOM-killed at 3 GiB; the same
+request at one field per call passed.  Two things were missing from the model:
+
+- **gribjump's own buffer.**  The deployed gribjump (0.12.0.26) is not lazy: `RemoteGribJump::extract`
+  decodes the whole TCP reply into a vector before returning and pygribjump's iterator is a cursor over
+  it, so the C++ side holds every value of the call until the call is over.  An `ExtractionResult` holds
+  `std::vector<std::vector<double>> values_` and `std::vector<std::vector<std::bitset<64>>> mask_`, one
+  inner vector each **per index range** (`gribjump/src/gribjump/ExtractionData.h`).
+- **index ranges.**  gribjump is asked for runs of consecutive grid indices, not for points, and how many
+  runs a field needs depends on the grid *and* on the request: an O1280 Europe box needs one range per
+  latitude line (222,960 points in 1,080 ranges), a HEALPix-nested box nearly one per point (479,865
+  points in 300,315 ranges).  That ratio -- not the grid as such -- is what the per-mapper constant was
+  standing in for, and `prepare` already knows it before anything is fetched.
+
+## Behaviour changes
+
+- **Unit sizing** (`polytope_mars.sizing.UnitSizing`, `polytope_mars.grid_ranges`).  A unit of `k` field
+  groups is planned when both
+
+  - `buffer_bytes + bytes_per_value x python_values <= limits.memory_budget_bytes`, where
+    `buffer_bytes = n_fields x (8 x n_points + n_points/8 + limits.bytes_per_range x n_ranges) x
+    limits.safety_factor` is gribjump's own residency and `python_values` the values the Python side
+    holds (the whole unit today, one group with per-field consumption, see below).  The two terms are
+    added because they are resident at the same time.
+  - `n_fields x n_points <= limits.max_values_per_unit`, a hard cap independent of the budget and of the
+    estimate.
+
+  `n_points` and `n_ranges` come from the tree: `polytope_mars.grid_ranges` counts the ranges the way
+  `FDBDatacube._gribjump_requests` builds them (grid indices through the axis' own `unmap_path_key`, then
+  one range per run of consecutive indices, duplicates dropped first-come-first-served), memoised per
+  spatial shape so a request walks its spatial sub-tree once.  A single group that does not fit is
+  fetched in latitude bands as before, the band sized by the same two terms (and by the group's own
+  ranges-per-point ratio, so a HEALPix band is smaller than an octahedral one).
+- **`limits`**: `bytes_per_value` (128, one constant for every grid: the measured Python-side cost of a
+  value -- results on the tree, the float64 field copies, the encoder's buffers), `bytes_per_range` (96:
+  two vector headers plus two heap allocations in the `ExtractionResult`), `safety_factor` (1.5, applied
+  to the gribjump term), `max_values_per_unit` (8,000,000), `per_field_consumption` (off, see below).
+  **`bytes_per_point` is deprecated**: a config that still sets it has its `default` entry used as
+  `bytes_per_value` and the per-mapper entries ignored.  Only `memory_budget_bytes` is injected by the
+  chart today; `bytes_per_value` and `max_values_per_unit` are worth injecting next to it.
+- **Preparing band by band.**  `FDBDatacube.prepare` computes a grid index per point, which on a
+  whole-world HEALPix-1024 field is 400 s and a 3.2 GB peak for a tree whose values are 100 MB.  The
+  units are therefore planned on the *sliced* tree (point and range counts do not need a prepared one)
+  and, as soon as any group has to be fetched in bands, the whole tree is never prepared: each band
+  prepares its own pruned copy of one field (`datacube.prepare(tree, select=..., latitude_range=...)`),
+  which is where that band's coordinates and point count come from.  Requests whose groups all fit keep
+  the single up-front prepare.  `timings["prepare_mode"]` says which happened.
+
+  Bytes are unchanged at every band size: a band is a run of whole latitude nodes of the same tree and
+  `prepare` only reorders points inside a leaf and drops duplicate grid indices.  A duplicate can only
+  cross a band boundary if two *different* latitude nodes ask for the same index; `grid_ranges` counts
+  that case and the extractor falls back to a whole-tree prepare for it.  The overlap case of
+  polytope-feature's `tests/test_pruned_get.py` (a box whose longitudes wrap past the full circle)
+  duplicates points within each latitude line, so it is identical either way (tested).
+- **Per-field consumption** (`limits.per_field_consumption`, **off by default**).  A multi-group unit is
+  consumed field by field and each group's blocks are emitted and freed as soon as its (param, level)
+  fields have arrived, in plan order (`polytope_mars.field_stream.GroupAssembler`), so the Python side
+  holds the incomplete groups only -- one group when the group axes are outermost in the tree, as they
+  are for the climate-dt hourly case.  With the flag on and a datacube that has `FDBDatacube.get_iter`
+  the fields arrive one at a time and the Python-side term of the sizing covers one group instead of the
+  unit; otherwise (the default) one `datacube.get` returns the whole unit through the same consumer.
+  `timings["unit_source"]` reports `get` or `get_iter`.  The flag stays off until the polytope-feature
+  API is released and `bytes_per_value` is re-calibrated against it.
+- **`timings`**: `estimated_unit_bytes_max` (the largest unit estimate the planner produced), `n_ranges`
+  (index ranges of one field of the largest group, from the tree), `n_ranges_requested` (ranges gribjump
+  was actually asked for, summed over the calls -- the observed counterpart of `n_ranges`),
+  `max_rss_bytes` (`getrusage(RUSAGE_SELF).ru_maxrss`), `prepare_mode`, `unit_source`,
+  `buffered_fields_max`.  The INFO summary line carries the estimate, the peak RSS, the range count and
+  both modes.  **Observation only:** no decision in polytope-mars reads the RSS, a cgroup or any other
+  runtime signal; the planner stays a pure function of (request, config, tree).
+- **Fake gribjump**: `FakeExtractResult` now mirrors pygribjump 0.12.0.26 -- one contiguous
+  `values_flat` buffer per field with `values` as per-range views built only when they are read.
+  polytope-feature prefers `values_flat`, so without this the fake charged the extraction ~150 MB of
+  per-range numpy objects that production does not pay.
+
+## Verification
+
+- The golden corpus is byte-identical (both modes, both reporting modes for missing fields) and so are
+  the unit- and band-invariance suites; `tests/test_streaming.py` now drives "k groups per call" through
+  `max_values_per_unit`, which is exact whatever the grid, instead of through a byte budget.
+- `tests/test_grid_ranges.py`: the counted ranges equal `timings["n_ranges_requested"]`, i.e. the ranges
+  the fake gribjump actually received, for seven cases covering `local_regular`, `octahedral`,
+  `healpix_nested`, merged polygon rows and levels, at one unit per group, one unit for everything and
+  one latitude node per band.
+- `tests/test_unit_sizing.py`: the two terms, and the planned `k` for the measured shapes (the LUMI
+  HEALPix box at 1.5 GiB, EFAS Danube at 1 GiB, an O1280 box where the hard cap binds), the cap, the
+  whole-world field that is served by bands at any budget, band sizes per grid.
+- `tests/test_band_prepare.py`: per-band prepare is byte-identical to a whole-tree prepare on HEALPix,
+  O1280 and the wrapping-longitude overlap case, at four band sizes; in the banded mode every `prepare`
+  call carries a `select` and a `latitude_range`.
+- `tests/test_field_stream.py`: the assembler (release in plan order, one group buffered when the group
+  axes are outermost, parts of a key concatenated per branch, flush), the key sequence against
+  `collect_field_values`, and `get_iter` end to end -- five golden cases byte-identical with
+  `per_field_consumption` on, including missing fields in both reporting modes.
+- Measurements and the calibration of `bytes_per_value`: MEASUREMENTS.md (`python tools/measure_memory.py
+  ranges calibrate`, re-runnable).
