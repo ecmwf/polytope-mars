@@ -150,7 +150,7 @@ def test_groups_that_pay_for_one_call_each_are_their_own_unit():
 def test_a_unit_is_the_longest_run_the_memory_model_pays_for():
     assert units(run_of(7, max_groups=3)) == "0+3 3+3 6+1"
     assert units(run_of(7, max_groups=10**9)) == "0+7"
-    # a group that does not fit even alone stays its own unit (it is fetched in latitude bands)
+    # a group that does not fit even alone stays its own unit (it is fetched one field per call)
     assert units(run_of(3, max_groups=0)) == "0+1 1+1 2+1"
     assert units(run_of(7, max_groups=10**9), max_groups=2) == "0+2 2+2 4+2 6+1"
 

@@ -179,7 +179,7 @@ def test_whole_group_fallback_with_a_missing_level():
 
 def test_a_data_not_found_per_field_call_marks_that_field_missing():
     # 4 groups x 2 params, one call each: the missing field is the call that raises, so nothing is
-    # re-fetched and no peek is needed
+    # re-fetched
     (out, pm, fake), _ = both_modes(case("o1280_bbox_missing_field"), **PER_FIELD)
     assert out == expected("o1280_bbox_missing_field")
     assert fake.n_extract_calls == 4 * 2

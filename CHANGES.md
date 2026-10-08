@@ -715,4 +715,5 @@ shapes for climate-dt and class=ng requests of every feature type to match the u
   refusal happens before the fake is asked for its axes (pre-slice) or for any values (post-prepare).
 - `tests/test_stream_memory.py`: the 20 MB tree refusal and the 60 MB field refusal (above).
 - The golden corpus is unchanged and byte-identical (91 assertions), as is the rest of the suite:
-  **342 passed, 1 skipped** (was 310 passed, 1 skipped).
+  **343 passed, 1 skipped** over `tests/golden` and the streaming test modules (the other test modules
+  need a local FDB and gribjump schema).
