@@ -624,3 +624,86 @@ budget the unit model covers - see MEASUREMENTS.md for the two requests where th
   fold off and on, and `extract_stream` end to end -- the LUMI HEALPix request in **one call at
   803 MB** (Phase 2f: two calls, 1,790 MB) and the whole-world HEALPix and whole-domain EFAS fields
   served whole at **1,242 MB** and **1,192 MB** against a 1.5 GiB budget.
+
+# Phase 3c: a request tree bounded before slicing and after prepare
+
+## Why
+
+The unit sizing prices extraction units; nothing priced the *tree*. polytope-feature gives every
+value of a branching axis its own node, spatial sub-tree and slice -- a merged axis (`datacube.py`:
+"do not compress merged axes") or any axis missing from `compressed_axes_config` -- so a request's
+tree grows with the product of those axes' value counts, before a single value is fetched. Measured
+on the climate-dt HEALPix-1024 Europe box x 24 hourly fields: 24 sub-trees, 35.5 s of slicing, a
+276.7 MB prepared tree. The same box over a month is 720 sub-trees, ~18 min of slicing and an 8.1 GB
+tree; a whole-world box x 10 datetimes is 3 GB. All of it is spent before the first gribjump call and
+none of it was visible to the planner.
+
+## Behaviour changes
+
+- **`limits.max_tree_bytes`** (new, `None`): bytes a request tree may cost. `None` derives it as half
+  of `limits.memory_budget_bytes` when that is set (800 MB in a 3 GiB pod -- the tree is resident for
+  the whole request, *beside* the unit the budget covers) and is off when neither is set.
+- **`limits.bytes_per_point_tree`** (new, 40): what a point of a spatial sub-tree costs. 24 B/point
+  are the bulk node's arrays after `prepare` (`coordinates` 16 B + `indexes` 8 B, measured exactly in
+  Phase 3b) and the rest covers the row leaves the slicer builds before the fold (9.4 B/point on the
+  HEALPix Europe shape, 27-44 B/point where rows are short), which are resident with them.
+- **Refused before slicing** (`ValueError`, the `max_points_per_field` client-error path):
+  `The request tree alone would need about 13 GB (720 separate branches (dates, times or other
+  uncompressed axis values) of about 466409 grid points each), more than the limit of 800 MB; request
+  fewer dates and times per request`. A single-branch request is told to `request a smaller area`
+  instead. The estimate is `polytope_mars.limits.estimate_tree_bytes` = branches x
+  `estimate_points_per_field` x `bytes_per_point_tree`, with the branches counted from the request
+  string alone (`branching_value_counts`, `request_value_count`): no datacube, no slice.
+- **Refused after `prepare`** on the exact figure, still before any gribjump call:
+  `The request tree holds 11516760 grid points in 24 separate branches and costs 277 MB, more than
+  the limit of ...; request a smaller area, or fewer dates and times per request`. The exact figure is
+  `coordinates.nbytes + indexes.nbytes` summed over the distinct bulk nodes
+  (`polytope_mars.bulk_tree.tree_summary`), and it is the backstop for what the estimate cannot see:
+  a union whose leaf axis stays uncompressed (polygon pieces, tagged points), and axis values the
+  request string does not bound (`ALL`, step/time ranges in units the counters do not parse), which
+  count as one value each.
+- **`timings["tree_bytes"]`** (new): the exact prepared-tree bytes of every request, reported whether
+  or not a limit is set.
+- **A non-finite points-per-field estimate is "unknown"**: `get_boundingbox_area` returns NaN for a
+  pole-to-pole box, and NaN compares false against any limit, so `max_points_per_field` already
+  failed open there; both limits now say so explicitly and leave such a request to the exact check.
+- **Interaction with the field refusal**: the tree guard answers first (it runs before the slice), so
+  a budget far too small for a request now names the tree rather than the field. At the deployed
+  budget the two are far apart; `tests/test_stream_memory.py` pins both (20 MB: the tree of a
+  634,550-point field is 15 MB, more than half the budget; 60 MB: the tree fits, the 65 MB field does
+  not).
+
+## Not in this phase: separate date/time axes for every feature type
+
+Un-merging date and time for boxes/circles/frames/shapefiles as well (the fe-worker's
+`unmerge_date_time_options`, today limited to timeseries and polygon) is what would remove the
+branching above at the source -- 24 sub-trees -> 1, 35.5 s -> 1.5 s, 276.7 MB -> 11.5 MB, 803 MB ->
+346 MB of peak (MEASUREMENTS.md Phase 3c). It is **not** on this branch: the golden corpus says the
+output changes. With the axes separate, four climate-dt cases (`cdt_bbox_sfc`, `cdt_bbox_levelist`,
+`cdt_bbox_missing_field`, `cdt_position`) differ, because the `"date"`-role plans
+(`from_polytope` and the point-feature date plans) read the coverage's reference datetime from the
+`date` path value alone: `t` loses the time of day (`2020-01-01 00:00:00Z` for both the 00 and the 12
+coverage, space instead of `T`), `mars:metadata` gains the `time` axis value, and `cdt_position`
+collapses 6 coverages into 2 series. `ReforecastPlan` (class=ce) already folds a separate `time`
+axis into its stamps (`ref()`); the `"date"`-role plans never had to, because no deployment ever ran
+a box with separate axes. A candidate 4-file patch that does the same there (a `datetime_z` beside
+`date_z`, and `time` out of the `"date"` walker's metadata) makes all 91 golden assertions pass
+byte-identical -- but it changes the coverage layout rules, so it is the project owner's call:
+`../PHASE3C-A-separate-date-time.patch`, and the diff is in the Phase 3c report.
+
+## What polytope-config / the chart must set
+
+**Nothing new.** `limits.memory_budget_bytes` already implies `max_tree_bytes` (half of it). Set
+`limits.max_tree_bytes` explicitly only to override that split.
+
+## Verification
+
+- `tests/test_tree_limits.py` (31 tests): the value count of every MARS range form; the branch count
+  of a merged date/time axis (720 for 30 dates x 24 times), of the same request with separate
+  compressed axes (1) and of an axis missing from `compressed_axes_config`; the byte estimate and its
+  linearity in the branches; the derived limit; both refusals and their messages, each with the
+  request one byte either side of the limit; `timings["tree_bytes"]` on golden cases; and that a
+  refusal happens before the fake is asked for its axes (pre-slice) or for any values (post-prepare).
+- `tests/test_stream_memory.py`: the 20 MB tree refusal and the 60 MB field refusal (above).
+- The golden corpus is unchanged and byte-identical (91 assertions), as is the rest of the suite:
+  **342 passed, 1 skipped** (was 310 passed, 1 skipped).

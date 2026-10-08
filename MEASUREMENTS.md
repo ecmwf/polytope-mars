@@ -579,12 +579,71 @@ the arrays' `nbytes`, views counted once), RSS is what the process actually hold
 - **The two largest single fields of the corpus are served whole**, 1,242 MB and 1,192 MB of peak
   against a 1.5 GiB budget in a 3 GiB pod -- which is what justifies deleting the banding. Both are
   one gribjump call of one field (1 and 2,968 index ranges).
-- **A budget that cannot hold one field refuses the request** instead of banding it: 20 MB against the
+- **A budget that cannot hold one field refuses the request** instead of banding it: 60 MB against the
   634,550-point Danube field raises `One field of this request covers 634550 grid points and needs
-  about 65 MB to extract, more than the memory budget of 20000000 bytes` before any call.
+  about 65 MB to extract, more than the memory budget of 60000000 bytes` before any call. (At 20 MB it
+  is now the tree guard of Phase 3c that answers first -- the tree of that field is 15 MB, more than
+  half the budget.)
 - **Output bytes do not depend on the call pattern**: 337.2 MiB for the Danube x 10 request at one
   call per group, at one call for all ten, and -- as Phase 1 measured the same request with latitude
   bands -- 337 MiB then. Byte identity itself is pinned by the golden corpus (28 cases, both
   consumption modes, both missing-field reporting modes) and by
   `../polytope/performance/bulk_order.py`, which asserts the ordered `(lat, lon)` list and the
   per-field values are identical with the fold off and on for every case.
+
+# Phase 3c measurements (separate date/time axes, and the tree guard)
+
+## 1. What a merged date/time axis costs: the HEALPix Europe x 24 hourly request
+
+polytope-feature never compresses a merged axis (`datacube.py`: "do not compress merged axes"), so a
+climate-dt *box* gets one branch, one spatial sub-tree and one slice per datetime, while the same
+rectangle as a *polygon* -- which the fe-worker un-merges -- gets one of each in total. The same
+request measured both ways, `python tools/measure_memory.py --run tree_healpix1024_europe_24h_fold_on`
+and `--run stream_healpix1024_europe_24fields_1_5GiB` (climate-dt HEALPix-1024, Europe box, 24 hourly
+fields of 479,865 points; the "separate" rows were measured with the date/time axes un-merged for
+every feature type, see `CHANGES.md` -- that change is **not** on this branch):
+
+| date/time axes | sub-trees | points in the tree | `slice` | `prepare` | prepared tree | peak RSS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| merged (today) | **24** | 11,516,760 | **35.5 s** | 14.1 s | **276.7 MB** | **672 MB** |
+| separate | **1** | 479,865 | **1.5 s** | 0.6 s | **11.5 MB** | **219 MB** |
+
+End to end through `extract_stream` at a 1.5 GiB budget, output discarded (identical bytes, 601.6 MiB
+either way):
+
+| date/time axes | calls (fields) | estimated unit | peak RSS | `slice` | `prepare` | `get` | wall |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| merged (today) | 1 (24) | 546 MB | **803 MB** | 35.5 s | 14.1 s | 2.2 s | **52 s** |
+| separate | 1 (24) | 193 MB | **346 MB** | 1.5 s | 0.6 s | 2.2 s | **4.2 s** |
+
+- **24x the tree for the same data**: 24 copies of the same spatial selection at 24 B/point. The
+  extraction itself is unchanged (one call, 24 fields, the same 1,388 index ranges, `get` 2.2 s both
+  ways): everything saved is slice time and resident tree.
+- **The slice is the cost that scales**, not the fetch: 35.5 s for 24 branches against 1.5 s for one,
+  and it is linear in the branches. "Europe hourly for a month" (720 branches) is ~18 min of slicing
+  and an 8.1 GB tree; a year is 8,760 branches.
+- Wall time is not a goal (DESIGN 1) but 52 s -> 4.2 s on a request the BOBS writer times out of at
+  300 s is worth recording.
+
+## 2. What the tree guard refuses
+
+`limits.max_tree_bytes` (default: half of `memory_budget_bytes`, so 800 MB in a 3 GiB pod) against
+`limits.estimate_tree_bytes` = branches x points per field x `bytes_per_point_tree` (40):
+
+| request (healpix_1024) | branches | points/field | estimated tree | 24 B/point | verdict at 800 MB |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Europe box, 1 datetime | 1 | 466,409 | 19 MB | 11 MB | served |
+| Europe box x 24 hourly | 24 | 466,409 | 448 MB | 269 MB | served (803 MB peak, above) |
+| Europe box, hourly month | **720** | 466,409 | **13 GB** | 8.1 GB | **refused before slicing** |
+| 2027 polygon, hourly year | 1 | 2,520 | 101 kB | 60 kB | served (date/time un-merged) |
+| HEALPix whole world, 1 field | 1 | NaN | unknown | 302 MB | served (exact check: 302 MB) |
+
+- The estimate is **1.7x the 24 B/point the prepared tree actually holds** (40 B/point against 24):
+  the slicer's row leaves are built before the fold and are resident with it (9.4 B/point measured on
+  this shape in Phase 3b, 27-44 B/point on shapes with short rows), so the constant covers the peak
+  the tree walks through, not its steady state. The exact post-prepare check (`timings["tree_bytes"]`,
+  `coordinates.nbytes + indexes.nbytes` over the bulk nodes) is what bounds the steady state.
+- **A pole-to-pole box has no estimate at all**: `get_boundingbox_area` returns NaN for
+  `[[90, -180], [-90, 180]]`, so the pre-slice guard opts out and the exact check does the work (the
+  whole-world HEALPix field's tree is 12,582,912 x 24 B = 302 MB, under the 800 MB limit, and the
+  request is served -- as Phase 3b measured, at 1,242 MB of peak).
