@@ -105,18 +105,20 @@ class FakeExtractResult:
     (``polytope_feature.datacube.fdb_assign.field_values_flat``) pays nothing per range while one
     reading ``values`` pays a numpy object per range.  A field gribjump has no message for has an
     empty buffer and no views.
+
+    Built from the buffer and the length of each range, never from one array per range: a HEALPix
+    field of a Europe box has ~300k ranges, and synthesising an array for each of them cost the
+    measurements more than everything they were measuring (MEASUREMENTS.md).
     """
 
     __slots__ = ("_lengths", "_views", "values_flat")
 
-    def __init__(self, values: list):
+    def __init__(self, values_flat, lengths=None):
         self._views = None
-        if len(values) == 0:
-            self.values_flat = np.empty(0, dtype=np.float64)
-            self._lengths = []
-            return
-        self.values_flat = np.concatenate(values) if len(values) > 1 else np.asarray(values[0], dtype=np.float64)
-        self._lengths = [len(chunk) for chunk in values]
+        self.values_flat = np.asarray(values_flat, dtype=np.float64)
+        if lengths is None:
+            lengths = [self.values_flat.size] if self.values_flat.size else []
+        self._lengths = list(lengths)
 
     @property
     def values(self) -> list:
@@ -128,6 +130,24 @@ class FakeExtractResult:
                 at += n
             self._views = views
         return self._views
+
+
+def _range_indices(ranges) -> tuple:
+    """``(grid indices of every requested range, one length per range)``, in request order.
+
+    Vectorised over the ranges: a HEALPix field of a Europe box is ~300k ranges of ~1.6 points, and
+    an array per range would cost more than the field itself.  Index ``i`` of the flat buffer
+    belongs to the range whose values start at ``start`` and whose first element sits at ``offset``,
+    so its grid index is ``start - offset + i``.
+    """
+    bounds = np.asarray(ranges, dtype=np.int64).reshape(-1, 2)
+    starts, lengths = bounds[:, 0], bounds[:, 1] - bounds[:, 0]
+    total = int(lengths.sum())
+    if total == 0:
+        return np.empty(0, dtype=np.int64), lengths.tolist()
+    offsets = np.concatenate(([0], np.cumsum(lengths)[:-1]))
+    indices = np.repeat(starts - offsets, lengths) + np.arange(total, dtype=np.int64)
+    return indices, lengths.tolist()
 
 
 def _matches(path: Mapping, partial: Mapping) -> bool:
@@ -218,19 +238,16 @@ class FakeGribJump:
             self.n_requests += 1
             self.fields[field_id(path)] = dict(path)
             if self._is_missing(path):
-                out.append(FakeExtractResult([]))
+                out.append(FakeExtractResult(np.empty(0)))
                 continue
-            values = []
-            for start, end in ranges:
-                idx = np.arange(start, end, dtype=np.int64)
-                arr = np.asarray(self.data(path, idx), dtype=np.float64)
-                if callable(self._nan):
-                    arr[np.asarray(self._nan(path, idx), dtype=bool)] = np.nan
-                elif self._nan is not None and self._nan.size:
-                    arr[np.isin(idx, self._nan)] = np.nan
-                values.append(arr)
-                self.n_values += int(end - start)
-            out.append(FakeExtractResult(values))
+            idx, lengths = _range_indices(ranges)
+            arr = np.asarray(self.data(path, idx), dtype=np.float64)
+            if callable(self._nan):
+                arr[np.asarray(self._nan(path, idx), dtype=bool)] = np.nan
+            elif self._nan is not None and self._nan.size:
+                arr[np.isin(idx, self._nan)] = np.nan
+            self.n_values += int(idx.size)
+            out.append(FakeExtractResult(arr, lengths))
         return out
 
     # -- missing fields -------------------------------------------------------------------------------
