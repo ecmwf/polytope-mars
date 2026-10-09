@@ -40,7 +40,9 @@ ecmwf/polytope-mars#100, which first described a tensogram layout for feature ex
 The header message adds ``parameters``, a list of ``{id, shortname, name, unit, description}`` in
 emission order (every requested parameter, including ones no coverage has data for), and ``mars``, the
 request keys common to every coverage.  The trailer message adds ``end_of_stream: true``,
-``n_coverages`` and ``n_messages`` (the whole stream, header and trailer included).
+``n_coverages``, ``n_messages`` (the whole stream, header and trailer included) and ``parameters``, the
+header's list restricted to the parameters some coverage holds a tensor for -- the same list CovJSON's
+``parameters`` gives, which can only be known once every coverage is written.
 
 A coverage message adds:
 
@@ -198,13 +200,19 @@ class TensogramEncoder:
         self._shortname = {p.id: p.shortname for p in header.parameters}
         self._unit = {p.id: p.unit for p in header.parameters}
         self._description = {p.id: p.description for p in header.parameters}
+        self._present: set = set()
         self.n_coverages = 0
         self.n_messages = 0
         self._group = None
         self._reset_message()
         extra = dict(self._stream_extra())
         extra["mars"] = _plain(dict(header.mars_metadata))
-        extra["parameters"] = [
+        extra["parameters"] = self._parameter_list(header.parameters)
+        return self._message(extra, [])
+
+    @staticmethod
+    def _parameter_list(parameters) -> list:
+        return [
             {
                 "id": p.id,
                 "shortname": p.shortname,
@@ -212,9 +220,8 @@ class TensogramEncoder:
                 "unit": p.unit,
                 "description": p.description,
             }
-            for p in header.parameters
+            for p in parameters
         ]
-        return self._message(extra, [])
 
     def encode(self, block) -> bytes:
         """The whole block as one ``bytes`` (``b"".join(self.encode_iter(block))``)."""
@@ -233,13 +240,14 @@ class TensogramEncoder:
         return self._group_end(block)
 
     def end(self) -> bytes:
-        """The trailer message: the stream's coverage and message counts, no data objects."""
+        """The trailer message: the stream's counts and the parameters it holds data for, no data objects."""
         out = b"".join(self._flush())
         extra = dict(self._stream_extra())
         extra["end_of_stream"] = True
         extra["n_coverages"] = self.n_coverages
         # the trailer counts itself, so that a reader can check it has every message
         extra["n_messages"] = self.n_messages + 1
+        extra["parameters"] = self._parameter_list(p for p in self._header.parameters if p.id in self._present)
         return out + self._message(extra, [])
 
     # -- blocks ------------------------------------------------------------------------------------------
@@ -254,6 +262,7 @@ class TensogramEncoder:
             # a group whose coordinates never arrived: open it so the values are still described
             yield from self._open(block.group)
         name = self._shortname.get(block.param, block.param)
+        self._present.add(block.param)
         yield from self._write(name, "data", block.param, block.level, block.values)
 
     def _group_end(self, block) -> Iterator[bytes]:

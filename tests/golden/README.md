@@ -88,6 +88,7 @@ except `cdt_bbox_missing_field` (defects 3 and 4 below).
 | 6 climate-dt position | `cdt_position` | was `TypeError`; now one PointSeries coverage per (point, date-time), `t` = that date-time, as `Position.from_polytope` does for grids with steps |
 | 7 clmn vertical profile | `clmn_verticalprofile` | each coverage's three level values came from three different (year, month, level) fields (8 of 12 values in the wrong coverage, `tools/audit_golden.py`); now every coverage holds its own month's three levels |
 | 8 clmn trajectory | `clmn_trajectory` | the whole trajectory was repeated in one coverage per (year, month) -- 6 coverages of all 18 composite tuples and 18 values each; now one coverage of the 18 tuples, as `t` is the composite's first element and distinguishes the months |
+| 9 parameters | `o1280_bbox_missing_param_everywhere` | the collection's `parameters` lists only the parameters some coverage holds a range for (here `2t`; `tp`, missing from every field, is not listed); it is written after `coverages`, so this costs no buffering. A collection with no coverage has `"parameters": {}` |
 
 `tools/audit_golden.py` finds no misplaced value in any case. Every case without `fixes:` is byte-identical to
 the oracle.
@@ -108,9 +109,9 @@ the oracle.
 
 ## Deliberate differences outside the corpus
 
-- The collection's `parameters` lists every requested param (request order, sorted as strings like the tree
-  sorts them), also params that turn out to be missing everywhere; legacy listed the tree's params
-  (`from_polytope*`) or only params with data (reforecast).
+- The collection's `parameters` lists the params some coverage holds (request order, sorted as strings like
+  the tree sorts them; defect 9); legacy listed the tree's params (`from_polytope*`) or only params with data
+  (reforecast).
 - A request where every field is missing yields an empty collection (legacy `from_polytope_reforecast`
   raised `ValueError("No data was returned.")`).
 - Reforecast (class=ce) MultiPoint coverages with several levels list composite tuples levels-outer like

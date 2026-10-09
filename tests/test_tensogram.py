@@ -256,13 +256,21 @@ def test_the_header_message_describes_the_request_and_its_parameters(name):
     assert extra["domain_type"] == doc["domainType"]
     assert extra["feature_type"] == case_of(name)["request"]["feature"]["type"]
     parameters = {p["shortname"]: p for p in extra["parameters"]}
-    assert set(parameters) == set(doc["parameters"])
+    assert set(doc["parameters"]) <= set(parameters)
     for shortname, expected in doc["parameters"].items():
         got = parameters[shortname]
         assert got["unit"] == expected["unit"]["symbol"]
         assert got["name"] == expected["observedProperty"]["label"]["en"]
         assert got["description"] == expected["description"]["en"]
         assert got["id"].isdigit()
+
+
+@pytest.mark.parametrize("name", CASES)
+def test_the_trailer_message_lists_the_parameters_the_coverages_hold(name):
+    doc = covjson_of(name)
+    meta, objects = decode(name)[-1]
+    assert objects == []
+    assert [p["shortname"] for p in meta.extra["parameters"]] == list(doc["parameters"])
 
 
 @pytest.mark.parametrize("name", CASES)
