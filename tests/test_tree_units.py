@@ -19,7 +19,7 @@ from polytope_mars.coverage_plan import analyse_tree, spatial_children
 from polytope_mars.extract import BlockExtractor, collect_field_values
 from polytope_mars.testing.fake_gribjump import decode_value
 from polytope_mars.testing.golden import build_fake, load_case, make_polytope_mars
-from polytope_mars.tree_units import GroupSpec, plan_units, prune_values, unit_select
+from polytope_mars.tree_units import GroupSpec, plan_units, unit_select
 
 GOLDEN = Path(__file__).parent / "golden"
 
@@ -193,9 +193,9 @@ def test_unit_select_lists_the_values_in_plan_order():
 # --- pruning a tree to the values of a unit ---------------------------------------------------------------
 
 
-def test_prune_values_keeps_the_selected_values_and_leaves_the_tree_untouched(monkeypatch):
+def test_pruning_to_a_units_values_leaves_the_tree_untouched(monkeypatch):
     datacube, tree, fake = prepared("efas_bbox_fc_steps", monkeypatch)  # one branch, steps 6/12/18
-    sub = prune_values(tree, {"step": (6, 18)})
+    sub = tree.prune(select={"step": (6, 18)})
     assert list(dict(analyse_tree(sub).branches[0].path)["step"]) == [6, 18]
 
     fields = collect_field_values(datacube.get(sub), ["step", "param"])
@@ -205,22 +205,22 @@ def test_prune_values_keeps_the_selected_values_and_leaves_the_tree_untouched(mo
     assert list(dict(analyse_tree(tree).branches[0].path)["step"]) == [6, 12, 18]
 
 
-def test_prune_values_selects_whole_branches(monkeypatch):
+def test_pruning_to_a_units_values_selects_whole_branches(monkeypatch):
     # climate-dt date and time are separate compressed axes: 2 dates x 2 times in one spatial sub-tree
     datacube, tree, fake = prepared("cdt_bbox_sfc", monkeypatch)
     info = analyse_tree(tree)
     dates = info.values["date"]
     assert len(dates) == 2 and len(info.values["time"]) == 2 and len(info.branches) == 1
-    sub = prune_values(tree, {"date": (dates[0],)})
+    sub = tree.prune(select={"date": (dates[0],)})
     pruned = analyse_tree(sub)
     assert len(pruned.branches) == 1 and pruned.values["date"] == [dates[0]] and len(pruned.values["time"]) == 2
 
 
-def test_prune_values_rejects_unknown_values_and_spatial_axes(monkeypatch):
+def test_pruning_rejects_unknown_values_and_spatial_axes(monkeypatch):
     datacube, tree, fake = prepared("efas_bbox_fc_steps", monkeypatch)
     with pytest.raises(ValueError, match="Values not found in tree: step"):
-        prune_values(tree, {"step": (5,)})
+        tree.prune(select={"step": (5,)})
     with pytest.raises(ValueError, match="spatial axis 'latitude'"):
-        prune_values(tree, {"latitude": (0.0,)})
+        tree.prune(select={"latitude": (0.0,)})
     with pytest.raises(ValueError, match="root of a tree"):
-        prune_values(tree.children[0], {"step": (6,)})
+        tree.children[0].prune(select={"step": (6,)})

@@ -22,9 +22,9 @@ Two things bound a unit:
   (``FDBDatacube._gribjump_requests``).  Groups of one unit must also agree on their point count,
   params and levels, so that each group's blocks are the same bytes whatever unit fetched them.
 
-:func:`plan_units` plans the units, :func:`prune_values` builds the sub-tree of one.
-``TensorIndexTree.prune`` keeps a single value per selected axis (one group); a unit needs a set of
-values per axis, which is the same sub-tree shape with more values left on the group-axis nodes.
+:func:`plan_units` plans the units; the sub-tree of one is ``tree.prune(select=unit_select(...))``,
+which keeps the unit's values on every group axis (``TensorIndexTree.prune`` takes a value or a set of
+values per axis) and copies the spatial sub-trees whole.
 """
 
 from __future__ import annotations
@@ -32,18 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from polytope_feature.datacube import tree_pruning
-from polytope_feature.datacube.tensor_index_tree import MergedTensorIndexNode
-
-# Node copying is polytope-feature's own (``TensorIndexTree.prune``); reuse it so a pruned unit is
-# built exactly like a pruned group.
-_copy_node = tree_pruning._copy_node
-_copy_subtree = tree_pruning._copy_subtree
-_value_matches = tree_pruning._value_matches
-
-__all__ = ["GroupSpec", "plan_units", "prune_values", "unit_select"]
-
-LATITUDE = "latitude"
+__all__ = ["GroupSpec", "plan_units", "unit_select"]
 
 
 @dataclass(frozen=True)
@@ -154,58 +143,3 @@ def unit_select(specs, start: int, length: int, axes) -> dict:
             if not any(_same(value, v) for v in values):
                 values.append(value)
     return {axis: tuple(values) for axis, values in select.items()}
-
-
-def prune_values(tree, select: dict):
-    """Copy of the (prepared) ``tree`` keeping, on every axis of ``select``, only the listed values.
-
-    The multi-value counterpart of ``TensorIndexTree.prune(select=...)``: nodes on a selected axis
-    keep their values that are in ``select`` (in the node's own order, so the compressed-axes
-    expansion of ``FDBDatacube.get`` stays in tree order), branches with no value left are dropped and
-    everything else is copied as ``prune`` copies it.  ``results`` are empty and no node is shared with
-    ``tree``, so ``get`` on the result leaves ``tree`` untouched.
-
-    :raises ValueError: for a spatial axis, a non-root tree, or an axis whose values are not in the
-        tree at all (same contract as ``prune``).
-    """
-    if not tree.is_root():
-        raise ValueError("prune_values() must be called on the root of a tree")
-    for name in select:
-        if name in (LATITUDE, "longitude"):
-            raise ValueError(f"Cannot select on spatial axis {name!r}")
-    matched = set()
-
-    def visit(src, dst) -> bool:
-        kept_any = False
-        for child in src.children:
-            if isinstance(child, MergedTensorIndexNode) or child.axis.name == LATITUDE:
-                dst.add_child(_copy_subtree(child))
-                kept_any = True
-                continue
-            values = None
-            name = child.axis.name
-            if name in select:
-                wanted = select[name]
-                values = tuple(v for v in child.values if any(_value_matches(v, w, child.axis) for w in wanted))
-                if not values:
-                    continue
-                matched.add(name)
-            new = _copy_node(child, values)
-            if len(child.children) == 0:
-                # a leaf above the latitude level (non-spatial tree): keep it whole
-                dst.add_child(new)
-                kept_any = True
-                continue
-            if visit(child, new):
-                dst.add_child(new)
-                kept_any = True
-        return kept_any
-
-    pruned = _copy_node(tree)
-    visit(tree, pruned)
-    missing = set(select) - matched
-    if missing:
-        raise ValueError(
-            "Values not found in tree: " + ", ".join(f"{name}={select[name]!r}" for name in sorted(missing))
-        )
-    return pruned

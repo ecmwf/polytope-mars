@@ -249,7 +249,8 @@ many small ones are.
   `limits.memory_budget_bytes = None` keeps one group per call (unchanged, and still the default). When a
   single group does not fit, that group goes through the per-(param, level) banded path as before.
 - **One call per unit.** The unit's sub-tree is pruned from the sliced tree with the group axes carrying
-  the unit's values (`tree_units.prune_values`; `TensorIndexTree.prune` only selects one value per axis),
+  the unit's values (`tree_units.prune_values`, which the section at the end replaces with
+  `TensorIndexTree.prune(select=...)`),
   `param`/`levelist` compressed. `collect_field_values` splits the leaf results per
   (group, param, level); a group's blocks are emitted only once all of the unit's results are in, groups in
   plan order, each group one band. Output bytes are unchanged for every unit size.
@@ -290,8 +291,8 @@ unmap to one key each.
   `test_multi_group_unit_assigns_every_field_to_its_own_group` (every range of a 4-group unit carries
   exactly its own field, decoded from the fake's values) cover the two rules the split depends on.
 - `tests/test_tree_units.py`: the planner (budget, cap, shape changes, product rule, groups without group-axis
-  values) and `prune_values` (selected values only, whole branches on the merged date axis, parent tree
-  untouched, errors).
+  values) and the pruning of a unit's sub-tree (selected values only, whole branches on the merged date axis,
+  parent tree untouched, errors).
 - `tests/test_missing_fields.py::test_multi_group_unit_falls_back_per_group` and
   `test_multi_group_unit_fallback_keeps_the_params_that_exist`: a step missing inside a 10-group unit, both
   reporting modes, same bytes as one unit per group.
@@ -829,6 +830,14 @@ what the repo contains.
   `pointseries_order` quirk where it builds the header), `bulk_tree.tree_bytes` (callers use
   `tree_summary`), `bulk_tree.RangeCounts.n_counted` and `sizing.UnitSizing.fits_group` (the planner and
   its tests ask `max_unit_groups(...) >= 1`).
+
+## Pruning a unit's sub-tree
+
+- **`tree_units.prune_values` is gone**: `TensorIndexTree.prune(select=...)` takes a value *or a sequence of
+  values* per axis (`../polytope/CHANGES.md`), which is exactly what a multi-group unit needs, so
+  `_emit_unit` calls `tree.prune(select=unit_select(...))`. The three private names `tree_units` imported
+  from `polytope_feature.datacube.tree_pruning` (`_copy_node`, `_copy_subtree`, `_value_matches`) go with it:
+  pruning is polytope-feature's, in one implementation.
 
 ## The block IR
 

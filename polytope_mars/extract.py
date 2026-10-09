@@ -77,7 +77,7 @@ from .field_stream import (
 )
 from .limits import format_bytes, tree_byte_limit
 from .sizing import DEFAULT_FRAGMENT_BYTES, UnitSizing
-from .tree_units import GroupSpec, plan_units, prune_values, unit_select
+from .tree_units import GroupSpec, plan_units, unit_select
 
 __all__ = ["BlockExtractor", "collect_field_values", "is_data_not_found", "slice_request"]
 
@@ -684,7 +684,7 @@ class BlockExtractor:
         """
         select = unit_select(specs, start, length, axes)
         logger.debug("%s: unit of %d groups: %s", self.pm.id, length, select)
-        sub = prune_values(tree, select)
+        sub = tree.prune(select=select)
         unit_groups = [groups[i] for i in range(start, start + length)]
         assembler = GroupAssembler(unit_groups)
         n_fields = length * specs[start].n_fields
