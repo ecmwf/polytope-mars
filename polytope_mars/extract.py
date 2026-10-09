@@ -532,9 +532,6 @@ class BlockExtractor:
             params=tuple(str(p) for p in params),
             levels=tuple(plan.level_out(lev) for lev in g.levels),
             n_points=n_points,
-            # A field is never split, so a group is always one block of points (the block IR keeps the
-            # band attributes at their single-band values for the encoders).
-            n_bands=1,
             mars_metadata=g.mars_metadata,
         )
 
@@ -800,7 +797,7 @@ class BlockExtractor:
             raise RuntimeError(f"Group {g.select}: {len(lat)} coordinates for {n_points} points")
         fg = self._field_group(plan, g, index, params, n_points)
         logger.debug("%s: group %d %s: %d points, %d params", self.pm.id, index, g.select, n_points, len(params))
-        yield CoordsBlock(fg, 0, 0, lat, lon)
+        yield CoordsBlock(fg, lat, lon)
         for p in params:
             for lev in levels:
                 vals = fields.pop(key(p, lev), None)
@@ -808,7 +805,7 @@ class BlockExtractor:
                     arr = np.full(n_points, np.nan)
                 else:
                     arr = vals[0]
-                yield ValuesBlock(fg, str(p), plan.level_out(lev) if has_levels else None, 0, 0, arr)
+                yield ValuesBlock(fg, str(p), plan.level_out(lev) if has_levels else None, arr)
         yield GroupEnd(fg)
 
     def _field_units(self, datacube, tree, info, plan, g, index, spec) -> Iterator[Any]:
@@ -904,12 +901,12 @@ class BlockExtractor:
                 continue
             fg = self._field_group(plan, g, index, params, n_points)
             lat, lon = group_coordinates(info, g.branches)
-            yield CoordsBlock(fg, 0, 0, lat, lon)
+            yield CoordsBlock(fg, lat, lon)
             for p in params:
                 for lev in levels:
                     vals = group_fields[(p, lev)]
                     arr = vals[0] if vals is not None and len(vals[0]) == n_points else np.full(n_points, np.nan)
-                    yield ValuesBlock(fg, str(p), plan.level_out(lev) if g.levels else None, 0, 0, arr)
+                    yield ValuesBlock(fg, str(p), plan.level_out(lev) if g.levels else None, arr)
             yield GroupEnd(fg)
             index += 1
             self.counters.n_groups += 1

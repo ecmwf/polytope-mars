@@ -561,9 +561,8 @@ latitude bands.
   memory budget of <b> bytes; request a smaller area or fewer parameters per request`. There is no
   splitting of any kind left. `limits.max_points_per_field` remains the explicit, pre-slicing cap.
 - **The block IR keeps its band attributes** at their single-band values (`FieldGroup.n_bands = 1`,
-  `CoordsBlock`/`ValuesBlock` `band = 0`, `offset = 0`) so that covjsonkit's stream encoder (PR #140,
-  which groups by `n_bands` and reads `band`/`offset` structurally) is untouched. They can be dropped
-  from the IR and from the encoder together, in one later change on both sides.
+  `CoordsBlock`/`ValuesBlock` `band = 0`, `offset = 0`) so that covjsonkit's stream encoder (PR #140) is
+  untouched by this change. The section below drops them from both sides.
 - **Unit sizing** (`polytope_mars.sizing.UnitSizing`). A unit of `k` groups is planned when
 
       buffer_cpp(unit) x safety_factor
@@ -824,6 +823,15 @@ what the repo contains.
   `pointseries_order` quirk where it builds the header), `bulk_tree.tree_bytes` (callers use
   `tree_summary`), `bulk_tree.RangeCounts.n_counted` and `sizing.UnitSizing.fits_group` (the planner and
   its tests ask `max_unit_groups(...) >= 1`).
+
+## The block IR
+
+- **`FieldGroup.n_bands`, `CoordsBlock.band`/`.offset` and `ValuesBlock.band`/`.offset` are gone.** A field
+  is fetched whole, so a block describes the points it carries and nothing else; a group is one block of
+  points plus one values block per (param, level). covjsonkit places blocks by arrival order and never read
+  the attributes (covjsonkit `CHANGES.md`), and the tensogram encoder derives a tensor's `point_offset`
+  from its own slicing of the block. A producer that splits a group's points over several consecutive
+  blocks still writes the same bytes, which covjsonkit's tests pin.
 
 ## Test suite
 

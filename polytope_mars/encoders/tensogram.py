@@ -246,15 +246,15 @@ class TensogramEncoder:
 
     def _coords(self, block) -> Iterator[bytes]:
         yield from self._open(block.group)
-        yield from self._write("latitude", "coordinate", None, None, block.offset, block.lat)
-        yield from self._write("longitude", "coordinate", None, None, block.offset, block.lon)
+        yield from self._write("latitude", "coordinate", None, None, block.lat)
+        yield from self._write("longitude", "coordinate", None, None, block.lon)
 
     def _values(self, block) -> Iterator[bytes]:
         if self._group is not block.group:
             # a group whose coordinates never arrived: open it so the values are still described
             yield from self._open(block.group)
         name = self._shortname.get(block.param, block.param)
-        yield from self._write(name, "data", block.param, block.level, block.offset, block.values)
+        yield from self._write(name, "data", block.param, block.level, block.values)
 
     def _group_end(self, block) -> Iterator[bytes]:
         if self._group is block.group:
@@ -272,7 +272,7 @@ class TensogramEncoder:
         self._part = 0
         self.n_coverages += 1
 
-    def _write(self, name, role, param, level, offset, values) -> Iterator[bytes]:
+    def _write(self, name, role, param, level, values) -> Iterator[bytes]:
         """One tensor as objects of at most ``max_fragment_bytes``, closing messages as they fill."""
         values = np.ascontiguousarray(values, dtype=np.float64)
         per_object = max(1, self.max_fragment_bytes // 8)
@@ -285,7 +285,7 @@ class TensogramEncoder:
                 "name": name,
                 "role": role,
                 "units": _COORDINATE_UNITS.get(name, self._unit.get(param, "")),
-                "point_offset": _plain(offset) + start,
+                "point_offset": start,
                 "n_values": _plain(piece.size),
             }
             if role == "data":

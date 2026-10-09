@@ -14,10 +14,7 @@ Emission order per field group (one output coverage for MultiPoint domains)::
             ValuesBlock
     GroupEnd
 
-A group is one block of points: a field is fetched whole, so the ``band`` / ``offset`` / ``n_bands``
-attributes below are always 0, 0 and 1.  They are kept because covjsonkit's stream encoder reads them
-structurally (it groups by ``n_bands`` and places a block by its ``band`` and ``offset``); they can be
-dropped from the IR and from the encoder together, in one change on both sides.
+A group is one block of points per (param, level): a field is fetched whole and never split.
 """
 
 from __future__ import annotations
@@ -69,8 +66,6 @@ class FieldGroup:
     levels: tuple[Any, ...]
     #: points per (param, level)
     n_points: int
-    #: always 1: a field is never split (see the module doc)
-    n_bands: int
     #: per-coverage mars:metadata exactly as legacy produced it (keys + order)
     mars_metadata: dict[str, Any]
 
@@ -78,10 +73,6 @@ class FieldGroup:
 @dataclass(frozen=True)
 class CoordsBlock:
     group: FieldGroup
-    #: always 0 (see the module doc)
-    band: int
-    #: point offset within the field, always 0
-    offset: int
     #: float64 [n]
     lat: np.ndarray
     #: float64 [n]
@@ -94,9 +85,6 @@ class ValuesBlock:
     param: str
     #: one of group.levels, or None when levels == ()
     level: Any
-    #: always 0, as on CoordsBlock
-    band: int
-    offset: int
     #: float64 [n]; NaN where missing
     values: np.ndarray
 
