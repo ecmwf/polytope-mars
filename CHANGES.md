@@ -126,6 +126,8 @@ several index ranges") plus that checkout's uncommitted changes, via the shared 
 | 3 + 4 | `cdt_bbox_missing_field` | the 1200 coverage has only `2t` (21 correct values) instead of 36-value `10u`/`2t` ranges with shifted/`null` values |
 | 5 frame | `efas_frame_fc` | was `TypeError`; now one coverage with 360 points (outer box minus inner box) |
 | 6 climate-dt position | `cdt_position` | was `TypeError`; now one PointSeries coverage per (point, date-time), `t` = that date-time, as `Position.from_polytope` does for grids with steps |
+| 7 clmn vertical profile | `clmn_verticalprofile` | each coverage's three level values came from three different (year, month, level) fields (8 of 12 values in the wrong coverage, `tools/audit_golden.py`); now every coverage holds its own month's three levels |
+| 8 clmn trajectory | `clmn_trajectory` | the whole trajectory was repeated in one coverage per (year, month) -- 6 coverages of all 18 composite tuples and 18 values each; now one coverage of the 18 tuples, as `t` is the composite's first element and distinguishes the months |
 
 `tools/audit_golden.py` finds no misplaced value in any case. Every case without `fixes:` is byte-identical to
 the oracle (`tests/golden/expected/`, tracked in git; regenerate only from the last commit that ran the
@@ -830,6 +832,33 @@ what the repo contains.
   `pointseries_order` quirk where it builds the header), `bulk_tree.tree_bytes` (callers use
   `tree_summary`), `bulk_tree.RangeCounts.n_counted` and `sizing.UnitSizing.fits_group` (the planner and
   its tests ask `max_unit_groups(...) >= 1`).
+
+## Six golden cases for the coverage plans that had none
+
+The corpus reached every plan class of `coverage_plan.py` except five, and the `series_major`
+PointSeries ordering, so those shipped with no byte-level oracle. Six cases close that, with their
+`expected/` bytes generated in the legacy environment (`tests/golden/README.md`):
+
+| case | plan class | what it covers |
+| --- | --- | --- |
+| `efcl_position_hdate` | `PositionReforecastPlan` | efcl position, 2 points x 2 hdates x 2 times x 2 steps: 8 coverages, byte-identical |
+| `efcl_trajectory_hdate` | `TrajectoryReforecastPlan` | efcl 2-D trajectory, 2 hdates: 2 coverages, byte-identical |
+| `efcl_verticalprofile_hdate` | `VerticalProfileReforecastPlan` | efcl profile, 3 levels x 2 hdates x 2 steps: 4 coverages, byte-identical |
+| `clmn_trajectory` | `TrajectoryMonthPlan` | clmn 2-D trajectory, 2 years x 3 months: defect 8 |
+| `clmn_verticalprofile` | `VerticalProfileMonthPlan` | clmn profile, 3 levels x 2 years x 2 months: defect 7 |
+| `efas_timeseries_series_major` | `TimeSeriesReforecastPlan` with `forecast()` | class=ce stream=efas timeseries, 2 dates x 4 steps x 2 points: the `pointseries_order: series_major` coverage order, byte-identical |
+
+- **`VerticalProfileReforecastPlan` writes `Forecast date` on efcl coverages**, which the MultiPoint
+  reforecast walk leaves out (the `collapse()` quirk) and `VerticalProfile.add_coverage` does not. The
+  plan inherited the MultiPoint rule and left the key out; the oracle bytes of the new case show it,
+  and the plan now overrides `metadata` for it. No other case changes.
+- The two clmn cases are the only new ones that differ from the oracle, both because the legacy
+  encoders mislaid data (defects 7 and 8 above); `tools/audit_golden.py` reports the new output clean
+  for all six, and 8 `t` mismatches for the oracle of `clmn_verticalprofile`.
+- The clmn and efcl sub-cubes of the fake are surface-only, so the two vertical-profile cases declare
+  a pressure-level axis table of their own (`fake: axes`), which the oracle's case runner supports.
+- No plan class was removed: the five that the corpus did not reach are the layouts the legacy
+  encoders served for those requests, and they are now pinned by bytes.
 
 ## What a unit is charged for
 

@@ -576,6 +576,18 @@ class VerticalProfileReforecastPlan(ReforecastPlan):
     def sort_key(self, g, axes) -> tuple:
         return tuple(self.info.rank(a, v) for a, v in zip(axes, g.key))
 
+    def metadata(self, g) -> dict:
+        """As ``ReforecastPlan``, but with ``Forecast date`` on efcl coverages too.
+
+        ``VerticalProfile.add_coverage`` writes the reference datetime for every stream, where the
+        MultiPoint reforecast walk leaves it out when class=ce and stream=efcl.
+        """
+        m = self.path_meta(g)
+        m["number"] = self.number(g)
+        m["step"] = self.step(g)
+        m["Forecast date"] = self.ref(g).isoformat() + "Z"
+        return m
+
 
 class TrajectoryReforecastPlan(ReforecastPlan):
     """class=ce trajectories went through the MultiPoint reforecast encoder with the Path domain (no t axis)."""
