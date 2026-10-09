@@ -783,3 +783,20 @@ shapes for climate-dt and class=ng requests of every feature type to match the u
   x 10 steps request through both formats. The peak is within 2% of the CovJSON run either way
   (352.5 MB against 346.1 MB, 302.2 MB against 311.2 MB) and the output is 7.7x and 30x smaller.
 - The CovJSON corpus is untouched: suite **401 passed, 1 skipped** (was 343 passed, 1 skipped).
+
+# One extraction path, and the request-costing helpers removed
+
+The sections above arrived at a single way to extract a request: bulk spatial nodes, one call per unit
+of consecutive field groups, every field fetched whole and consumed field by field. This section
+removes the alternatives and the measurements that were kept beside it, so that what the worker runs is
+what the repo contains.
+
+## Request costing
+
+- **`polytope_mars.utils.areas.field_area` and `request_cost` are gone**, together with `count_values`
+  (a MARS value counter only those two used) and `tests/test_costing.py`. They priced a request as
+  `shape area x number of fields` for the `max_area` refusal, which `limits` replaced with
+  `max_polygon_points`, `max_points_per_field` and `max_tree_bytes` -- limits expressed in grid points
+  rather than in square kilometres. `Feature.field_area` is gone with them; the shape areas
+  (`get_boundingbox_area`, `get_polygon_area`, `get_circle_area_from_coords`) stay, they feed the
+  points-per-field estimate of `limits`.

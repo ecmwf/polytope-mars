@@ -1,7 +1,7 @@
 from polytope_feature import shapes
 
 from ..feature import Feature
-from ..utils.areas import field_area, get_polygon_area
+from ..utils.areas import get_polygon_area
 
 
 class Polygons(Feature):
@@ -9,7 +9,6 @@ class Polygons(Feature):
         assert feature_config.pop("type") == "polygon"
         self.shape = feature_config.pop("shape")
         self.area = 0
-        self.field_area = 0
         if type(self.shape[0][0]) is not list:
             self.area = get_polygon_area(self.shape)
             if len(self.shape) > client_config.limits.max_polygon_points:
@@ -69,13 +68,8 @@ class Polygons(Feature):
         return ["latitude", "longitude"]
 
     def parse(self, request, feature_config):
-        self.field_area = field_area(request, self.area)
         if "axes" in request:
             if len(request["axes"]) != 2:
                 raise ValueError("Polygon feature must have two axes, latitude and longitude")
-        # if field_area(request, self.area) > self.max_area:
-        #    raise ValueError(
-        #        f"The total request size is too large, area of request shape {self.area} * total number of fields = {field_area(request, self.area)} km\u00b2, must be below {self.max_area} km\u00b2 for total size request. "  # noqa: E501
-        #    )
 
         return request
