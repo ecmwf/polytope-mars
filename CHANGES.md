@@ -759,6 +759,9 @@ shapes for climate-dt and class=ng requests of every feature type to match the u
   without HTTP content encoding (polytope-server `codec_for_response`).
 - **Config**: `encoders.tensogram` (`max_fragment_bytes` 8 MiB, `compression` `zstd`,
   `compression_level`, `hash` `xxh3`) beside `encoders.covjson`. Nothing a deployment has to set.
+- **The dependency is optional**: `pip install polytope-mars[tensogram]`, and
+  `tests/requirements_test.txt` carries it so the suite covers the format. Deployments install it
+  with the worker (polytope-server `requirements.txt`).
 - **Tensogram output is not byte-reproducible**: the library stamps a timestamp and a UUID into every
   message's `_reserved_` section. There is therefore no golden-bytes corpus for this format; the
   tests compare decoded content.
