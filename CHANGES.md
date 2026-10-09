@@ -824,3 +824,10 @@ what the repo contains.
   `pointseries_order` quirk where it builds the header), `bulk_tree.tree_bytes` (callers use
   `tree_summary`), `bulk_tree.RangeCounts.n_counted` and `sizing.UnitSizing.fits_group` (the planner and
   its tests ask `max_unit_groups(...) >= 1`).
+
+## Test suite
+
+- The unit-layout suite (`tests/test_streaming.py`) runs nine MultiPoint cases instead of ten:
+  `ode_bbox_subhourly` is the only Lambert-conformal case and slicing its quadtree costs 7 s per run,
+  while its unit planning has the same shape as `cdt_polygon_sfc`'s and its subhourly step formatting is
+  pinned byte for byte by two golden cases. `tests/test_streaming.py` runs in 2.3 s instead of 38.8 s.

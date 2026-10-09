@@ -64,6 +64,10 @@ def fields_per_group(name) -> int:
     return len(doc["parameters"]) * len({v[2] for v in values})
 
 
+#: MultiPoint cases run through every unit layout below.  The Lambert-conformal ``ode_bbox_subhourly`` is
+#: not among them: slicing its quadtree costs 7 s per run, its unit planning is the same shape as
+#: ``cdt_polygon_sfc``'s (three groups on one axis), and its subhourly step formatting is a
+#: ``legacy_format`` concern that two golden cases pin byte for byte.
 MULTIPOINT = [
     "efas_bbox_multiparam",
     "efas_bbox_ensemble",
@@ -74,7 +78,6 @@ MULTIPOINT = [
     "cdt_polygon_sfc",
     "clmn_bbox",
     "efcl_bbox_hdate",
-    "ode_bbox_subhourly",
 ]
 
 
@@ -91,7 +94,6 @@ GROUP_GRID = {
     "cdt_polygon_sfc": (3, (3,)),  # 3 times
     "clmn_bbox": (3, (3,)),  # 3 months
     "efcl_bbox_hdate": (4, (2, 2)),  # 2 hdates x 2 steps
-    "ode_bbox_subhourly": (3, (3,)),  # 3 subhourly steps
 }
 
 
