@@ -240,7 +240,6 @@ def test_a_field_too_large_for_the_budget_is_refused(name):
     assert fake.n_extract_calls == 0, "refused before anything is fetched"
 
 
-@pytest.mark.parametrize("missing_mode", ["raise", "empty"])
 @pytest.mark.parametrize("fields_per_call", [None, 1])
 @pytest.mark.parametrize("budget", [None, 10**12])
 @pytest.mark.parametrize(
@@ -254,9 +253,14 @@ def test_a_field_too_large_for_the_budget_is_refused(name):
         "efas_bbox_nan_points",
     ],
 )
-def test_missing_fields_and_points_through_both_unit_paths(name, budget, fields_per_call, missing_mode):
+def test_missing_fields_and_points_through_both_unit_paths(name, budget, fields_per_call):
+    """Missing fields and bitmap-missing points are the same bytes however the call is cut up.
+
+    The reporting mode of a missing field (``DataNotFound`` or an empty result) is covered for these
+    cases by ``tests/test_missing_fields.py``, which also pins the call counts of each mode.
+    """
     limits = {} if fields_per_call is None else {"max_fields_per_call": fields_per_call}
-    out, pm, fake = run(name, budget=budget, fake=build_fake(case(name), missing_mode=missing_mode), **limits)
+    out, pm, fake = run(name, budget=budget, fake=build_fake(case(name)), **limits)
     assert out == expected(name)
     assert b"NaN" not in out
 

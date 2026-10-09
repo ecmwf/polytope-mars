@@ -39,6 +39,7 @@ import numpy as np
 
 __all__ = [
     "GroupAssembler",
+    "branch_field_keys",
     "field_key_sequence",
     "has_per_field_consumption",
     "lazy_unit_fields",
@@ -149,21 +150,26 @@ def whole_unit_fields(fields: dict) -> Iterator:
 # -- the per-field seam (polytope-feature ``get_iter``) ----------------------------------------------
 
 
-def field_key_sequence(info, key_axes) -> list:
-    """The key of every item ``get_iter`` yields for a tree, in order.
+def branch_field_keys(branch, key_axes) -> list:
+    """The key of every field one branch carries, in the order its values arrive.
 
-    One item per (branch, field): the branches in tree order, a branch's fields in the cartesian
-    product of its compressed axes (outermost axis first) -- the layout
-    :func:`~polytope_mars.extract.collect_field_values` splits a filled node's ``result`` into.
+    A branch's fields are the cartesian product of its compressed axes (outermost axis first), which is
+    both the order a filled bulk node's ``result`` arrays come in
+    (:func:`~polytope_mars.extract.collect_field_values`) and the order ``get_iter`` yields them in.
     """
+    axes = [a for a, _ in branch.path]
+    combos = list(np.ndindex(*[len(v) for _, v in branch.path])) if branch.path else [()]
     keys = []
-    for branch in info.branches:
-        axes = [a for a, _ in branch.path]
-        combos = list(np.ndindex(*[len(v) for _, v in branch.path])) if branch.path else [()]
-        for combo in combos:
-            values = {a: branch.path[i][1][j] for i, (a, j) in enumerate(zip(axes, combo))}
-            keys.append(tuple(values.get(a) for a in key_axes))
+    for combo in combos:
+        values = {a: branch.path[i][1][j] for i, (a, j) in enumerate(zip(axes, combo))}
+        keys.append(tuple(values.get(a) for a in key_axes))
     return keys
+
+
+def field_key_sequence(info, key_axes) -> list:
+    """The key of every item ``get_iter`` yields for a tree, in order: branches in tree order, each
+    branch's fields as :func:`branch_field_keys` orders them."""
+    return [key for branch in info.branches for key in branch_field_keys(branch, key_axes)]
 
 
 def _field_values(node_values) -> tuple:

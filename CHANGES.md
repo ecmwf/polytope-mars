@@ -833,9 +833,38 @@ what the repo contains.
   from its own slicing of the block. A producer that splits a group's points over several consecutive
   blocks still writes the same bytes, which covjsonkit's tests pin.
 
+## One way through the extraction loop
+
+- **`encode_iter` is the encoder protocol.** `encoders.base.FragmentingEncoder` is merged into
+  `Encoder`: an encoder hands a block over in fragments whose size does not grow with the block, which
+  is the property the whole memory model rests on, so it is a requirement and not an option. Both
+  registered encoders (covjsonkit's and tensogram's) already provide it, and both keep `encode(block)`
+  as the buffered convenience. `BlockExtractor.stream` has one emission loop instead of two.
+- **Point features emit their groups through `_group_blocks`**, the same code a multi-group unit uses:
+  `collect_field_values` keys the whole tree's fields by the group axes plus (param, levelist), which is
+  the `prefix + (param, levelist)` keying `_group_blocks` reads. The present-params detection, the
+  missing-field notes, the coordinates block, the param x level values blocks and the group count are
+  therefore written once. The eight point-feature golden cases pin the bytes.
+- **One key-sequence loop.** `field_stream.branch_field_keys` builds the keys of one branch's fields in
+  the order its values arrive, and both `collect_field_values` (a filled bulk node's `result` arrays) and
+  `field_key_sequence` (what `get_iter` yields) are expressed in terms of it.
+
 ## Test suite
 
 - The unit-layout suite (`tests/test_streaming.py`) runs nine MultiPoint cases instead of ten:
   `ode_bbox_subhourly` is the only Lambert-conformal case and slicing its quadtree costs 7 s per run,
   while its unit planning has the same shape as `cdt_polygon_sfc`'s and its subhourly step formatting is
   pinned byte for byte by two golden cases. `tests/test_streaming.py` runs in 2.3 s instead of 38.8 s.
+- **The golden corpus runs each case once**, through `extract_stream`. `extract()` is
+  `json.loads` of the same stream (`api.py`), so running every case through both asserted that
+  `json.dumps(json.loads(b)) == b`; `tests/test_streaming.py::test_extract_equals_json_dumps_of_stream`
+  keeps one instance of that check, and covjsonkit tests orjson's float spelling against `json.dumps`
+  directly on 5,000 random magnitudes. 63 assertions in 14.3 s (was 91 in 21.0 s).
+- **The missing-field byte matrix drops its reporting-mode axis** (24 runs instead of 48):
+  `tests/test_missing_fields.py` covers both reporting modes for the same cases *and* their call counts,
+  and `tests/golden/test_golden.py::test_golden_with_empty_results_for_missing_fields` runs the whole
+  corpus in the empty-result mode.
+- **`tests/test_field_stream.py` checks one case end to end through `get_iter`** instead of five: the
+  five were the same requests, at the same budget and in the default configuration, that
+  `tests/test_streaming.py::test_large_budget_is_one_unit_for_all_groups` already runs byte for byte.
+  What the remaining test adds is that the fields came from `get_iter` one at a time.

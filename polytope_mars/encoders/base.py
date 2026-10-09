@@ -2,8 +2,8 @@
 
 An encoder turns the block stream of one request (:mod:`polytope_mars.blocks`) into bytes.
 Encoders are implemented structurally (no subclassing needed), e.g. ``covjsonkit.stream.CovjsonStreamEncoder``.
-One encoder instance encodes exactly one request: ``begin`` once, ``encode`` per block, ``end`` once.
-Any of the three may return ``b""``.
+One encoder instance encodes exactly one request: ``begin`` once, ``encode_iter`` per block, ``end`` once.
+Any of them may yield or return ``b""``.
 """
 
 from __future__ import annotations
@@ -27,21 +27,14 @@ class Encoder(Protocol):
     def begin(self, header: RequestHeader) -> bytes:
         ...
 
-    def encode(self, block: Block) -> bytes:
+    def encode_iter(self, block: Block) -> Iterator[bytes]:
+        """The block's bytes in fragments whose size does not grow with the block.
+
+        covjsonkit bounds a fragment by ``max_fragment_bytes`` (8 MiB by default), which is what keeps the
+        encoder's memory independent of the request size.  The iterator must be consumed completely and in
+        order before the next block is encoded: the encoder's state advances with it.
+        """
         ...
 
     def end(self) -> bytes:
-        ...
-
-
-@runtime_checkable
-class FragmentingEncoder(Encoder, Protocol):
-    """An :class:`Encoder` that can hand a block's bytes over in bounded fragments.
-
-    ``encode_iter(block)`` yields the same bytes as ``encode(block)`` would return, split into pieces whose size
-    does not grow with the block (covjsonkit: ``max_fragment_bytes``, default 8 MiB). The extractor prefers it
-    when present; the iterator must be consumed completely and in order before the next block is encoded.
-    """
-
-    def encode_iter(self, block: Block) -> Iterator[bytes]:
         ...

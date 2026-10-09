@@ -69,6 +69,7 @@ from .coverage_plan import (
 )
 from .field_stream import (
     GroupAssembler,
+    branch_field_keys,
     has_per_field_consumption,
     lazy_unit_fields,
     unit_field_source,
@@ -191,12 +192,7 @@ def collect_field_values(tree, key_axes) -> dict:
     info = analyse_tree(tree)
     chunks: dict = {}
     for branch in info.branches:
-        axes = [a for a, _ in branch.path]
-        combos = list(np.ndindex(*[len(v) for _, v in branch.path])) if branch.path else [()]
-        keys = []
-        for combo in combos:
-            values = {a: branch.path[i][1][j] for i, (a, j) in enumerate(zip(axes, combo))}
-            keys.append(tuple(values.get(a) for a in key_axes))
+        keys = branch_field_keys(branch, key_axes)
         for node in spatial_children(branch.node):
             results = bulk_tree.field_results(node, len(keys))
             for key, values in zip(keys, results):
@@ -352,27 +348,19 @@ class BlockExtractor:
             info, plan, groups = self._plan(tree)
             source = self._whole_tree_blocks(datacube, tree, info, plan, groups)
 
-        encode_iter = getattr(self.encoder, "encode_iter", None)
+        # The encoder hands a block over in bounded fragments, so memory per block does not scale with
+        # the block; the generator is consumed completely and in order before the next block, because the
+        # encoder's state advances with it.
         for block in source:
-            if encode_iter is not None:
-                # Bounded fragments (covjsonkit >= feat/streaming-encoder): the encoder never materialises a
-                # whole block's text, so memory per block does not scale with the block. The generator must be
-                # consumed completely and in order before the next block (the encoder's state advances with it).
+            fragments = self.encoder.encode_iter(block)
+            while True:
                 t0 = time.perf_counter()
-                fragments = encode_iter(block)
-                enc_seconds += time.perf_counter() - t0
-                while True:
-                    t0 = time.perf_counter()
-                    try:
-                        data = next(fragments)
-                    except StopIteration:
-                        enc_seconds += time.perf_counter() - t0
-                        break
+                try:
+                    data = next(fragments)
+                except StopIteration:
                     enc_seconds += time.perf_counter() - t0
-                    if data:
-                        yield data
-            else:
-                data = emit(self.encoder.encode, block)
+                    break
+                enc_seconds += time.perf_counter() - t0
                 if data:
                     yield data
         last = emit(self.encoder.end)
@@ -868,8 +856,13 @@ class BlockExtractor:
         return n_fields
 
     def _whole_tree_blocks(self, datacube, tree, info, plan, groups) -> Iterator[Any]:
-        axes = plan.group_axes()
-        key_axes = axes + ["param", "levelist"]
+        """The blocks of a point feature: one ``datacube.get`` for the whole tree, then group by group.
+
+        ``collect_field_values`` keys the whole tree's fields by the group axes plus (param, levelist),
+        which is exactly the ``prefix + (param, levelist)`` keying :meth:`_group_blocks` reads, so the
+        groups are emitted by the same code as a multi-group unit's.
+        """
+        key_axes = plan.group_axes() + ["param", "levelist"]
         n_fields = self._note_whole_tree_estimate(datacube, info, groups)
         try:
             filled = self._get(datacube, tree, n_fields=n_fields)
@@ -884,32 +877,12 @@ class BlockExtractor:
         else:
             info = analyse_tree(filled)
             fields = collect_field_values(filled, key_axes)
-        index = 0
         for g in groups:
             n_points = sum(spatial_counts(info, g.branches))
             if n_points == 0:
                 continue
-            levels = g.levels or [None]
-
-            group_fields = {(p, lev): fields.get(tuple(g.key) + (p, lev)) for p in g.params for lev in levels}
-            found = {k for k, v in group_fields.items() if v is not None and not v[1]}
-            for p, lev in group_fields:
-                if (p, lev) not in found:
-                    self._note_missing(g.select, p, lev)
-            params = [p for p in g.params if any((p, lev) in found for lev in levels)]
-            if not params:
-                continue
-            fg = self._field_group(plan, g, index, params, n_points)
-            lat, lon = group_coordinates(info, g.branches)
-            yield CoordsBlock(fg, lat, lon)
-            for p in params:
-                for lev in levels:
-                    vals = group_fields[(p, lev)]
-                    arr = vals[0] if vals is not None and len(vals[0]) == n_points else np.full(n_points, np.nan)
-                    yield ValuesBlock(fg, str(p), plan.level_out(lev) if g.levels else None, arr)
-            yield GroupEnd(fg)
-            index += 1
-            self.counters.n_groups += 1
+            index = self.counters.n_groups
+            yield from self._emit_group(self._group_blocks(info, plan, g, index, n_points, fields, tuple(g.key)))
 
     def _point_fields_fallback(self, datacube, tree, info, groups, key_axes) -> dict:
         """The fields of ``tree`` fetched piecewise after the whole-tree get raised DataNotFound.

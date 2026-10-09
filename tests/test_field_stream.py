@@ -133,9 +133,6 @@ def test_the_key_sequence_matches_how_a_filled_leaf_is_split():
 # --- the seam: FDBDatacube.get_iter --------------------------------------------------------------------
 
 
-MULTIPOINT = ["efas_bbox_multiparam", "o1280_bbox_ensemble", "cdt_bbox_sfc", "cdt_bbox_levelist", "efas_polygon_fc"]
-
-
 def has_get_iter() -> bool:
     """Whether this polytope-feature offers ``FDBDatacube.get_iter`` at all."""
     from polytope_feature.datacube.backends.fdb import FDBDatacube
@@ -173,15 +170,18 @@ def test_the_whole_unit_path_is_the_opt_out():
     assert pm.timings["unit_source"] == "get"
 
 
-@pytest.mark.parametrize("name", MULTIPOINT)
-def test_per_field_consumption_gives_the_same_bytes(name):
-    """The whole request in one call, consumed field by field: identical output."""
-    out, pm, fake = run(name, per_field=True)
+def test_a_whole_request_in_one_call_is_consumed_field_by_field():
+    """Six groups fetched by one call and emitted as their fields arrive: identical output.
+
+    The same cases at this budget are byte-checked by
+    ``tests/test_streaming.py::test_large_budget_is_one_unit_for_all_groups``; what this adds is that
+    the fields came through ``get_iter`` one at a time.
+    """
+    out, pm, fake = run("o1280_bbox_ensemble", per_field=True)
     if pm.timings["unit_source"] == "get":
-        # a single-group request never takes the multi-group path (nothing to stream), and a
-        # polytope-feature without FDBDatacube.get_iter falls back to fetching the whole unit
-        pytest.skip(f"whole-unit path: {pm.timings['n_groups']} group(s), get_iter is {has_get_iter()}")
-    assert out == expected_bytes(name)
+        # a polytope-feature without FDBDatacube.get_iter falls back to fetching the whole unit
+        pytest.skip(f"whole-unit path: get_iter is {has_get_iter()}")
+    assert out == expected_bytes("o1280_bbox_ensemble")
     assert fake.n_extract_calls == pm.timings["n_units"] == 1
     assert pm.timings["buffered_fields_max"] >= 1
 
