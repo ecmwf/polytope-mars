@@ -651,3 +651,36 @@ either way):
   `[[90, -180], [-90, 180]]`, so the pre-slice guard opts out and the exact check does the work (the
   whole-world HEALPix field's tree is 12,582,912 x 24 B = 302 MB, under the 800 MB limit, and the
   request is served, at the 1,242 MB of peak measured above).
+
+# Serving the result as tensogram
+
+`python tools/measure_memory.py stream`, one subprocess per run, the same two requests through
+`format: covjson` and `format: tensogram`. Peak = `max_rss_bytes` of the run (`ru_maxrss`, the whole
+process); "fragments" is what `extract_stream` yielded, which for tensogram is one complete message
+each; "largest" is the largest of them.
+
+| request | budget | format | fragments | largest | peak RSS | growth | output |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| climate-dt HEALPix-1024 Europe box x 24 hourly | 1.5 GiB | covjson | 242 | 5.43 MiB | 346.1 MB | 158.9 MB | 601.6 MiB |
+| climate-dt HEALPix-1024 Europe box x 24 hourly | 1.5 GiB | **tensogram** | 50 | 2.20 MiB | **352.5 MB** | 165.4 MB | **78.4 MiB** |
+| EFAS Danube box x 10 steps | 200 MB | covjson | 112 | 5.45 MiB | 311.2 MB | 123.9 MB | 337.2 MiB |
+| EFAS Danube box x 10 steps | 200 MB | **tensogram** | 32 | 1.22 MiB | **302.2 MB** | 115.2 MB | **11.2 MiB** |
+
+- **The peak is bounded the same way**: within 2% of the CovJSON run either way (+1.8% on the HEALPix
+  request, -2.9% on the Danube one). Both encoders are charged the same `fragment_bytes` term of the
+  unit sizing (2 x 8 MiB), the extraction plans the same units (`estimated_unit_mb` 192.6 and 135.4,
+  1 call each), and neither encoder holds more than one fragment: for tensogram that is the message
+  being assembled, whose raw payload `max_fragment_bytes` bounds.
+- **A coverage becomes two or three messages at the deployed field sizes.** The HEALPix coverage is
+  479,865 points: `latitude` and `longitude` fit one message (7.7 MB of the 8 MiB bound) and the
+  values follow in a second, so 24 coverages give 48 messages plus the header and the trailer. The
+  Danube coverage is 634,550 points, where each tensor is 5.1 MB and no two fit together: three
+  messages per coverage, 32 for the request. Smaller coverages -- everything up to ~350,000 points
+  for a single-parameter request -- are one message each.
+- **Output is 7.7x and 30x smaller than CovJSON**, which is the format doing its job: float64 values
+  as 8 bytes under zstd instead of ~17 characters of JSON text, and the coordinates once per
+  coverage instead of once per composite tuple. The Danube ratio is the larger one because its
+  values repeat more (one parameter over ten steps on the same grid points).
+- **Encoding is cheaper**: `encode_ms` 902 against 1,497 on the HEALPix request and 218 against 833
+  on the Danube one. Not a target -- wall time is not what these limits are for -- but it means
+  tensogram costs nothing to adopt on the producer side.

@@ -30,10 +30,25 @@ class CovjsonEncoderConfig(ConfigModel):
     param_db: str = "ecmwf"
 
 
+class TensogramEncoderConfig(ConfigModel):
+    """Settings of the tensogram encoder (:mod:`polytope_mars.encoders.tensogram`)."""
+
+    #: upper bound on the raw bytes behind one tensogram message; also the ``fragment_bytes`` term
+    #: of the unit sizing (twice this value)
+    max_fragment_bytes: int = 8 * 1024 * 1024
+    #: compression tensogram applies to every data object (``none`` to store the values raw)
+    compression: str = "zstd"
+    #: level for codecs that take one (``None``: the codec's default)
+    compression_level: Optional[int] = None
+    #: integrity hash per data object (``None`` to skip hashing)
+    hash: Optional[str] = "xxh3"
+
+
 class EncodersConfig(ConfigModel):
     model_config = ConfigDict(extra="allow")
 
     covjson: CovjsonEncoderConfig = CovjsonEncoderConfig()
+    tensogram: TensogramEncoderConfig = TensogramEncoderConfig()
 
 
 class BytesPerPointConfig(ConfigModel):

@@ -393,6 +393,12 @@ TREE_SCENARIOS = {
     "tree_cdt_hourly_bbox_fold_on": ("healpix_1024", cdt_hourly(CDT_YEAR_BBOX, HOURLY_DAYS), True, HOURLY_DAYS),
 }
 
+
+def tensogram(request: dict) -> dict:
+    """``request`` served as tensogram instead of CovJSON (``polytope_mars.encoders.tensogram``)."""
+    return {**request, "format": "tensogram"}
+
+
 STREAM_SCENARIOS = {
     "stream_healpix1024_europe_24fields_1_5GiB": ("stream", "healpix_1024", HEALPIX_EUROPE_24H, 3 * 1024**3 // 2),
     # the two largest single fields of the corpus, each whole in one call at the deployed budget
@@ -402,6 +408,19 @@ STREAM_SCENARIOS = {
     "stream_efas_danube_10steps_budget200MB": ("stream", "efas_local_regular", DANUBE_10_STEPS, 200_000_000),
     "stream_efas_danube_10steps_budget20MB": ("stream", "efas_local_regular", DANUBE_10_STEPS, 20_000_000),
     "stream_efas_danube_10steps_nobudget": ("stream", "efas_local_regular", DANUBE_10_STEPS, None),
+    # the same two requests as tensogram, to compare the peak with the CovJSON runs above
+    "stream_healpix1024_europe_24fields_tensogram_1_5GiB": (
+        "stream",
+        "healpix_1024",
+        tensogram(HEALPIX_EUROPE_24H),
+        3 * 1024**3 // 2,
+    ),
+    "stream_efas_danube_10steps_tensogram_budget200MB": (
+        "stream",
+        "efas_local_regular",
+        tensogram(DANUBE_10_STEPS),
+        200_000_000,
+    ),
 }
 
 
@@ -644,6 +663,7 @@ def run_stream(grid, request, budget):
     peak = peak_rss()
     n_vals = fake.n_values
     return {
+        "format": request.get("format", "covjson"),
         "budget_mb": None if budget is None else round(budget / 1e6),
         "values": n_vals,
         "n_groups": pm.timings["n_groups"],
@@ -656,7 +676,7 @@ def run_stream(grid, request, budget):
         "max_rss_mb": round(pm.timings["max_rss_bytes"] / 1e6, 1),
         "output_mib": round(n_bytes / MiB, 1),
         "chunks": n_chunks,
-        "max_chunk_mib": round(max_chunk / MiB, 1),
+        "max_chunk_mib": round(max_chunk / MiB, 2),
         "stream_s": round(t_stream, 1),
         "timings_ms": {k: round(v) for k, v in pm.timings.items() if k.endswith("_ms")},
         "rss_before_mib": round(rss0 / MiB, 1),
@@ -1009,6 +1029,7 @@ TABLE_COLUMNS = {
         "timings_ms",
     ],
     "stream": [
+        "format",
         "budget_mb",
         "values",
         "n_groups",

@@ -34,6 +34,14 @@ def expected(name):
     return (GOLDEN / folder / f"{name}.covjson").read_bytes()
 
 
+def parsed(data: bytes) -> dict:
+    """CovJSON bytes as a dict; a document that does not parse is a failure of the encoder."""
+    try:
+        return json.loads(data)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(f"the encoder produced invalid JSON: {exc}") from exc
+
+
 #: Sizing knobs that make one unit's budget exactly ``n_values x BYTES_PER_VALUE`` whatever the grid:
 #: without a safety factor and with a nominal range cost, gribjump's own term (<= ~9 B/value) never
 #: binds, so a test can turn "k groups per call" into a budget without counting index ranges.
@@ -51,7 +59,7 @@ def run(name, budget=None, fake=None, **limits):
 
 def fields_per_group(name) -> int:
     """``n_params x n_levels`` of one group of ``name``: the fields of one coverage, from the output."""
-    doc = json.loads(expected(name))
+    doc = parsed(expected(name))
     values = doc["coverages"][0]["domain"]["axes"]["composite"]["values"]
     return len(doc["parameters"]) * len({v[2] for v in values})
 
@@ -89,7 +97,7 @@ GROUP_GRID = {
 
 def group_values(name) -> int:
     """``n_points x n_params x n_levels`` of one group of ``name`` (its values, from the output)."""
-    doc = json.loads(expected(name))
+    doc = parsed(expected(name))
     values = doc["coverages"][0]["domain"]["axes"]["composite"]["values"]
     n_levels = len({v[2] for v in values})
     return (len(values) // n_levels) * len(doc["parameters"]) * n_levels
@@ -179,7 +187,7 @@ def test_multi_group_unit_assigns_every_field_to_its_own_group():
     out, pm, fake = run("efas_bbox_multiparam", budget=10**12)
     assert out == expected("efas_bbox_multiparam")
     assert fake.n_extract_calls == 1 and pm.timings["groups_per_unit_max"] == 4
-    doc = json.loads(out)
+    doc = parsed(out)
     params = get_params("ecmwf")
     shortnames = {params[pid]["shortname"]: pid for pid in case("efas_bbox_multiparam")["request"]["param"].split("/")}
     seen = set()
@@ -205,7 +213,7 @@ def test_one_call_per_field_gives_the_same_bytes(name):
     pay for gribjump's buffer and the encoder's fragments, which dwarf a 9-point golden case.
     """
     ref = expected(name)
-    n_groups = len(json.loads(ref)["coverages"])
+    n_groups = len(parsed(ref)["coverages"])
     n_fields = fields_per_group(name)
 
     out, pm, fake = run(name, budget=10**12, max_fields_per_call=1)
@@ -263,13 +271,13 @@ def test_a_missing_field_costs_one_call_on_the_per_field_path():
 
 def test_all_absent_group_emits_no_coverage():
     out, pm, fake = run("o1280_bbox_missing_last_date", budget=10**12, max_fields_per_call=1)
-    doc = json.loads(out)
+    doc = parsed(out)
     assert [c["domain"]["axes"]["t"]["values"] for c in doc["coverages"]] == [["2024-01-01T00:00:00Z"]]
     assert pm.timings["n_groups"] == 1
 
 
 def test_bitmap_nan_points_are_null():
-    doc = json.loads(run("o1280_bbox_nan_points", budget=10**12, max_fields_per_call=1)[0])
+    doc = parsed(run("o1280_bbox_nan_points", budget=10**12, max_fields_per_call=1)[0])
     values = doc["coverages"][0]["ranges"]["2t"]["values"]
     assert values.count(None) == 4 and all(v is None or np.isfinite(v) for v in values)
 
@@ -309,16 +317,16 @@ def test_format_default_explicit_and_unknown():
 
     fake = build_fake(c)
     pm, request = make_polytope_mars(c, fake)
-    request["format"] = "tensogram"
-    with pytest.raises(ValueError, match=r"'tensogram'.*covjson"):
+    request["format"] = "netcdf"
+    with pytest.raises(ValueError, match=r"'netcdf'.*covjson, tensogram"):
         pm.extract_stream(request)
-    with pytest.raises(ValueError, match="tensogram"):
+    with pytest.raises(ValueError, match="netcdf"):
         pm.extract(dict(request))
     assert fake.n_axes_calls == 0  # rejected before any datacube work
 
 
 def test_get_encoder_registry():
-    assert list(supported_formats()) == ["covjson"]
+    assert list(supported_formats()) == ["covjson", "tensogram"]
     enc = get_encoder("covjson", PolytopeMarsConfig())
     assert enc.content_type == "application/prs.coverage+json"
     with pytest.raises(ValueError, match="Unsupported output format 'netcdf'"):

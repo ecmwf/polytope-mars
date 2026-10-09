@@ -717,3 +717,66 @@ shapes for climate-dt and class=ng requests of every feature type to match the u
 - The golden corpus is unchanged and byte-identical (91 assertions), as is the rest of the suite:
   **343 passed, 1 skipped** over `tests/golden` and the streaming test modules (the other test modules
   need a local FDB and gribjump schema).
+
+# Feature-extraction results as tensogram (`format: tensogram`)
+
+## Behaviour changes
+
+- **`format: tensogram`** selects `polytope_mars.encoders.tensogram.TensogramEncoder`, a thin adapter
+  over the block IR that needs the `tensogram` package (>= 0.24.0; a clear `ImportError` names it when
+  it is missing). `supported_formats()` is now `("covjson", "tensogram")`, so the frontend's
+  `supported_formats` setting has to list `tensogram` for a request to reach the worker
+  (polytope-server CHANGES.md). `content_type` is `application/vnd.ecmwf.tensogram`,
+  `file_extension` `tgm`.
+- **The message layout is defined in the module docstring** and is the format definition: a header
+  message with the parameter table and the request's MARS keys, then one or more messages per
+  coverage carrying `latitude`, `longitude` and one values tensor per (parameter, level), then a
+  trailer message with the coverage and message counts. Every message is self-describing: its
+  `_extra_` names the coverage index, its MARS metadata, its `t` values and its point count, and
+  every tensor's `base[i]` entry names its parameter, level and point offset. Messages are
+  concatenated, which is how tensogram defines a `.tgm` stream, so the result file reads back with
+  `tensogram.iter_messages`, `tensogram.TensogramFile` or the `tensogram` CLI.
+
+  It follows the layout ecmwf/polytope-mars#100 proposed (flat `_extra_` with `source`,
+  `feature_type`, `domain_type`, `mars`, `time_values`; `base[i]` with `name`, `role`, `units`,
+  `description`, `mars.param`) and differs from it where streaming requires: a values tensor per
+  (parameter, level) rather than per parameter, separate `latitude`/`longitude` tensors, a coverage
+  that may span messages, and the header/trailer messages that bracket the stream.
+- **Coverages keep the extraction order for every domain type.** CovJSON's PointSeries,
+  VerticalProfile and Trajectory layouts are point-major across field groups, which is why covjsonkit
+  buffers a whole collection to transpose it; the tensogram stream writes the field-group order it is
+  produced in, because each tensor already carries the point offset, level and datetimes a consumer
+  needs to group by point. A tensogram collection is therefore never buffered, whatever the feature.
+- **Fragments.** `encode_iter` yields one complete message per fragment. A message is closed before
+  a tensor that would take its raw payload over `max_fragment_bytes` (8 MiB by default, as
+  covjsonkit), and a tensor longer than the bound is split into point-slices, so the encoder holds
+  one message at a time whatever the request. The unit sizing reads `max_fragment_bytes` off the
+  encoder as before.
+- **NaN is the missing value.** Tensogram rejects non-finite values unless told to record their
+  positions, so every tensor is written with `allow_nan` / `allow_inf`: a value CovJSON writes as
+  `null` decodes as NaN. `_extra_["missing_value"]` says so in every message.
+- **Compression is tensogram's own** (`zstd` per data object by default), so the result is served
+  without HTTP content encoding (polytope-server `codec_for_response`).
+- **Config**: `encoders.tensogram` (`max_fragment_bytes` 8 MiB, `compression` `zstd`,
+  `compression_level`, `hash` `xxh3`) beside `encoders.covjson`. Nothing a deployment has to set.
+- **Tensogram output is not byte-reproducible**: the library stamps a timestamp and a UUID into every
+  message's `_reserved_` section. There is therefore no golden-bytes corpus for this format; the
+  tests compare decoded content.
+
+## Verification
+
+- `tests/test_tensogram.py` (58 tests): ten golden cases -- MultiPoint box and polygon, an ensemble,
+  levels, bitmap-missing points, a missing field, a time series on both coverage plans, a vertical
+  profile and a trajectory -- encoded as tensogram, decoded with the `tensogram` package and compared
+  with the CovJSON of the same request, record by record (datetime, parameter, level, latitude,
+  longitude, ensemble member). For MultiPoint domains the coverages are also compared in order:
+  `mars:metadata`, the `t` axis, the coordinates and each range's values against the matching tensor.
+  Also: the header's parameter table against the CovJSON collection's `parameters`, the trailer's
+  counts, `null` against NaN count for bitmap-missing points, a missing parameter left out of its
+  coverage, the fragment bound at 512 and 2048 bytes (every message within it, the pieces
+  reassembling to the same records), one message per coverage at the default bound, and the same
+  records with one field per gribjump call and with all of them in one.
+- Measured (MEASUREMENTS.md): the climate-dt HEALPix Europe x 24 hourly request and the EFAS Danube
+  x 10 steps request through both formats. The peak is within 2% of the CovJSON run either way
+  (352.5 MB against 346.1 MB, 302.2 MB against 311.2 MB) and the output is 7.7x and 30x smaller.
+- The CovJSON corpus is untouched: suite **401 passed, 1 skipped** (was 343 passed, 1 skipped).

@@ -15,8 +15,18 @@ def _covjson(config) -> Encoder:
     return CovjsonStreamEncoder(config)
 
 
+def _tensogram(config) -> Encoder:
+    # Spelled absolutely, and ignored by the type checker, because this module's name is also that of
+    # the tensogram distribution: resolvers that search the environment before the package look there.
+    from polytope_mars.encoders.tensogram import (  # type: ignore[import-not-found]
+        TensogramEncoder,
+    )
+
+    return TensogramEncoder(config)
+
+
 #: format name -> factory(config of that format) -> Encoder
-_REGISTRY: dict[str, Callable[..., Encoder]] = {"covjson": _covjson}
+_REGISTRY: dict[str, Callable[..., Encoder]] = {"covjson": _covjson, "tensogram": _tensogram}
 
 
 def supported_formats() -> tuple[str, ...]:
