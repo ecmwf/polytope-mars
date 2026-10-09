@@ -800,3 +800,27 @@ what the repo contains.
   rather than in square kilometres. `Feature.field_area` is gone with them; the shape areas
   (`get_boundingbox_area`, `get_polygon_area`, `get_circle_area_from_coords`) stay, they feed the
   points-per-field estimate of `limits`.
+
+## Config keys
+
+- **`limits.bytes_per_point` is gone** (`BytesPerPointConfig` with it). It was the per-mapper-family
+  table that `limits.bytes_per_value` replaced with one constant plus the index-range count read off the
+  prepared tree; no deployment set it. `coverageconfig` and `polygonrules` remain accepted as aliases of
+  `encoders.covjson` and `limits` -- polytope-config sets both.
+
+## Observability
+
+- **`timings` loses `retrieve_ms`** (it was slice + prepare + get). The fe-worker computes its own
+  `retrieve_ms` over the whole request and overwrites the value, so the one reported here was never read.
+  `slice_ms`, `prepare_ms` and `get_ms` are unchanged and add up to the same number.
+- polytope-feature drops `datacube.prototype_metrics["returned_range_arrays"]` (`../polytope/CHANGES.md`),
+  which reported 0 for every request.
+
+## Dead code
+
+- Gone, with no caller anywhere in the extraction: `extract.mapper_type` (and its `__all__` entry),
+  `extract.BlockExtractor._slice_and_prepare`, `coverage_plan._branch_matches`, `Plan.header_extra` and
+  `TimeSeriesReforecastPlan.header_extra` (`api.PolytopeMars._build_header` decides the
+  `pointseries_order` quirk where it builds the header), `bulk_tree.tree_bytes` (callers use
+  `tree_summary`), `bulk_tree.RangeCounts.n_counted` and `sizing.UnitSizing.fits_group` (the planner and
+  its tests ask `max_unit_groups(...) >= 1`).

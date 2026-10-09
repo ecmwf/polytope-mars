@@ -246,13 +246,6 @@ class UnitSizing:
                 limits.append(_floor_div(self.budget - shared, per_group + self.python_bytes(group_values)))
         return max(0, min(limits))
 
-    def fits_group(self, n_points: int, group_fields: int, n_ranges: int, n_subtrees: int = 1) -> bool:
-        """True when every field of one group can be fetched by one call.
-
-        When it is not, the group is fetched one (param, level) at a time (:meth:`field_bytes`).
-        """
-        return self.max_unit_groups(n_points, group_fields, n_ranges, n_subtrees) >= 1
-
     def field_bytes(self, n_points: int, n_ranges: int, group_fields: int = 1, n_subtrees: int = 1) -> int:
         """Estimated peak of fetching one field of a group, one (param, level) per call.
 

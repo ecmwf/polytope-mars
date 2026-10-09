@@ -51,41 +51,6 @@ class EncodersConfig(ConfigModel):
     tensogram: TensogramEncoderConfig = TensogramEncoderConfig()
 
 
-class BytesPerPointConfig(ConfigModel):
-    """Deprecated: use ``limits.bytes_per_value``.
-
-    This key sized an extraction unit with one constant per grid mapper family, because HEALPix nested
-    costs ~2.5x more per value than the other grids.  That difference is not a property of the grid but
-    of the number of gribjump index *ranges* a field needs, which the sizing now counts from the
-    prepared tree (:mod:`polytope_mars.sizing`, :mod:`polytope_mars.bulk_tree`).  A config that still
-    sets this key has its ``default`` entry used as ``limits.bytes_per_value``; the per-mapper entries
-    are ignored.
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    default: int = 64
-    local_regular: int = 64
-    octahedral: int = 64
-    healpix_nested: int = 160
-
-    @model_validator(mode="after")
-    def _check_extra_mappers(self):
-        for name, value in (self.model_extra or {}).items():
-            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-                raise ValueError(f"limits.bytes_per_point.{name} must be a positive integer, got {value!r}")
-        return self
-
-    def for_mapper(self, mapper_type: Optional[str]) -> int:
-        """Bytes per value for ``mapper_type`` (the ``type`` of the grid mapper transformation)."""
-        if mapper_type:
-            if mapper_type in type(self).model_fields:
-                return getattr(self, mapper_type)
-            if self.model_extra and mapper_type in self.model_extra:
-                return self.model_extra[mapper_type]
-        return self.default
-
-
 class LimitsConfig(ConfigModel):
     """What bounds one request: polygon size, and the memory one ``datacube.get`` may cost.
 
@@ -153,8 +118,6 @@ class LimitsConfig(ConfigModel):
     #: turning it off restores the whole-unit ``get`` (and the smaller units that go with it).
     #: Ignored by a datacube that has no ``get_iter`` (:mod:`polytope_mars.field_stream`).
     per_field_consumption: bool = True
-    #: Deprecated alias of ``bytes_per_value`` (its ``default`` entry).
-    bytes_per_point: Optional[BytesPerPointConfig] = None
 
     @model_validator(mode="after")
     def _check_limits(self):
@@ -174,9 +137,6 @@ class LimitsConfig(ConfigModel):
             raise ValueError(f"limits.max_tree_bytes must be positive or null, got {self.max_tree_bytes!r}")
         if self.max_fields_per_call < 1:
             raise ValueError(f"limits.max_fields_per_call must be positive, got {self.max_fields_per_call!r}")
-        if self.bytes_per_point is not None and "bytes_per_value" not in self.model_fields_set:
-            logging.debug("polytope-mars config: 'limits.bytes_per_point' is deprecated, use 'limits.bytes_per_value'")
-            object.__setattr__(self, "bytes_per_value", self.bytes_per_point.default)
         return self
 
 

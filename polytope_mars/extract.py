@@ -78,7 +78,7 @@ from .limits import format_bytes, tree_byte_limit
 from .sizing import DEFAULT_FRAGMENT_BYTES, UnitSizing
 from .tree_units import GroupSpec, plan_units, prune_values, unit_select
 
-__all__ = ["BlockExtractor", "collect_field_values", "is_data_not_found", "mapper_type", "slice_request"]
+__all__ = ["BlockExtractor", "collect_field_values", "is_data_not_found", "slice_request"]
 
 logger = logging.getLogger(__name__)
 
@@ -144,17 +144,6 @@ def slice_request(api, preq):
                 else:
                     datacube.nearest_search[key][0].append(polytope.points[0])
     return api.slice(datacube, preq.polytopes())
-
-
-def mapper_type(options) -> str | None:
-    """The ``type`` of the grid mapper transformation in polytope ``options`` (a Config or a dict)."""
-    if hasattr(options, "model_dump"):
-        options = options.model_dump()
-    for axis in (options or {}).get("axis_config", []) or []:
-        for tr in axis.get("transformations", []) or []:
-            if tr.get("name") == "mapper":
-                return tr.get("type")
-    return None
 
 
 # --- reading coordinates and values from (prepared / filled) trees ---------------------------------------
@@ -390,9 +379,6 @@ class BlockExtractor:
 
         c = self.counters
         timings["get_ms"] = round(c.get_seconds * 1000, 3)
-        timings["retrieve_ms"] = round(
-            timings.get("slice_ms", 0.0) + timings.get("prepare_ms", 0.0) + c.get_seconds * 1000, 3
-        )
         timings["encode_ms"] = round(enc_seconds * 1000, 3)
         timings["n_groups"] = c.n_groups
         timings["n_units"] = c.n_units
@@ -506,11 +492,6 @@ class BlockExtractor:
             f"{format_bytes(n_bytes)}, more than the limit of {format_bytes(limit)}; "
             "request a smaller area, or fewer dates and times per request"
         )
-
-    def _slice_and_prepare(self):
-        """``(api, prepared tree)`` of the whole request (point features, and tests that spy here)."""
-        api, tree = self._slice()
-        return api, self._prepare(api.datacube, tree)
 
     def _plan(self, tree):
         """``(info, plan, groups)``: the field groups of ``tree`` in legacy coverage order."""

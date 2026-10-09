@@ -184,7 +184,6 @@ def test_without_a_budget_a_unit_is_one_group():
     s = sizing(None)
     points, ranges = SHAPES["efas_danube"]
     assert s.max_unit_groups(points, 1, ranges) == 1
-    assert s.fits_group(points, 1, ranges)
     # ... and a single group is never refused: 12.6M points fit the raised cap
     global_points, global_ranges = SHAPES["healpix1024_global"]
     assert s.max_unit_groups(global_points, 1, global_ranges) == 1
@@ -206,7 +205,7 @@ def test_the_largest_single_fields_fit_one_call_at_the_deployed_budget(shape):
     """A field is fetched whole, so the two largest requests of the corpus have to fit 1.5 GiB."""
     points, ranges = SHAPES[shape]
     s = sizing(BUDGET_1_5_GiB)
-    assert s.fits_field(points, 1, ranges) and s.fits_group(points, 1, ranges)
+    assert s.fits_field(points, 1, ranges) and s.max_unit_groups(points, 1, ranges) >= 1
     assert s.field_bytes(points, ranges) <= BUDGET_1_5_GiB
     assert s.estimate_bytes(1, points, ranges, group_fields=1) <= BUDGET_1_5_GiB
 
@@ -216,7 +215,6 @@ def test_a_group_that_does_not_fit_is_fetched_one_field_per_call():
     points, ranges = SHAPES["healpix1024_europe"]
     s = sizing(110_000_000)  # fits one field of a 4-param group, not all four
     assert s.max_unit_groups(points, 4, ranges) == 0
-    assert not s.fits_group(points, 4, ranges)
     assert s.fits_field(points, 4, ranges)
     assert s.field_bytes(points, ranges, 4) <= 110_000_000
     # one field of the group costs its buffer once, not four times
@@ -228,7 +226,7 @@ def test_a_field_that_does_not_fit_is_refused(shape):
     """A field is never split, so a field larger than the budget cannot be served at all."""
     points, ranges = SHAPES[shape]
     s = sizing(500_000_000)
-    assert not s.fits_group(points, 1, ranges)
+    assert s.max_unit_groups(points, 1, ranges) == 0
     assert not s.fits_field(points, 1, ranges)
     assert s.field_bytes(points, ranges) > 500_000_000
     # ... and so is a multi-param group of such a field, whose params are all held at once

@@ -170,14 +170,6 @@ class GroupPlan:
     mars_metadata: dict = field(default_factory=dict)
 
 
-def _branch_matches(branch: Branch, select: dict) -> bool:
-    axes = branch.axes()
-    for axis, value in select.items():
-        if axis in axes and value not in axes[axis]:
-            return False
-    return True
-
-
 class Plan:
     """Base plan: MultiPoint ``from_polytope`` (one coverage per date, number, step)."""
 
@@ -270,9 +262,6 @@ class Plan:
     def level_out(self, level):
         """Level as written to the output (composite tuples / levelist axes)."""
         return level
-
-    def header_extra(self) -> dict:
-        return {}
 
 
 class ReforecastPlan(Plan):
@@ -560,9 +549,6 @@ class TimeSeriesReforecastPlan(ReforecastPlan):
         elif not self.collapse():
             m["Forecast date"] = pd.Timestamp(g.path.get("hdate", g.path.get("date"))).isoformat() + "Z"
         return m
-
-    def header_extra(self) -> dict:
-        return {"pointseries_order": "series_major"} if self.forecast() else {}
 
 
 class PositionReforecastPlan(ReforecastPlan):

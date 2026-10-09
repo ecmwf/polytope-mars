@@ -96,9 +96,8 @@ def test_datacube_factory_and_timings():
     assert t["n_units"] == t["n_gribjump_calls"] == 2
     # the two steps are compressed inside one branch, so both coverages share one bulk spatial node
     assert t["n_spatial_subtrees"] == 1
-    for key in ("datacube_init_ms", "retrieve_ms", "slice_ms", "prepare_ms", "get_ms", "encode_ms", "first_byte_ms"):
+    for key in ("datacube_init_ms", "slice_ms", "prepare_ms", "get_ms", "encode_ms", "first_byte_ms"):
         assert t[key] >= 0
-    assert abs(t["slice_ms"] + t["prepare_ms"] + t["get_ms"] - t["retrieve_ms"]) < 0.01
 
 
 def test_monkeypatched_gribjump_class_still_used(monkeypatch):

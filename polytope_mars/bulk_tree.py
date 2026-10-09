@@ -33,7 +33,6 @@ __all__ = [
     "node_bytes",
     "point_count",
     "range_count",
-    "tree_bytes",
     "tree_summary",
 ]
 
@@ -107,15 +106,12 @@ class RangeCounts:
 
     def __init__(self):
         self._cache: dict = {}
-        #: nodes actually counted (the rest are cache hits)
-        self.n_counted = 0
 
     def of(self, node) -> int:
         key = id(node)
         count = self._cache.get(key)
         if count is None:
             count = self._cache[key] = range_count(node)
-            self.n_counted += 1
         return count
 
 
@@ -153,8 +149,3 @@ def tree_summary(tree) -> tuple[int, int, int]:
             continue
         stack.extend(node.children)
     return nodes, points, total
-
-
-def tree_bytes(tree) -> int:
-    """Bytes the spatial sub-trees of a prepared tree hold (see :func:`tree_summary`)."""
-    return tree_summary(tree)[2]
