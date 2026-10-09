@@ -102,7 +102,7 @@ class FakeExtractResult:
     ``values_flat`` is one contiguous float64 buffer for the whole field and ``values`` is a list of
     *views* into it, one per requested range -- the layout pygribjump exposes, and the reason a
     consumer reading ``values_flat``
-    (``polytope_feature.datacube.fdb_assign.field_values_flat``) pays nothing per range while one
+    (``polytope_feature.datacube.backends.fdb.field_values_flat``) pays nothing per range while one
     reading ``values`` pays a numpy object per range.  A field gribjump has no message for has an
     empty buffer and no views.
 
