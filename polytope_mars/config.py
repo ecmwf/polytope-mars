@@ -89,9 +89,6 @@ class LimitsConfig(ConfigModel):
     #: measured Python-side peak bytes per value held at once (the leaf arrays plus the float64
     #: field copy handed to the encoder), the same constant for every grid
     bytes_per_value: int = 32
-    #: Accepted for configuration compatibility and ignored: the spatial nodes a call reads its points
-    #: from are resident for the whole request and priced by ``max_tree_bytes``, not per call.
-    bytes_per_point_call: Optional[int] = None
     #: bytes one gribjump index range costs in an ``ExtractionResult``: two vector headers plus two
     #: heap allocations, for the values and the bitmap of that range
     bytes_per_range: int = 96
@@ -108,9 +105,6 @@ class LimitsConfig(ConfigModel):
     #: hard cap on the fields of one ``datacube.get``: keeps the request list gribjump has to parse
     #: (and the pruned tree) bounded however large the budget is
     max_fields_per_call: int = 1024
-    #: Accepted for configuration compatibility and ignored: a unit's fields are always consumed one at
-    #: a time (``FDBDatacube.get_iter``), which is what the ``bytes_per_value`` term above is sized for.
-    per_field_consumption: Optional[bool] = None
 
     @model_validator(mode="after")
     def _check_limits(self):
@@ -129,9 +123,6 @@ class LimitsConfig(ConfigModel):
             raise ValueError(f"limits.max_tree_bytes must be positive or null, got {self.max_tree_bytes!r}")
         if self.max_fields_per_call < 1:
             raise ValueError(f"limits.max_fields_per_call must be positive, got {self.max_fields_per_call!r}")
-        for name in ("per_field_consumption", "bytes_per_point_call"):
-            if getattr(self, name) is not None:
-                logging.debug("polytope-mars config: 'limits.%s' is ignored", name)
         return self
 
 

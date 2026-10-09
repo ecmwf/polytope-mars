@@ -428,11 +428,8 @@ def test_deprecated_config_keys_map_onto_new_sections():
     conf = PolytopeMarsConfig.model_validate({})
     assert conf.limits.max_polygon_points == 3600
     assert conf.limits.bytes_per_value == 32 and conf.limits.bytes_per_range == 96
-    assert conf.limits.max_fields_per_call == 1024 and conf.limits.bytes_per_point_call is None
+    assert conf.limits.max_fields_per_call == 1024
     assert conf.limits.safety_factor == 1.5 and conf.limits.max_values_per_unit == 256_000_000
-    # accepted and ignored, so that a config written against an earlier worker keeps validating
-    assert conf.limits.per_field_consumption is None
-    assert PolytopeMarsConfig.model_validate({"limits": {"per_field_consumption": False}}).limits
 
 
 def test_timings_are_reset_per_request():

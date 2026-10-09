@@ -234,8 +234,3 @@ def test_sizing_reads_the_config():
     s = UnitSizing.from_limits(conf.limits)
     assert s.budget == 1000 and s.bytes_per_value == 10
     assert s.bytes_per_range == 2 and s.safety_factor == 2.0 and s.max_fields_per_call == 7
-    # the deprecated flags are accepted and change nothing
-    accepted = PolytopeMarsConfig.model_validate(
-        {"limits": {"per_field_consumption": False, "bytes_per_point_call": 128}}
-    )
-    assert UnitSizing.from_limits(accepted.limits) == UnitSizing.from_limits(PolytopeMarsConfig().limits)

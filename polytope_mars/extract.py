@@ -631,10 +631,8 @@ class BlockExtractor:
         (:class:`~polytope_mars.field_stream.GroupAssembler`): the Python heap only ever holds the
         groups still incomplete, not the whole unit.
 
-        The fields are handed over by :mod:`polytope_mars.field_stream`:
-        ``FDBDatacube.get_iter`` hands the fields over as they are decoded (the default), or one
-        ``datacube.get`` returns all of them at once (``limits.per_field_consumption: false``, in
-        which case the unit's whole size is what the budget has to cover).
+        The fields are handed over by :mod:`polytope_mars.field_stream`: ``FDBDatacube.get_iter``
+        yields them one at a time as gribjump's reply is decoded.
         """
         select = unit_select(specs, start, length, axes)
         logger.debug("%s: unit of %d groups: %s", self.pm.id, length, select)
