@@ -1,0 +1,22 @@
+description: climate-dt HEALPix 1024 timeseries along date, two points, two days of hourly data (from_polytope_step).
+grid: healpix_1024
+request:
+  activity: projections
+  class: d1
+  dataset: climate-dt
+  experiment: ssp3-7.0
+  expver: "0001"
+  generation: "1"
+  model: ifs-nemo
+  realization: "1"
+  resolution: high
+  type: fc
+  stream: clte
+  levtype: sfc
+  date: 20200101/to/20200102
+  time: 0000/to/2300
+  param: 167/165
+  feature:
+    type: timeseries
+    points: [[40.0, -105.0], [51.5, 0.1]]
+    time_axis: date

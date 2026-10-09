@@ -1,0 +1,21 @@
+description: climate-dt HEALPix 1024 polygon, two params x three hours (date/time unmerged by separate_datetime; from_polytope_step).
+grid: healpix_1024
+request:
+  activity: projections
+  class: d1
+  dataset: climate-dt
+  experiment: ssp3-7.0
+  expver: "0001"
+  generation: "1"
+  model: ifs-nemo
+  realization: "1"
+  resolution: high
+  type: fc
+  stream: clte
+  levtype: sfc
+  date: "20200101"
+  time: 0000/0100/0200
+  param: 167/165
+  feature:
+    type: polygon
+    shape: [[40.0, -105.0], [40.0, -104.6], [40.4, -104.6], [40.4, -105.0], [40.0, -105.0]]

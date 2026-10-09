@@ -1,0 +1,19 @@
+description: EFAS local_regular circle, one step.
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efas
+  type: fc
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: "20240101"
+  time: "0000"
+  step: "6"
+  param: "240023"
+  feature:
+    type: circle
+    center: [[46.9, 8.0]]
+    radius: 0.1

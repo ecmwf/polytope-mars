@@ -1,0 +1,39 @@
+description: >
+  EFAS reforecast (efcl) vertical profile, three levels over two hdates x two steps
+  (VerticalProfile.from_polytope_reforecast).  The deployed efcl sub-cube is surface only, so the
+  case declares a pressure-level one of its own.
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efcl
+  type: sfo
+  levtype: pl
+  levelist: 1000/850/500
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: "20230101"
+  time: "0000"
+  hdate: 20250101/20250102
+  param: "240023"
+  step: 6/12
+  feature:
+    type: verticalprofile
+    points: [[50.75, 7.1]]
+fake:
+  axes:
+    - class: [ce]
+      stream: [efcl]
+      type: [sfo]
+      levtype: [pl]
+      levelist: ["500", "850", "1000"]
+      expver: ["0001"]
+      origin: [ecmf]
+      domain: [g]
+      model: [lisflood]
+      date: ["20230101"]
+      hdate: ["20250101", "20250102"]
+      time: ["0000"]
+      step: ["6", "12"]
+      param: ["240023"]

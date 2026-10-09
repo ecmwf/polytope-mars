@@ -1,0 +1,44 @@
+description: >
+  climate-dt monthly means (clmn) vertical profile, three levels over two years x two months
+  (VerticalProfile.from_polytope_month).  The deployed clmn sub-cube is surface only, so the case
+  declares a pressure-level one of its own.
+grid: healpix_1024
+request:
+  activity: projections
+  class: d1
+  dataset: climate-dt
+  experiment: ssp3-7.0
+  expver: "0001"
+  generation: "1"
+  model: ifs-nemo
+  realization: "1"
+  resolution: high
+  type: fc
+  stream: clmn
+  levtype: pl
+  levelist: 1000/850/500
+  year: 2020/2021
+  month: 1/2
+  param: "130"
+  feature:
+    type: verticalprofile
+    points: [[40.0, -105.0]]
+fake:
+  axes:
+    - activity: [projections]
+      class: [d1]
+      dataset: [climate-dt]
+      experiment: [ssp3-7.0]
+      expver: ["0001"]
+      generation: ["1"]
+      levtype: [pl]
+      levelist: ["500", "850", "1000"]
+      model: [ifs-nemo]
+      realization: ["1"]
+      resolution: [high]
+      stream: [clmn]
+      type: [fc]
+      year: ["2020", "2021"]
+      month: ["1", "2"]
+      param: ["130"]
+fixes: [7]

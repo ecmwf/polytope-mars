@@ -3,7 +3,6 @@ import logging
 from polytope_feature import shapes
 
 from ..feature import Feature
-from ..utils.areas import field_area
 
 
 class TimeSeries(Feature):
@@ -13,8 +12,6 @@ class TimeSeries(Feature):
         # self.end_step = config.pop("end", None)
         self.axes = feature_config.pop("axes", [])
         self.time_axis = feature_config.pop("time_axis", [])
-
-        self.max_size = client_config.polygonrules.max_area
 
         if self.axes != []:
             if not isinstance(self.axes, list):
@@ -67,13 +64,6 @@ class TimeSeries(Feature):
         #        raise ValueError("Timeseries axes must be step or date")
         if feature_config["time_axis"] not in self.allowed_time_axis():  # noqa: E501
             raise ValueError(f"Timeseries axes must be in {self.allowed_time_axis()}")
-
-        area = field_area(request, len(feature_config["points"]))
-
-        if area > self.max_size:
-            raise ValueError(
-                f"Number of coordinates*fields for timeseries {area} exceeds total number allowed, please reduce the number of coordinates or fields requested"  # noqa: E501
-            )
 
         if isinstance(feature_config["time_axis"], list):
             if "step" in feature_config["time_axis"]:
