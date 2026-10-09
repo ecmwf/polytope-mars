@@ -26,15 +26,11 @@ sub-tree the call asks for, paid once however many fields it asks for (measured 
 MEASUREMENTS.md, ``python tools/measure_memory.py calibrate``).
 
 **The values the Python side holds**: ``limits.bytes_per_value`` per value (~24 B measured: the
-leaf arrays plus the float64 field copy the block walker hands to the encoder).  How many values
-that term covers depends on how the unit's results are consumed:
-
-* *per field* (``FDBDatacube.get_iter``, ``limits.per_field_consumption``, **the default**): the
-  fields arrive one at a time and each group's blocks are emitted and freed as soon as the group is
-  complete, so the term covers **one group** whatever the unit's size
-  (:mod:`polytope_mars.field_stream`);
-* *whole unit* (``FDBDatacube.get``, the opt-out): every field of the call is on the Python heap
-  before the first block is emitted, so the term covers the whole unit.
+leaf arrays plus the float64 field copy the block walker hands to the encoder).  A unit's fields
+arrive one at a time (``FDBDatacube.get_iter``) and each group's blocks are emitted and freed as soon
+as that group is complete, so the term covers **one field group** whatever the unit's size
+(:mod:`polytope_mars.field_stream`).  A point feature is the exception: it fetches its whole tree with
+one ``datacube.get`` and holds every field of it, which is what ``group_fields=None`` prices.
 
 **The encoder's fragments**: ``fragment_bytes``, twice the encoder's ``max_fragment_bytes`` (one
 fragment being built while the previous one is still on the wire), independent of the unit.
@@ -48,8 +44,8 @@ A unit of ``k`` groups is planned when
     ``k x group_fields <= max_fields_per_call``
     ``k x group_fields x n_points <= max_values_per_unit``
 
-where ``python_values`` is one group's values on the per-field path and the unit's values on the
-whole-unit path.  Without a budget a unit is a single group: nothing bounds a larger call.
+where ``python_values`` is one group's values.  Without a budget a unit is a single group: nothing
+bounds a larger call.
 
 **A field is never split.**  When the fields of a *single* group do not fit one call, the group is
 fetched one (param, level) at a time: gribjump's buffer then holds one field while the Python side
@@ -137,12 +133,9 @@ class UnitSizing:
     max_values_per_unit: Optional[int] = None
     #: hard cap on the fields of one call (``limits.max_fields_per_call``)
     max_fields_per_call: int = MAX_FIELDS_PER_CALL
-    #: True when the unit's fields are consumed one at a time (``FDBDatacube.get_iter``), so that
-    #: the per-value term covers one group instead of the whole unit
-    per_field_consumption: bool = False
 
     @classmethod
-    def from_limits(cls, limits, per_field_consumption: bool = False, fragment_bytes=None) -> "UnitSizing":
+    def from_limits(cls, limits, fragment_bytes=None) -> "UnitSizing":
         """The model of ``config.limits``; ``fragment_bytes`` comes from the encoder in use."""
         return cls(
             budget=limits.memory_budget_bytes,
@@ -153,7 +146,6 @@ class UnitSizing:
             fragment_bytes=_fragment_bytes(fragment_bytes),
             max_values_per_unit=limits.max_values_per_unit,
             max_fields_per_call=limits.max_fields_per_call,
-            per_field_consumption=per_field_consumption,
         )
 
     # -- the terms -------------------------------------------------------------------------------
@@ -188,8 +180,12 @@ class UnitSizing:
         return self.request_bytes(n_points, n_subtrees) + self.python_bytes(python_values) + self.fragment_bytes
 
     def python_values(self, n_fields: int, group_fields: Optional[int]) -> int:
-        """Fields of a unit whose values are live at once: one group, or all of them."""
-        if not self.per_field_consumption or group_fields is None:
+        """Values of the call that are live at once, counted in fields: one group of it.
+
+        ``group_fields=None`` means every field of the call instead, which is what a point feature's
+        single ``datacube.get`` for its whole tree holds.
+        """
+        if group_fields is None:
             return n_fields
         return min(n_fields, max(1, group_fields))
 
@@ -219,9 +215,9 @@ class UnitSizing:
         """Groups of this shape one ``datacube.get`` may fetch; 0 when one group does not even fit.
 
         Without a budget every unit is a single group (nothing bounds a larger call), the hard caps
-        still applying.  With a budget the per-field path is bounded by
-        gribjump's buffer -- plus, when every group brings its own sub-trees (``own_branch``), their
-        request side -- because its live values are one group's whatever the unit's size.
+        still applying.  With a budget a unit is bounded by gribjump's buffer -- plus, when every group
+        brings its own sub-trees (``own_branch``), their request side -- because the Python side holds
+        one group's values whatever the unit's size.
         """
         group_fields = max(1, group_fields)
         group_values = group_fields * max(0, n_points)
@@ -239,11 +235,8 @@ class UnitSizing:
                 per_group += self.request_bytes(n_points, n_subtrees)
             else:
                 shared += self.request_bytes(n_points, n_subtrees)
-            if self.per_field_consumption:
-                # the Python side holds one group however many groups the call fetches
-                limits.append(_floor_div(self.budget - shared - self.python_bytes(group_values), per_group))
-            else:
-                limits.append(_floor_div(self.budget - shared, per_group + self.python_bytes(group_values)))
+            # the Python side holds one group however many groups the call fetches
+            limits.append(_floor_div(self.budget - shared - self.python_bytes(group_values), per_group))
         return max(0, min(limits))
 
     def field_bytes(self, n_points: int, n_ranges: int, group_fields: int = 1, n_subtrees: int = 1) -> int:

@@ -31,10 +31,10 @@ SHAPES = {
 }
 
 
-def sizing(budget, per_field_consumption=True, **kwargs) -> UnitSizing:
+def sizing(budget, **kwargs) -> UnitSizing:
     """The default limits with one budget: what a deployed worker is configured with."""
     conf = PolytopeMarsConfig.model_validate({"limits": {"memory_budget_bytes": budget, **kwargs}})
-    return UnitSizing.from_limits(conf.limits, per_field_consumption=per_field_consumption)
+    return UnitSizing.from_limits(conf.limits)
 
 
 def spec(shape, n_fields=1, key=(0,), max_groups=1) -> GroupSpec:
@@ -82,20 +82,12 @@ def test_the_python_side_is_per_call_points_plus_one_groups_values_plus_the_frag
         bytes_per_point_call=256,
         safety_factor=1.0,
         fragment_bytes=1_000,
-        per_field_consumption=True,
     )
     # four fields of a two-field group: the request side is paid once, the values of one group
     estimate = s.estimate_bytes(4, 1_000, 10, group_fields=2)
     assert estimate == s.buffer_bytes(4, 1_000, 10) + 256 * 1_000 + 32 * 2_000 + 1_000
-    # the whole-unit path pays the values of every field of the call instead
-    whole = UnitSizing(
-        bytes_per_value=32,
-        bytes_per_point_call=256,
-        safety_factor=1.0,
-        fragment_bytes=1_000,
-        per_field_consumption=False,
-    )
-    assert whole.estimate_bytes(4, 1_000, 10, group_fields=2) == estimate + 32 * 2_000
+    # a point feature holds every field of its one call instead (group_fields=None)
+    assert s.estimate_bytes(4, 1_000, 10) == estimate + 32 * 2_000
 
 
 def test_the_request_side_is_paid_once_per_branch_of_the_unit():
@@ -104,7 +96,7 @@ def test_the_request_side_is_paid_once_per_branch_of_the_unit():
     An EFAS ensemble compresses ``number``/``step`` inside one branch (paid once); climate-dt's
     merged date/time axis gives every hourly field its own branch (paid per group).
     """
-    s = UnitSizing(bytes_per_point_call=256, per_field_consumption=True)
+    s = UnitSizing(bytes_per_point_call=256)
     assert s.request_bytes(1_000) == 256_000
     assert s.request_bytes(1_000, 4) == 4 * 256_000
     shared = s.estimate_bytes(4, 1_000, 10, group_fields=1, n_branches=1)
@@ -155,12 +147,15 @@ def test_fields_per_call_for_the_measured_shapes(shape, n_fields, budget, expect
     assert over_budget or over_cap
 
 
-def test_the_per_field_path_plans_larger_units_than_the_whole_unit_path():
-    """The opt-out pays ``bytes_per_value`` for every field of the call, not for one group."""
+def test_holding_one_group_plans_larger_units_than_holding_the_whole_call():
+    """What the per-field consumption buys: ``bytes_per_value`` is paid for one group, not for the call."""
     points, ranges = SHAPES["efas_volga"]
-    lazy = sizing(BUDGET_1_5_GiB).max_unit_groups(points, 4, ranges)
-    whole = sizing(BUDGET_1_5_GiB, per_field_consumption=False).max_unit_groups(points, 4, ranges)
-    assert lazy > whole >= 1
+    s = sizing(BUDGET_1_5_GiB)
+    per_group = s.max_unit_groups(points, 4, ranges)
+    # what the same budget would allow if the Python side held every field of the call instead
+    room = BUDGET_1_5_GiB - s.fragment_bytes - s.request_bytes(points)
+    whole_call = room // (s.buffer_bytes(4, points, ranges) + s.python_bytes(4 * points))
+    assert per_group > whole_call >= 1
 
 
 def test_the_planner_turns_that_into_units():
@@ -249,7 +244,6 @@ def test_sizing_reads_the_config():
     s = UnitSizing.from_limits(conf.limits)
     assert s.budget == 1000 and s.bytes_per_value == 10 and s.bytes_per_point_call == 20
     assert s.bytes_per_range == 2 and s.safety_factor == 2.0 and s.max_fields_per_call == 7
-    assert not s.per_field_consumption
-    assert UnitSizing.from_limits(conf.limits, per_field_consumption=True).per_field_consumption
-    # the default config is the production path
-    assert PolytopeMarsConfig().limits.per_field_consumption
+    # the deprecated flag is accepted and changes nothing
+    accepted = PolytopeMarsConfig.model_validate({"limits": {"per_field_consumption": False}})
+    assert UnitSizing.from_limits(accepted.limits) == UnitSizing.from_limits(PolytopeMarsConfig().limits)

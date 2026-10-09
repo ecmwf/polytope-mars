@@ -5,19 +5,14 @@ A multi-group unit fetches the fields of several field groups in one
 every (param, level) of that group has arrived, so the Python side only holds the groups that are
 still incomplete (:class:`GroupAssembler`), not the whole unit.
 
-The fields reach polytope-mars from polytope-feature by one of two paths:
+The fields come from :func:`lazy_unit_fields` (``FDBDatacube.get_iter``): they arrive one at a time
+and are handed on as they come, so the Python peak is one group whatever the unit's size.  gribjump's
+own buffer still holds the whole call (the deployed gribjump decodes the reply before returning),
+which is what the 8 B/value term of the sizing covers.
 
-* :func:`whole_unit_fields` -- **the default path**: one ``FDBDatacube.get`` fills the pruned
-  sub-tree and :func:`~polytope_mars.extract.collect_field_values` splits its results per
-  (group, param, level).  Every field of the call is on the Python heap before the first block is
-  emitted, so the unit's size is what the budget has to cover
-  (:class:`~polytope_mars.sizing.UnitSizing` with ``per_field_consumption=False``).  It is also the
-  path a group that does not fit one call takes, one (param, level) at a time.
-* :func:`lazy_unit_fields` -- ``FDBDatacube.get_iter``, used when the datacube has it *and*
-  ``limits.per_field_consumption`` is on: the fields arrive one at a time and are handed on as they
-  come, so the Python peak is one group whatever the unit's size.  gribjump's own buffer still holds
-  the whole call (the deployed gribjump decodes the reply before returning), which is what the
-  8 B/value term of the sizing covers.
+A single group that does not fit one call is fetched one (param, level) at a time instead
+(:meth:`polytope_mars.extract.BlockExtractor._field_units`), each field whole, and so are point
+features: those go through ``datacube.get`` and ``collect_field_values``.
 
 ``get_iter`` yields ``(field_path, node_values)``: ``field_path`` the MARS keys of one field as
 strings, ``node_values`` ``[(bulk spatial node, float64 values), ...]`` -- one entry per spatial
@@ -41,18 +36,26 @@ __all__ = [
     "GroupAssembler",
     "branch_field_keys",
     "field_key_sequence",
-    "has_per_field_consumption",
     "lazy_unit_fields",
-    "unit_field_source",
-    "whole_unit_fields",
+    "require_per_field_consumption",
 ]
 
 logger = logging.getLogger(__name__)
 
 
-def has_per_field_consumption(datacube) -> bool:
-    """True when the datacube can deliver a unit's fields one at a time (``get_iter``)."""
-    return callable(getattr(datacube, "get_iter", None))
+def require_per_field_consumption(datacube) -> None:
+    """Check that the datacube delivers a unit's fields one at a time (``FDBDatacube.get_iter``).
+
+    The extractor sizes a multi-group unit on the assumption that the Python side holds one field
+    group, which only ``get_iter`` gives it; a datacube without it would hold the whole call while
+    being priced for one group.  polytope-feature ships ``get_iter`` since the release this worker
+    requires, so this is a version check with a message that says what to do.
+    """
+    if not callable(getattr(datacube, "get_iter", None)):
+        raise RuntimeError(
+            f"{type(datacube).__name__} has no get_iter(): feature extraction needs a polytope-feature "
+            "that delivers a unit's fields one at a time; upgrade polytope-python"
+        )
 
 
 def group_field_keys(group, prefix: tuple) -> list:
@@ -141,12 +144,6 @@ def _join(parts: list):
     return values, all(missing for _, missing in parts)
 
 
-def whole_unit_fields(fields: dict) -> Iterator:
-    """``(key, value)`` of an already fetched unit, dropping each field from ``fields`` as it goes."""
-    for key in list(fields):
-        yield key, fields.pop(key)
-
-
 # -- the per-field seam (polytope-feature ``get_iter``) ----------------------------------------------
 
 
@@ -205,8 +202,3 @@ def lazy_unit_fields(datacube, tree, key_axes, context=None, **kwargs) -> Iterat
         n += 1
     if n != len(expected):
         raise RuntimeError(f"datacube.get_iter yielded {n} of the unit's {len(expected)} fields")
-
-
-def unit_field_source(datacube, enabled: bool = True) -> str:
-    """``"get_iter"`` when the datacube can stream fields and that is enabled, else ``"get"``."""
-    return "get_iter" if enabled and has_per_field_consumption(datacube) else "get"

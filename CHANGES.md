@@ -831,6 +831,26 @@ what the repo contains.
   `tree_summary`), `bulk_tree.RangeCounts.n_counted` and `sizing.UnitSizing.fits_group` (the planner and
   its tests ask `max_unit_groups(...) >= 1`).
 
+## How a unit's fields are consumed
+
+- **A unit's fields always arrive one at a time** (`FDBDatacube.get_iter`), which is what the
+  `bytes_per_value` term of the sizing is priced for (one field group live, whatever the unit's size).
+  `limits.per_field_consumption` is accepted and ignored, with a DEBUG line saying so, since a deployed
+  config may still set it; polytope-config sets only `limits.max_polygon_points`.
+- **A datacube without `get_iter` is refused** with
+  `<class> has no get_iter(): feature extraction needs a polytope-feature that delivers a unit's fields one
+  at a time; upgrade polytope-python` (`field_stream.require_per_field_consumption`, checked once per
+  request before anything is fetched). Sizing a call for one group and then holding all of it is the one
+  failure mode that would silently exceed the budget, so this is a version check with a clear message
+  rather than a quiet fallback.
+- Gone with the opt-out: `field_stream.whole_unit_fields`, `field_stream.unit_field_source`, the
+  whole-unit arms of `sizing.UnitSizing.python_values` / `max_unit_groups` /
+  `from_limits(per_field_consumption=)`, `BlockExtractor._per_field` and the `per_field` argument of
+  `_sizing`, and `timings["unit_source"]` (it said `get_iter` for every request).
+- **Point features keep fetching their whole tree with one `datacube.get`** and holding every field of
+  it, which is now what `UnitSizing.python_values(n_fields, group_fields=None)` prices: the same
+  arithmetic as before, stated as the point-feature estimate rather than as a second consumption mode.
+
 ## Pruning a unit's sub-tree
 
 - **`tree_units.prune_values` is gone**: `TensorIndexTree.prune(select=...)` takes a value *or a sequence of

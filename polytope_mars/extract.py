@@ -70,10 +70,8 @@ from .coverage_plan import (
 from .field_stream import (
     GroupAssembler,
     branch_field_keys,
-    has_per_field_consumption,
     lazy_unit_fields,
-    unit_field_source,
-    whole_unit_fields,
+    require_per_field_consumption,
 )
 from .limits import format_bytes, tree_byte_limit
 from .sizing import DEFAULT_FRAGMENT_BYTES, UnitSizing
@@ -234,10 +232,8 @@ class _Counters:
         self.n_ranges_requested = 0
         #: largest unit estimate the planner produced (bytes)
         self.estimated_unit_bytes_max = 0
-        #: fields of one unit held on the Python heap at once (per-field consumption only)
+        #: fields of one unit held on the Python heap at once
         self.buffered_fields_max = 0
-        #: where a unit's fields come from: "get" (whole unit) or "get_iter" (per field)
-        self.unit_source = "get"
         #: "per_call" or "per_group": how often a unit pays for building its gribjump request ranges
         self.request_side = "per_call"
 
@@ -383,7 +379,6 @@ class BlockExtractor:
         for name, count in c.get_buckets.items():
             timings[f"units_get_{name}"] = count
         timings["get_ms_max"] = round(c.get_seconds_max * 1000, 3)
-        timings["unit_source"] = c.unit_source
         timings["request_side"] = c.request_side
         timings["buffered_fields_max"] = c.buffered_fields_max
         timings["max_rss_bytes"] = max_rss_bytes()
@@ -391,7 +386,7 @@ class BlockExtractor:
         timings["n_coverages"] = n_cov if n_cov is not None else c.n_groups
         logger.info(
             "%s: extracted %d groups in %d units (<= %d groups / %d fields per unit,"
-            " %d gribjump calls, %d spatial sub-trees, %d ranges per field via %s, request side %s);"
+            " %d gribjump calls, %d spatial sub-trees, %d ranges per field, request side %s);"
             " estimated <= %.1f MB per unit,"
             " peak RSS %.1f MB; get %.1f ms (max %.1f ms per unit, %s), encode %.1f ms",
             self.pm.id,
@@ -402,7 +397,6 @@ class BlockExtractor:
             c.n_gribjump_calls,
             c.n_spatial_subtrees,
             c.n_ranges,
-            c.unit_source,
             c.request_side,
             c.estimated_unit_bytes_max / 1e6,
             timings["max_rss_bytes"] / 1e6,
@@ -490,26 +484,16 @@ class BlockExtractor:
 
     # -- MultiPoint: one unit per group, or one call per (param, level) -----------------------------------
 
-    def _sizing(self, datacube, per_field=None) -> UnitSizing:
-        """The memory model of one unit, and how this datacube delivers a unit's fields.
+    def _sizing(self) -> UnitSizing:
+        """The memory model of one extraction unit.
 
-        ``per_field_consumption`` is on (the default) when the datacube can hand the fields over one
-        at a time (``get_iter``), which keeps the per-value term at one group whatever the unit's
-        size; without it one ``get`` returns the whole unit and that term covers all of it.  The
-        fragment term comes from the encoder in use, so a smaller ``max_fragment_bytes`` buys unit
+        The fragment term comes from the encoder in use, so a smaller ``max_fragment_bytes`` buys unit
         size back.
         """
-        if per_field is None:
-            per_field = self._per_field(datacube)
         return UnitSizing.from_limits(
             self.conf.limits,
-            per_field_consumption=per_field,
             fragment_bytes=2 * getattr(self.encoder, "max_fragment_bytes", DEFAULT_FRAGMENT_BYTES // 2),
         )
-
-    def _per_field(self, datacube) -> bool:
-        """True when this run consumes a unit's fields one at a time (config + datacube support)."""
-        return bool(self.conf.limits.per_field_consumption) and has_per_field_consumption(datacube)
 
     def _field_group(self, plan, g: GroupPlan, index, params, n_points) -> FieldGroup:
         return FieldGroup(
@@ -586,9 +570,10 @@ class BlockExtractor:
         prepared tree.  A field is never split: when a single field does not fit the budget the request
         is refused (:meth:`_refuse_field`) rather than cut into pieces.
         """
+        require_per_field_consumption(datacube)
         tree = self._prepare(datacube, tree)
         info, plan, groups = self._plan(tree)
-        sizing = self._sizing(datacube)
+        sizing = self._sizing()
         specs = self._group_specs(info, plan, groups, sizing)
         for spec in specs:
             if spec.max_groups < 1 and not sizing.fits_field(
@@ -718,27 +703,13 @@ class BlockExtractor:
         yield from self._emit_group(self._group_blocks(info, plan, g, index, spec.n_points, fields, tuple(g.key)))
 
     def _unit_fields(self, datacube, sub, key_axes, label, n_fields: int = 0) -> Iterator:
-        """``(key, (values, missing))`` of a unit's fields, from ``get_iter`` when there is one.
+        """``(key, (values, missing))`` of a unit's fields, as ``FDBDatacube.get_iter`` hands them over.
+
+        The whole pass is one gribjump call, so it is timed and counted as one unit; the time includes
+        the consumer's work on each field, which is what a per-unit duration means here.
 
         Raises :class:`_UnitPartiallyMissing` when gribjump reports some (not all) fields of the unit
         missing; yields nothing when it has none of them.
-        """
-        per_field = self._per_field(datacube)
-        self.counters.unit_source = unit_field_source(datacube, per_field)
-        if per_field:
-            yield from self._lazy_unit_fields(datacube, sub, key_axes, label, n_fields)
-            return
-        fields = self._get_fields(datacube, sub, key_axes, label=label, n_fields=n_fields)
-        del sub  # the values live in `fields` now; drop the pruned tree's nodes
-        if fields is None:
-            raise _UnitPartiallyMissing(label)
-        yield from whole_unit_fields(fields)
-
-    def _lazy_unit_fields(self, datacube, sub, key_axes, label, n_fields: int = 0) -> Iterator:
-        """The per-field seam: ``FDBDatacube.get_iter`` delivers the unit's fields as they arrive.
-
-        The whole pass is one gribjump call, so it is timed and counted as one unit; the time
-        includes the consumer's work on each field, which is what a per-unit duration means here.
         """
         t0 = time.perf_counter()
         try:
@@ -826,12 +797,12 @@ class BlockExtractor:
     def _note_whole_tree_estimate(self, datacube, info, groups) -> int:
         """Estimate of the one call a point feature makes, and its field count.
 
-        Point features fetch the whole tree with one ``datacube.get``, never through ``get_iter``,
-        so this is the whole-unit model whatever ``limits.per_field_consumption`` says.  A point
-        feature's fields hold a handful of points each, so this is observability only: there is
+        A point feature fetches the whole tree with one ``datacube.get`` and holds every field of it,
+        which is the ``group_fields=None`` arithmetic of :meth:`polytope_mars.sizing.UnitSizing.python_values`.
+        A point feature's fields hold a handful of points each, so this is observability only: there is
         nothing to refuse and nothing to fetch in smaller pieces.
         """
-        sizing = self._sizing(datacube, per_field=False)
+        sizing = self._sizing()
         ranges = self.ranges
         n_fields = n_points = n_ranges = 0
         subtrees: set = set()

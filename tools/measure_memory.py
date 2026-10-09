@@ -778,7 +778,7 @@ def run_calibrate(name, n_fields):
     """Peak RSS growth of one unit of ``n_fields`` fields of one shape, consumed field by field.
 
     The budget and the caps are set out of the way so that the whole request is one unit (one
-    gribjump call, all fields) on the production path (``per_field_consumption``), and the peak is
+    gribjump call, all fields), and the peak is
     measured from the moment the tree is sliced and prepared: what is left is what the call itself
     costs, i.e. gribjump's buffer plus the Python terms the sizing has to cover.
 
@@ -803,7 +803,6 @@ def run_calibrate(name, n_fields):
         "memory_budget_bytes": 10**12,
         "max_values_per_unit": None,
         "max_fields_per_call": 4096,
-        "per_field_consumption": True,
     }
     pm = PolytopeMars(config, datacube_factory=lambda: fake)
 
@@ -850,7 +849,6 @@ def run_calibrate(name, n_fields):
         "request_side": pm.timings["request_side"],
         "n_ranges": pm.timings["n_ranges"],
         "n_units": pm.timings["n_units"],
-        "unit_source": pm.timings["unit_source"],
         "estimated_unit_mb": round(pm.timings["estimated_unit_bytes_max"] / 1e6, 1),
         "output_mib": round(n_bytes / MiB, 1),
         "max_chunk_mib": round(max_chunk / MiB, 2),
@@ -925,7 +923,7 @@ def run_targets(name):
     plans = {}
     for budget in budgets:
         conf = PolytopeMarsConfig.model_validate({"limits": {"memory_budget_bytes": budget}})
-        sizing = UnitSizing.from_limits(conf.limits, per_field_consumption=True)
+        sizing = UnitSizing.from_limits(conf.limits)
         sized = [
             dataclasses.replace(
                 s,
@@ -1074,7 +1072,6 @@ TABLE_COLUMNS = {
         "points",
         "values",
         "n_ranges",
-        "unit_source",
         "estimated_unit_mb",
         "max_chunk_mib",
         "stream_s",
@@ -1123,7 +1120,7 @@ def _fit_calibration(rows) -> str:
     (bpc, bpv), *_ = np.linalg.lstsq(design, residual, rcond=None)
 
     limits = PolytopeMarsConfig().limits
-    default = UnitSizing.from_limits(limits, per_field_consumption=True)
+    default = UnitSizing.from_limits(limits)
     lines = [
         f"Least squares over {len(usable)} runs (residual = growth - exact gribjump term - 16 MiB of"
         f" fragments): bytes_per_point_call = {bpc:.1f}, bytes_per_value = {bpv:.1f}",

@@ -64,8 +64,8 @@ class LimitsConfig(ConfigModel):
     with ``buffer_cpp(unit) = n_fields x (8 x n_points + n_points / 8 + bytes_per_range x
     n_ranges)`` (gribjump's own residency, the only term the safety factor applies to),
     ``n_subtrees`` the spatial sub-trees the call asks for (one array-backed bulk node each) and
-    ``python_values`` the values the Python side holds at once: **one field group** on the
-    per-field path (``per_field_consumption``, the default) and the whole unit without it.  Two
+    ``python_values`` the values the Python side holds at once: **one field group**, because a unit's
+    fields arrive one at a time (``FDBDatacube.get_iter``).  Two
     hard caps apply on top, independent of the budget: ``max_fields_per_call`` and
     ``max_values_per_unit``.  Without a budget a unit is one field group.
 
@@ -112,12 +112,9 @@ class LimitsConfig(ConfigModel):
     #: hard cap on the fields of one ``datacube.get``: keeps the request list gribjump has to parse
     #: (and the pruned tree) bounded however large the budget is
     max_fields_per_call: int = 1024
-    #: consume a unit's fields one at a time (``FDBDatacube.get_iter``) instead of fetching the
-    #: whole unit with ``FDBDatacube.get``: the Python side then holds one field group instead of
-    #: the whole unit, so units may be as large as gribjump's own buffer allows.  On by default;
-    #: turning it off restores the whole-unit ``get`` (and the smaller units that go with it).
-    #: Ignored by a datacube that has no ``get_iter`` (:mod:`polytope_mars.field_stream`).
-    per_field_consumption: bool = True
+    #: Accepted for configuration compatibility and ignored: a unit's fields are always consumed one at
+    #: a time (``FDBDatacube.get_iter``), which is what the ``bytes_per_value`` term above is sized for.
+    per_field_consumption: Optional[bool] = None
 
     @model_validator(mode="after")
     def _check_limits(self):
@@ -137,6 +134,11 @@ class LimitsConfig(ConfigModel):
             raise ValueError(f"limits.max_tree_bytes must be positive or null, got {self.max_tree_bytes!r}")
         if self.max_fields_per_call < 1:
             raise ValueError(f"limits.max_fields_per_call must be positive, got {self.max_fields_per_call!r}")
+        if self.per_field_consumption is not None:
+            logging.debug(
+                "polytope-mars config: 'limits.per_field_consumption' is ignored; a unit's fields are "
+                "always consumed one at a time"
+            )
         return self
 
 

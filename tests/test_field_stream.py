@@ -2,9 +2,8 @@
 
 A multi-group unit is fetched by one call but emitted group by group: each group's blocks go out as
 soon as its (param, level) fields have arrived, so the Python heap holds the incomplete groups only.
-With ``limits.per_field_consumption`` the fields come from ``FDBDatacube.get_iter`` one at a time;
-by default they come from one ``FDBDatacube.get`` (the whole unit at once) through the same
-consumer, so both paths must produce the same bytes.
+The fields come from ``FDBDatacube.get_iter``, which is what the per-value term of the unit sizing is
+sized for; a datacube without it is refused.
 """
 
 from pathlib import Path
@@ -13,7 +12,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from polytope_mars.field_stream import GroupAssembler, field_key_sequence, has_per_field_consumption, unit_field_source
+from polytope_mars.field_stream import GroupAssembler, field_key_sequence, require_per_field_consumption
 from polytope_mars.testing.golden import build_fake, load_case, make_polytope_mars
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -133,11 +132,11 @@ def test_the_key_sequence_matches_how_a_filled_leaf_is_split():
 # --- the seam: FDBDatacube.get_iter --------------------------------------------------------------------
 
 
-def has_get_iter() -> bool:
-    """Whether this polytope-feature offers ``FDBDatacube.get_iter`` at all."""
-    from polytope_feature.datacube.backends.fdb import FDBDatacube
-
-    return hasattr(FDBDatacube, "get_iter")
+def test_a_datacube_without_get_iter_is_refused():
+    """The sizing prices one field group per call, which only ``get_iter`` delivers."""
+    with pytest.raises(RuntimeError, match="get_iter"):
+        require_per_field_consumption(SimpleNamespace())
+    require_per_field_consumption(SimpleNamespace(get_iter=lambda *a, **k: iter(())))
 
 
 def expected_bytes(name):
@@ -146,28 +145,12 @@ def expected_bytes(name):
     return (GOLDEN / folder / f"{name}.covjson").read_bytes()
 
 
-def run(name, per_field, budget=10**12, request_update=None, **limits):
+def run(name, budget=10**12, request_update=None, **limits):
     case = load_case(GOLDEN / "cases" / f"{name}.yaml")
     case["request"].update(request_update or {})
     fake = build_fake(case)
-    limits = {"memory_budget_bytes": budget, **limits}
-    if per_field is not None:
-        limits["per_field_consumption"] = per_field
-    pm, request = make_polytope_mars(case, fake, {"limits": limits})
+    pm, request = make_polytope_mars(case, fake, {"limits": {"memory_budget_bytes": budget, **limits}})
     return b"".join(pm.extract_stream(request)), pm, fake
-
-
-def test_the_per_field_path_is_the_default():
-    """``limits.per_field_consumption`` is on, so a multi-group unit streams its fields."""
-    out, pm, _ = run("efas_bbox_multiparam", per_field=None)
-    assert out == expected_bytes("efas_bbox_multiparam")
-    assert pm.timings["unit_source"] == "get_iter"
-
-
-def test_the_whole_unit_path_is_the_opt_out():
-    out, pm, _ = run("efas_bbox_multiparam", per_field=False)
-    assert out == expected_bytes("efas_bbox_multiparam")
-    assert pm.timings["unit_source"] == "get"
 
 
 def test_a_whole_request_in_one_call_is_consumed_field_by_field():
@@ -177,10 +160,7 @@ def test_a_whole_request_in_one_call_is_consumed_field_by_field():
     ``tests/test_streaming.py::test_large_budget_is_one_unit_for_all_groups``; what this adds is that
     the fields came through ``get_iter`` one at a time.
     """
-    out, pm, fake = run("o1280_bbox_ensemble", per_field=True)
-    if pm.timings["unit_source"] == "get":
-        # a polytope-feature without FDBDatacube.get_iter falls back to fetching the whole unit
-        pytest.skip(f"whole-unit path: get_iter is {has_get_iter()}")
+    out, pm, fake = run("o1280_bbox_ensemble")
     assert out == expected_bytes("o1280_bbox_ensemble")
     assert fake.n_extract_calls == pm.timings["n_units"] == 1
     assert pm.timings["buffered_fields_max"] >= 1
@@ -188,9 +168,7 @@ def test_a_whole_request_in_one_call_is_consumed_field_by_field():
 
 def test_a_unit_whose_groups_are_separate_branches_buffers_one_group():
     """climate-dt hourly fields: one branch per datetime, so a group is complete before the next starts."""
-    out, pm, _ = run("cdt_bbox_sfc", per_field=True)
-    if pm.timings["unit_source"] == "get":
-        pytest.skip(f"whole-unit path: get_iter is {has_get_iter()}")
+    out, pm, _ = run("cdt_bbox_sfc")
     assert out == expected_bytes("cdt_bbox_sfc")
     case = load_case(GOLDEN / "cases" / "cdt_bbox_sfc.yaml")
     params_per_group = len(str(case["request"]["param"]).split("/"))
@@ -225,7 +203,7 @@ def test_only_one_groups_fields_are_alive_at_a_time():
         case = load_case(GOLDEN / "cases" / "efas_bbox_fc_steps.yaml")
         case["request"]["step"] = steps
         fake = build_fake(case)
-        update = {"limits": {"memory_budget_bytes": 10**12, "per_field_consumption": True}}
+        update = {"limits": {"memory_budget_bytes": 10**12}}
         pm, request = make_polytope_mars(case, fake, update)
         for _chunk in pm.extract_stream(request):
             gc.collect()
@@ -233,8 +211,6 @@ def test_only_one_groups_fields_are_alive_at_a_time():
     finally:
         extract_mod.lazy_unit_fields = original
 
-    if pm.timings["unit_source"] == "get":
-        pytest.skip(f"whole-unit path: get_iter is {has_get_iter()}")
     assert pm.timings["n_groups"] == 10 and fake.n_extract_calls == 1
     assert len(live) == 10, "one field per group was streamed"
     assert max(alive) <= 2, f"fields alive at once over the stream: {alive}"
@@ -246,15 +222,7 @@ def test_only_one_groups_fields_are_alive_at_a_time():
 def test_missing_fields_fall_back_the_same_way(missing_mode):
     case = load_case(GOLDEN / "cases" / "o1280_bbox_missing_field.yaml")
     fake = build_fake(case, missing_mode=missing_mode)
-    update = {"limits": {"memory_budget_bytes": 10**12, "per_field_consumption": True}}
+    update = {"limits": {"memory_budget_bytes": 10**12}}
     pm, request = make_polytope_mars(case, fake, update)
     out = b"".join(pm.extract_stream(request))
     assert out == expected_bytes("o1280_bbox_missing_field")
-
-
-def test_unit_field_source_reports_the_path():
-    assert unit_field_source(SimpleNamespace(), enabled=True) == "get"
-    streaming = SimpleNamespace(get_iter=lambda *a, **k: iter(()))
-    assert has_per_field_consumption(streaming)
-    assert unit_field_source(streaming, enabled=True) == "get_iter"
-    assert unit_field_source(streaming, enabled=False) == "get"
