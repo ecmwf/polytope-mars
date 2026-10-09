@@ -17,6 +17,7 @@ import pandas as pd
 __all__ = [
     "LEGACY_WALKERS",
     "normalize_step_value",
+    "referencing_coordinates",
     "parse_step_string",
     "reforecast_stringify",
     "step_timedelta",
@@ -160,6 +161,41 @@ LEGACY_WALKERS = {
     # Encoder.walk_tree_month
     "month": {"exclude": ("latitude", "longitude", "param", "year", "month"), "forecast_date_axes": ()},
 }
+
+#: The coordinate name sets the legacy encoders wrote (the trajectory variant is spelled out below).
+_LATLON = ("latitude", "longitude", "levelist")
+_XYZ = ("x", "y", "z")
+
+
+def referencing_coordinates(domain_type: str, feature_type: str, time_axis: str) -> tuple[str, ...]:
+    """Coordinate names of the collection's reference system, as the legacy encoders wrote them.
+
+    Which of ``latitude/longitude/levelist``, ``x/y/z`` or ``t/x/y/z`` a collection declares follows from
+    the legacy encoder method that served the request rather than from the coordinates themselves, so it
+    is a table over (domain type, feature type, time-axis role) like :data:`LEGACY_WALKERS` above.  The
+    composite axis of every coverage declares the same names.  Preserved quirk 8 in CHANGES.md.
+
+    Shapefile requests arrive here as ``MultiPoint`` with their own feature type, which is how they keep
+    ``x/y/z``.
+    """
+    if domain_type == "Trajectory":
+        return _LATLON if time_axis == "hdate" else ("t", "x", "y", "z")
+    if domain_type == "VerticalProfile":
+        return _LATLON
+    if domain_type == "PointSeries":
+        if time_axis == "step":
+            return _XYZ
+        if time_axis == "month" and feature_type == "position":
+            return _XYZ
+        return _LATLON
+    # MultiPoint
+    if time_axis == "hdate":
+        return _LATLON
+    if time_axis == "date":
+        return _LATLON if feature_type in ("boundingbox", "circle") else _XYZ
+    if time_axis == "month":
+        return _LATLON if feature_type == "circle" else _XYZ
+    return _XYZ
 
 
 def _walker_value(axis: str, value, walker: str):

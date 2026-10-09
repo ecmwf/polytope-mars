@@ -17,6 +17,7 @@ from polytope_mars.api import PolytopeMars
 from polytope_mars.config import PolytopeMarsConfig
 from polytope_mars.encoders import get_encoder, supported_formats
 from polytope_mars.extract import BlockExtractor
+from polytope_mars.legacy_format import referencing_coordinates
 from polytope_mars.param_db import get_params
 from polytope_mars.testing.fake_gribjump import decode_value
 from polytope_mars.testing.golden import build_fake, load_case, make_polytope_mars
@@ -47,6 +48,10 @@ def parsed(data: bytes) -> dict:
 #: binds, so a test can turn "k groups per call" into a budget without counting index ranges.
 BYTES_PER_VALUE = 64
 SIZING = {"bytes_per_value": BYTES_PER_VALUE, "bytes_per_range": 1, "safety_factor": 1.0}
+
+#: The two coordinate name sets of ``legacy_format.referencing_coordinates``
+LATLON = ("latitude", "longitude", "levelist")
+XYZ = ("x", "y", "z")
 
 
 def run(name, budget=None, fake=None, **limits):
@@ -357,6 +362,38 @@ def test_extract_equals_json_dumps_of_stream():
     streamed = b"".join(pm.extract_stream(copy.deepcopy(request)))
     pm, request = make_polytope_mars(c)
     assert json.dumps(pm.extract(request)).encode() == streamed
+
+
+@pytest.mark.parametrize(
+    "domain,feature,role,coords",
+    [
+        ("MultiPoint", "boundingbox", "date", LATLON),
+        ("MultiPoint", "circle", "month", LATLON),
+        ("MultiPoint", "polygon", "hdate", LATLON),
+        ("MultiPoint", "polygon", "date", XYZ),
+        ("MultiPoint", "polygon", "step", XYZ),
+        ("MultiPoint", "shapefile", "date", XYZ),
+        ("MultiPoint", "boundingbox", "month", XYZ),
+        ("PointSeries", "timeseries", "date", LATLON),
+        ("PointSeries", "timeseries", "step", XYZ),
+        ("PointSeries", "position", "month", XYZ),
+        ("VerticalProfile", "verticalprofile", "date", LATLON),
+        ("Trajectory", "trajectory", "hdate", LATLON),
+        ("Trajectory", "trajectory", "date", ("t", "x", "y", "z")),
+    ],
+)
+def test_the_referencing_coordinates_of_each_legacy_encoder(domain, feature, role, coords):
+    """Preserved quirk 8: the names a collection declares follow the legacy encoder that served it."""
+    assert referencing_coordinates(domain, feature, role) == coords
+
+
+def test_the_header_carries_the_referencing_coordinates():
+    """covjsonkit writes what the header says, so the rule lives here and not in the encoder."""
+    doc = parsed(run("cdt_polygon_sfc")[0])  # a polygon on the step time axis: x/y/z
+    assert doc["referencing"][0]["coordinates"] == list(XYZ)
+    assert doc["coverages"][0]["domain"]["axes"]["composite"]["coordinates"] == list(XYZ)
+    doc = parsed(run("efas_bbox_multiparam")[0])  # a class=ce box: latitude/longitude/levelist
+    assert doc["referencing"][0]["coordinates"] == list(LATLON)
 
 
 def test_max_points_per_field_is_enforced_before_slicing():

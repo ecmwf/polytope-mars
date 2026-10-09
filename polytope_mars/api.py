@@ -24,6 +24,7 @@ from .features.position import Position
 from .features.shpfile import Shapefile
 from .features.timeseries import TimeSeries
 from .features.verticalprofile import VerticalProfile
+from .legacy_format import referencing_coordinates
 from .limits import (
     estimate_points_per_field,
     estimate_tree_branches,
@@ -233,6 +234,7 @@ class PolytopeMars:
             time_axis=role,
             parameters=build_parameters(ids, param_db),
             mars_metadata=mars_metadata,
+            referencing_coordinates=referencing_coordinates(domain_type, feature_type, role),
             extra=extra,
         )
 

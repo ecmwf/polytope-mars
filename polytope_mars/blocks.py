@@ -48,6 +48,9 @@ class RequestHeader:
     parameters: tuple[ParamInfo, ...]
     #: request keys common to all coverages, insertion order preserved
     mars_metadata: dict[str, str]
+    #: coordinate names of the collection's reference system, and of every coverage's composite axis
+    #: (``polytope_mars.legacy_format.referencing_coordinates``)
+    referencing_coordinates: tuple[str, ...]
     #: encoder-specific knobs (e.g. legacy variant selection); see ``polytope_mars.extract``
     extra: dict = field(default_factory=dict)
 

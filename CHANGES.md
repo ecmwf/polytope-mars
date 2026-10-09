@@ -832,6 +832,13 @@ what the repo contains.
   the attributes (covjsonkit `CHANGES.md`), and the tensogram encoder derives a tensor's `point_offset`
   from its own slicing of the block. A producer that splits a group's points over several consecutive
   blocks still writes the same bytes, which covjsonkit's tests pin.
+- **`RequestHeader.referencing_coordinates`** (new) carries the coordinate names of the collection's
+  reference system and of every coverage's composite axis:
+  `legacy_format.referencing_coordinates(domain_type, feature_type, time_axis)`, a table over the legacy
+  encoder methods beside `LEGACY_WALKERS`. It was covjsonkit's `legacy_referencing`, the one place where
+  the encoder reasoned about feature types rather than about blocks (covjsonkit `CHANGES.md`); preserved
+  quirk 8 is now stated in one place, in the repo that owns the rest of the legacy output rules.
+  `tests/test_streaming.py` pins all thirteen (domain, feature, role) outcomes.
 
 ## One way through the extraction loop
 
