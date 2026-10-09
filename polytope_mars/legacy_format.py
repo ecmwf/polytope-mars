@@ -3,7 +3,8 @@
 The streaming pipeline computes the coverage ``t`` values and ``mars:metadata`` in polytope-mars
 (:mod:`polytope_mars.coverage_plan`); these helpers are ports of the covjsonkit functions that
 produced those strings and numbers, so the output stays byte-identical.  Odd results (space-separated
-datetimes on the ``_step`` path, ``int`` realization, ...) are preserved on purpose; see CHANGES.md.
+datetimes on the ``_step`` path, ``int`` realization, ...) are preserved on purpose; ``tests/golden/README.md``
+lists them.
 """
 
 from __future__ import annotations
@@ -173,7 +174,7 @@ def referencing_coordinates(domain_type: str, feature_type: str, time_axis: str)
     Which of ``latitude/longitude/levelist``, ``x/y/z`` or ``t/x/y/z`` a collection declares follows from
     the legacy encoder method that served the request rather than from the coordinates themselves, so it
     is a table over (domain type, feature type, time-axis role) like :data:`LEGACY_WALKERS` above.  The
-    composite axis of every coverage declares the same names.  Preserved quirk 8 in CHANGES.md.
+    composite axis of every coverage declares the same names (quirk 8 in ``tests/golden/README.md``).
 
     Shapefile requests arrive here as ``MultiPoint`` with their own feature type, which is how they keep
     ``x/y/z``.

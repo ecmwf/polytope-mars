@@ -140,8 +140,8 @@ range), without the safety factor. Python MB = `128 x points`.
   polytope-feature would take a global HEALPix field from 857 MB to ~102 MB: **a required follow-up** if
   whole-world HEALPix fields are to be served in one call.
 - No request measured here asks for the same grid index from two different latitude nodes
-  (`cross_node_duplicates` false), including boxes that wrap past the longitude seam, so latitude bands can
-  be prepared independently (see "Preparing band by band" in CHANGES.md).
+  (`cross_node_duplicates` false), including boxes that wrap past the longitude seam, so latitude bands could
+  be prepared independently (the banded extraction this once supported is gone: a field is never split).
 - Counting the ranges walks every point once, like `prepare`: 0.4 s for the Danube box, 7 s for the HEALPix
   Europe box, **398 s for a global HEALPix field** (`prepare` itself takes 402 s for it). Planning a
   whole-world HEALPix request therefore doubles its slice-time cost; polytope-feature returning the counts
@@ -537,8 +537,8 @@ subprocess each.  A bulk node holds `coordinates`
 nodes and the longitude leaf arrays; `tree MB` is a structural estimate (`getsizeof` of the nodes plus
 the arrays' `nbytes`, views counted once), RSS is what the process actually holds.
 
-The `fold off` rows were measured while `bulk_grid_leaves` could still be turned off (polytope
-`CHANGES.md`); the tool now measures the folded tree only, which is the `on` row of each pair.
+The `fold off` rows were measured while polytope-feature could still skip the fold of the spatial rows; the
+tool now measures the folded tree only, which is the `on` row of each pair.
 
 | request | fold | sub-trees | points | tree MB | tree B/point | RSS after slice | RSS after prepare | peak |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -620,7 +620,7 @@ slice per datetime, while the same request with `date` and `time` as separate co
 one of each in total. The same request measured both ways, `python tools/measure_memory.py --run
 tree_healpix1024_europe_24h_fold_on` and `--run stream_healpix1024_europe_24fields_1_5GiB`
 (climate-dt HEALPix-1024, Europe box, 24 hourly fields of 479,865 points; the fe-worker un-merges the
-axes for every feature type of these datasets, see `CHANGES.md`):
+axes for every feature type of these datasets):
 
 | date/time axes | sub-trees | points in the tree | `slice` | `prepare` | prepared tree | peak RSS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |

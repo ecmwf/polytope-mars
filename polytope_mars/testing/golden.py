@@ -16,7 +16,7 @@ A case file (YAML or JSON) has the keys:
 ``description`` (optional)
     free text.
 ``fixes`` (optional)
-    numbers of the legacy defects (polytope-mars CHANGES.md) this branch fixes for the case; its expected
+    numbers of the legacy defects (``tests/golden/README.md``) fixed for the case; its expected
     bytes are then ``expected_fixed/<case>.covjson`` instead of the oracle ``expected/<case>.covjson``.
 ``expect_error`` (optional)
     ``{type, match}``: extraction raises (``legacy_error`` records what the oracle raised for fixed cases).
