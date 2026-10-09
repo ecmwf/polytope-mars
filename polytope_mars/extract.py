@@ -51,7 +51,7 @@ from typing import Any, Iterator
 
 import numpy as np
 
-from . import bulk_tree
+from . import spatial_node
 from .blocks import (
     CoordsBlock,
     FieldGroup,
@@ -147,18 +147,18 @@ def slice_request(api, preq):
 
 # --- reading coordinates and values from (prepared / filled) trees ---------------------------------------
 #
-# Every spatial sub-tree of a prepared tree is one array-backed bulk node (:mod:`polytope_mars.bulk_tree`):
+# Every spatial sub-tree of a prepared tree is one array-backed spatial node (:mod:`polytope_mars.spatial_node`):
 # its coordinates, its grid indexes and one result array per field of the call are arrays, so none of the
 # readers below holds anything per point.
 
 
 def _spatial_points(node):
     """``(lat, lon)`` of one spatial sub-tree, in output order (views on the node's coordinates)."""
-    return bulk_tree.coordinates(node)
+    return spatial_node.coordinates(node)
 
 
 def spatial_nodes(info: TreeInfo, branches) -> list:
-    """The bulk spatial nodes of ``branches``, in tree order: one per spatial sub-tree."""
+    """The spatial nodes of ``branches``, in tree order: one per spatial sub-tree."""
     return [child for b in branches for child in spatial_children(info.branches[b].node)]
 
 
@@ -174,7 +174,7 @@ def group_coordinates(info: TreeInfo, branches):
 
 def spatial_counts(info: TreeInfo, branches) -> list:
     """Points per spatial sub-tree over ``branches``, in tree order."""
-    return [bulk_tree.point_count(node) for node in spatial_nodes(info, branches)]
+    return [spatial_node.point_count(node) for node in spatial_nodes(info, branches)]
 
 
 def collect_field_values(tree, key_axes) -> dict:
@@ -184,7 +184,7 @@ def collect_field_values(tree, key_axes) -> dict:
     in key_axes)`` (None for axes absent from a branch).  A field is ``missing`` when gribjump had no
     message for it (every value None); bitmap-missing points come back as NaN.
 
-    A bulk spatial node holds one result array per field of the call, in the ``itertools.product`` order of
+    A spatial node holds one result array per field of the call, in the ``itertools.product`` order of
     the compressed axes above it, which is the order ``keys`` is built in.
     """
     info = analyse_tree(tree)
@@ -192,7 +192,7 @@ def collect_field_values(tree, key_axes) -> dict:
     for branch in info.branches:
         keys = branch_field_keys(branch, key_axes)
         for node in spatial_children(branch.node):
-            results = bulk_tree.field_results(node, len(keys))
+            results = spatial_node.field_results(node, len(keys))
             for key, values in zip(keys, results):
                 chunks.setdefault(key, []).append(values)
     out = {}
@@ -217,7 +217,7 @@ class _Counters:
         self.groups_per_unit_max = 0
         #: fields one ``datacube.get`` fetched at most (what the call cost gribjump)
         self.fields_per_unit_max = 0
-        #: spatial sub-trees (bulk nodes) the request walks
+        #: spatial sub-trees (one array-backed node each) the request walks
         self.n_spatial_subtrees = 0
         self.n_gribjump_calls = 0
         self.n_missing_fields = 0
@@ -261,7 +261,7 @@ class BlockExtractor:
         self.encoder = encoder
         self.counters = _Counters()
         #: gribjump index ranges per spatial sub-tree, counted once per node
-        self.ranges = bulk_tree.RangeCounts()
+        self.ranges = spatial_node.RangeCounts()
 
     # -- datacube --------------------------------------------------------------------------------------
 
@@ -418,7 +418,7 @@ class BlockExtractor:
         handle = self.pm.datacube_factory() if self.pm.datacube_factory is not None else self.pm._default_gribjump()
         options = self.conf.options.model_dump()
         # polytope-feature gives every spatial sub-tree of a prepared tree one array-backed node
-        # (:mod:`polytope_mars.bulk_tree`), which every tree reader here expects: the gribjump index ranges
+        # (:mod:`polytope_mars.spatial_node`), which every tree reader here expects: the gribjump index ranges
         # come from one sort of the whole field's indexes (hundreds instead of hundreds of thousands on
         # HEALPix nested) and nothing of the spatial walk is per point.
         api = Polytope(datacube=handle, options=options, context=self.pm.log_context)
@@ -438,7 +438,7 @@ class BlockExtractor:
     def _prepare(self, datacube, tree, **kwargs):
         """``FDBDatacube.prepare``: the points of (a pruned copy of) ``tree`` in their final order.
 
-        ``prepare`` also folds each spatial sub-tree into one bulk node and is where the request ranges
+        ``prepare`` also folds each spatial sub-tree into one array-backed node and is where the request ranges
         are planned, so after it the tree holds the exact coordinates, grid indexes and range counts the
         extraction is sized and emitted from.  It is also the first point where the tree's size is known
         exactly rather than estimated, so that is where ``limits.max_tree_bytes`` is enforced
@@ -459,7 +459,7 @@ class BlockExtractor:
         branching axes it can read off the request; this is the exact figure, and the backstop for the
         shapes the estimate cannot see (an uncompressed union leaf, an ``ALL`` axis).
         """
-        n_spatial, n_points, n_bytes = bulk_tree.tree_summary(tree)
+        n_spatial, n_points, n_bytes = spatial_node.tree_summary(tree)
         self.pm.timings["tree_bytes"] = n_bytes
         limit = tree_byte_limit(self.conf.limits)
         if limit is None or n_bytes <= limit:
@@ -505,8 +505,8 @@ class BlockExtractor:
     def _group_specs(self, info, plan, groups, sizing: UnitSizing) -> list:
         """One :class:`~polytope_mars.tree_units.GroupSpec` per planned group, in emission order.
 
-        Points and gribjump index ranges are read off the prepared tree's bulk spatial nodes, one entry
-        per spatial sub-tree (:mod:`polytope_mars.bulk_tree`); the sizing turns them into the number of
+        Points and gribjump index ranges are read off the prepared tree's spatial nodes, one entry
+        per spatial sub-tree (:mod:`polytope_mars.spatial_node`); the sizing turns them into the number of
         groups one ``datacube.get`` may fetch.
         """
         axes = plan.group_axes()
@@ -516,7 +516,7 @@ class BlockExtractor:
         for g in groups:
             nodes = spatial_nodes(info, g.branches)
             subtrees.update(id(node) for node in nodes)
-            counts = tuple(bulk_tree.point_count(node) for node in nodes)
+            counts = tuple(spatial_node.point_count(node) for node in nodes)
             n_points = sum(counts)
             n_fields = len(g.params) * len(g.levels or [None])
             range_counts = tuple(ranges.of(node) for node in nodes) if n_points else ()
@@ -539,7 +539,7 @@ class BlockExtractor:
     def _multipoint_source(self, datacube, tree) -> Iterator[Any]:
         """Prepare the whole tree, plan the units on it, and refuse a field that cannot be fetched whole.
 
-        ``prepare`` is what folds the spatial layers into one bulk node per sub-tree and plans the
+        ``prepare`` is what folds the spatial layers into one array-backed node per sub-tree and plans the
         request ranges, so the point counts and range counts the units are sized from come from the
         prepared tree.  A field is never split: when a single field does not fit the budget the request
         is refused (:meth:`_refuse_field`) rather than cut into pieces.
@@ -777,7 +777,7 @@ class BlockExtractor:
         subtrees: set = set()
         for g in groups:
             nodes = spatial_nodes(info, g.branches)
-            points = sum(bulk_tree.point_count(node) for node in nodes)
+            points = sum(spatial_node.point_count(node) for node in nodes)
             if not points:
                 continue
             subtrees.update(id(node) for node in nodes)

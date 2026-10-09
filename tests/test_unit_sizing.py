@@ -4,7 +4,7 @@ The shapes below are the measured ones (MEASUREMENTS.md, ``tools/measure_memory.
 calibrate targets``), so these tests state what a deployed worker will do with a given budget, not
 only that the arithmetic is self-consistent.
 
-Ranges per field are the gaps in a spatial sub-tree's sorted grid indexes (one array-backed bulk node
+Ranges per field are the gaps in a spatial sub-tree's sorted grid indexes (one array-backed spatial node
 per sub-tree), which keeps the HEALPix counts in the thousands even though a ring's pixels are
 scattered over the index space.
 """
@@ -86,7 +86,7 @@ def test_the_python_side_is_one_groups_values_plus_the_fragments():
 
 
 def test_the_points_of_a_call_cost_the_unit_nothing():
-    """Measured: the bulk nodes a call reads its points from are resident for the whole request.
+    """Measured: the spatial nodes a call reads its points from are resident for the whole request.
 
     They are built by ``prepare`` and priced by ``limits.max_tree_bytes`` (half the budget), so the
     number of spatial sub-trees a unit touches does not make its units smaller.

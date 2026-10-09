@@ -453,7 +453,7 @@ def reset_peak_rss():
 def tree_stats(tree):
     """(spatial nodes, spatial points, result values) of a polytope request tree.
 
-    A prepared tree holds one array-backed bulk node per spatial sub-tree; a sliced one holds a latitude
+    A prepared tree holds one array-backed spatial node per spatial sub-tree; a sliced one holds a latitude
     node per grid row, each with its longitude leaves.
     """
     from polytope_feature.datacube.tensor_index_tree import (
@@ -491,7 +491,7 @@ def _array_bytes(obj, seen: set) -> int:
     if isinstance(obj, np.ndarray):
         base = obj.base if obj.base is not None else obj
         if id(base) in seen:
-            return 0  # a view (eg. a bulk grid node's lon_values) or an array already counted
+            return 0  # a view (eg. a spatial node's lon_values) or an array already counted
         seen.add(id(base))
         nbytes: int = getattr(base, "nbytes", 0)
         return nbytes
@@ -684,13 +684,13 @@ def run_stream(grid, request, budget, tree_bytes=None):
 def run_ranges(grid, request):
     """Points and gribjump index ranges of one field, and what they cost in gribjump's buffer.
 
-    No extraction: the counts come from the prepared tree's bulk spatial nodes exactly as the planner
-    reads them (``polytope_mars.bulk_tree``), and the bytes from ``polytope_mars.sizing``.
+    No extraction: the counts come from the prepared tree's spatial nodes exactly as the planner
+    reads them (``polytope_mars.spatial_node``), and the bytes from ``polytope_mars.sizing``.
     """
-    from polytope_mars.bulk_tree import RangeCounts
     from polytope_mars.coverage_plan import analyse_tree
     from polytope_mars.extract import spatial_counts, spatial_nodes
     from polytope_mars.sizing import UnitSizing
+    from polytope_mars.spatial_node import RangeCounts
 
     fake, api, preq = _prepare(grid, request)
     rss0 = rss()
@@ -737,7 +737,7 @@ def run_ranges(grid, request):
 def run_tree(grid, request, axes=None):
     """What a prepared request tree costs resident.
 
-    A bulk node holds ``coordinates`` (16 B/point) and ``indexes`` (8 B/point) of its sub-tree for the
+    A spatial node holds ``coordinates`` (16 B/point) and ``indexes`` (8 B/point) of its sub-tree for the
     whole request: on a request with thousands of sub-trees that is what the tree guard prices, and this
     is where it is measured.  RSS is the number that counts; ``tree_mb`` says where it sits (see
     :func:`tree_bytes`).

@@ -46,7 +46,7 @@ class GroupSpec:
     #: groups of this shape one ``datacube.get`` may fetch (``UnitSizing.max_unit_groups``); 0 when
     #: a single group does not fit and is fetched one (param, level) per call
     max_groups: int = 1
-    #: points per spatial sub-tree of the group, in tree order (one entry per bulk spatial node)
+    #: points per spatial sub-tree of the group, in tree order (one entry per spatial node)
     counts: Any = ()
     #: gribjump index ranges of one field, per spatial sub-tree (parallel to ``counts``)
     range_counts: Any = ()
@@ -72,7 +72,7 @@ class GroupSpec:
 
     @property
     def n_subtrees(self) -> int:
-        """Spatial sub-trees (bulk nodes) of the group."""
+        """Spatial nodes of the group, one per sub-tree."""
         return max(1, len(self.counts))
 
 

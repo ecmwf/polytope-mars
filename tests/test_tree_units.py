@@ -1,7 +1,7 @@
 """Extraction units of several field groups: the planner, the multi-value tree pruning, and the
 compressed-axes order the per-(group, param, level) split relies on.
 
-The split assumes one rule about ``polytope_feature``: a bulk spatial node's ``result`` holds one array
+The split assumes one rule about ``polytope_feature``: a spatial node's ``result`` holds one array
 of its points per field of the branch, the fields in C-order over the branch's compressed axes in tree
 order (root to leaf).  ``FDBDatacube._gribjump_requests`` builds the requests with ``product()`` over
 the leaf path's keys, which ``get_fdb_requests`` inserts while it descends the tree, and
@@ -49,7 +49,7 @@ def prepared(name, monkeypatch, **request_update):
 
 
 def first_spatial_node(tree):
-    """The first bulk spatial node of a tree: one array-backed node per spatial sub-tree."""
+    """The first spatial node of a tree: one array-backed node per spatial sub-tree."""
     branch = analyse_tree(tree).branches[0]
     return spatial_children(branch.node)[0]
 

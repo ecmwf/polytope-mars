@@ -9,8 +9,8 @@ without fetching any data first.
 Terminology:
 
 * a *branch* is a path from the root to a node whose children are spatial; every combination of the
-  branch's (compressed) axis values is one field.  A prepared tree holds one array-backed bulk node per
-  spatial sub-tree (:mod:`polytope_mars.bulk_tree`), so a branch has as many spatial children as it has
+  branch's (compressed) axis values is one field.  A prepared tree holds one array-backed spatial node per
+  spatial sub-tree (:mod:`polytope_mars.spatial_node`), so a branch has as many spatial children as it has
   sub-trees -- usually one -- and nothing below them;
 * *group axes* are the axes whose values distinguish field groups (coverages for MultiPoint); the remaining
   axes inside a group are ``param`` and, unless the plan splits levels into groups, ``levelist``;
@@ -42,9 +42,9 @@ LATITUDE = "latitude"
 
 
 def is_spatial(node) -> bool:
-    """True for a node holding spatial points: a bulk spatial node, a merged lat/lon leaf, a latitude node.
+    """True for a node holding spatial points: an array-backed spatial node, a merged lat/lon leaf, a latitude node.
 
-    Both bulk node kinds subclass ``MergedTensorIndexNode``, so :func:`analyse_tree` stops at them and
+    Both array-backed node kinds subclass ``MergedTensorIndexNode``, so :func:`analyse_tree` stops at them and
     never descends into anything spatial.
     """
     return isinstance(node, MergedTensorIndexNode) or node.axis.name == LATITUDE
@@ -54,7 +54,7 @@ def is_spatial(node) -> bool:
 class Branch:
     #: ((axis, values), ...) from the root's child down to ``node``
     path: tuple
-    #: the node whose children are spatial (one bulk node per spatial sub-tree)
+    #: the node whose children are spatial (one array-backed node per spatial sub-tree)
     node: Any
 
     def axes(self) -> dict:

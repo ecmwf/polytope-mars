@@ -15,11 +15,11 @@ exists upstream but is unreleased, so sizing is done against what is deployed.) 
 
 8 B per value, one mask bit per value, and ``limits.bytes_per_range`` (default 96 B: two vector
 headers plus two heap allocations) per range.  ``n_ranges`` is counted from the prepared tree
-(:mod:`polytope_mars.bulk_tree`), so ``bytes_per_range`` is the only approximation in this term.
+(:mod:`polytope_mars.spatial_node`), so ``bytes_per_range`` is the only approximation in this term.
 ``limits.safety_factor`` multiplies it, and nothing else.
 
 **The request side costs nothing per call.**  Each spatial sub-tree of the prepared tree is one
-array-backed bulk node (:mod:`polytope_mars.bulk_tree`) holding ``coordinates`` (16 B/point) and
+array-backed spatial node (:mod:`polytope_mars.spatial_node`) holding ``coordinates`` (16 B/point) and
 ``indexes`` (8 B/point).  Those arrays are built by ``prepare`` and are resident for the *whole*
 request, not per call, and they are what ``limits.max_tree_bytes`` prices (half the memory budget by
 default, :mod:`polytope_mars.limits`); a call adds only the sort its index ranges come from, which the
@@ -161,7 +161,7 @@ class UnitSizing:
     def call_bytes(self, n_points: int, python_values: int) -> int:
         """Python-side bytes of one call: its live values and the encoder's fragments.
 
-        The points themselves cost nothing here: they live in the prepared tree's bulk nodes, which are
+        The points themselves cost nothing here: they live in the prepared tree's spatial nodes, which are
         resident for the whole request and priced by ``limits.max_tree_bytes`` (see the module doc).
         """
         return self.python_bytes(python_values) + self.fragment_bytes

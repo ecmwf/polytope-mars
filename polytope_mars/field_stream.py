@@ -15,7 +15,7 @@ A single group that does not fit one call is fetched one (param, level) at a tim
 features: those go through ``datacube.get`` and ``collect_field_values``.
 
 ``get_iter`` yields ``(field_path, node_values)``: ``field_path`` the MARS keys of one field as
-strings, ``node_values`` ``[(bulk spatial node, float64 values), ...]`` -- one entry per spatial
+strings, ``node_values`` ``[(spatial node, float64 values), ...]`` -- one entry per spatial
 sub-tree of the field, in tree order, the values in the node's point order -- or ``None`` for a field
 gribjump has no message for.  Which (group, param, level) an item belongs to is
 *not* read off ``field_path`` -- its values are MARS strings while the tree (and the plan) carry
@@ -151,7 +151,7 @@ def branch_field_keys(branch, key_axes) -> list:
     """The key of every field one branch carries, in the order its values arrive.
 
     A branch's fields are the cartesian product of its compressed axes (outermost axis first), which is
-    both the order a filled bulk node's ``result`` arrays come in
+    both the order a filled spatial node's ``result`` arrays come in
     (:func:`~polytope_mars.extract.collect_field_values`) and the order ``get_iter`` yields them in.
     """
     axes = [a for a, _ in branch.path]

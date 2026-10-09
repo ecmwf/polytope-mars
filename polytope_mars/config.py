@@ -89,14 +89,14 @@ class LimitsConfig(ConfigModel):
     #: measured Python-side peak bytes per value held at once (the leaf arrays plus the float64
     #: field copy handed to the encoder), the same constant for every grid
     bytes_per_value: int = 32
-    #: Accepted for configuration compatibility and ignored: the bulk nodes a call reads its points
+    #: Accepted for configuration compatibility and ignored: the spatial nodes a call reads its points
     #: from are resident for the whole request and priced by ``max_tree_bytes``, not per call.
     bytes_per_point_call: Optional[int] = None
     #: bytes one gribjump index range costs in an ``ExtractionResult``: two vector headers plus two
     #: heap allocations, for the values and the bitmap of that range
     bytes_per_range: int = 96
     #: measured bytes per point one spatial sub-tree of the request tree costs, the constant
-    #: ``max_tree_bytes`` is estimated with: 24 B/point of bulk-node arrays after ``prepare``
+    #: ``max_tree_bytes`` is estimated with: 24 B/point of spatial-node arrays after ``prepare``
     #: (``coordinates`` 16 B + ``indexes`` 8 B) plus the row leaves the slicer builds before the fold
     #: (9-16 B/point measured, MEASUREMENTS.md)
     bytes_per_point_tree: int = 40

@@ -539,7 +539,7 @@ latitude bands.
 
 - **Every request is sliced and prepared with one array-backed node per spatial sub-tree** (what
   polytope-feature's `bulk_grid_leaves` introduced and now always does). The spatial walk is
-  :mod:`polytope_mars.bulk_tree`: `node.coordinates` (float64 (N, 2), output order),
+  :mod:`polytope_mars.spatial_node`: `node.coordinates` (float64 (N, 2), output order),
   `node.point_count`, `node.indexes`, one `node.result` array per field of the call. Nothing in the
   extraction holds a Python object per point any more, and `polytope_mars.grid_ranges` (which
   re-derived the ranges the way `FDBDatacube` built them) is gone: the count is
@@ -664,7 +664,7 @@ none of it was visible to the planner.
   `The request tree holds 11516760 grid points in 24 separate branches and costs 277 MB, more than
   the limit of ...; request a smaller area, or fewer dates and times per request`. The exact figure is
   `coordinates.nbytes + indexes.nbytes` summed over the distinct bulk nodes
-  (`polytope_mars.bulk_tree.tree_summary`), and it is the backstop for what the estimate cannot see:
+  (`polytope_mars.spatial_node.tree_summary`), and it is the backstop for what the estimate cannot see:
   a union whose leaf axis stays uncompressed (polygon pieces, tagged points), and axis values the
   request string does not bound (`ALL`, step/time ranges in units the counters do not parse), which
   count as one value each.
@@ -829,8 +829,8 @@ what the repo contains.
 - Gone, with no caller anywhere in the extraction: `extract.mapper_type` (and its `__all__` entry),
   `extract.BlockExtractor._slice_and_prepare`, `coverage_plan._branch_matches`, `Plan.header_extra` and
   `TimeSeriesReforecastPlan.header_extra` (`api.PolytopeMars._build_header` decides the
-  `pointseries_order` quirk where it builds the header), `bulk_tree.tree_bytes` (callers use
-  `tree_summary`), `bulk_tree.RangeCounts.n_counted` and `sizing.UnitSizing.fits_group` (the planner and
+  `pointseries_order` quirk where it builds the header), `spatial_node.tree_bytes` (callers use
+  `tree_summary`), `spatial_node.RangeCounts.n_counted` and `sizing.UnitSizing.fits_group` (the planner and
   its tests ask `max_unit_groups(...) >= 1`).
 
 ## Six golden cases for the coverage plans that had none
