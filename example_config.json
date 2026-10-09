@@ -107,12 +107,10 @@
         "max_tree_bytes": null,
         "memory_budget_bytes": 1610612736,
         "bytes_per_value": 32,
-        "bytes_per_point_call": 32,
         "bytes_per_range": 96,
         "bytes_per_point_tree": 40,
         "safety_factor": 1.5,
         "max_values_per_unit": 256000000,
-        "max_fields_per_call": 1024,
-        "per_field_consumption": true
+        "max_fields_per_call": 1024
     }
 }

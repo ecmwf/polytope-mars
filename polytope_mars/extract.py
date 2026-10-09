@@ -234,8 +234,6 @@ class _Counters:
         self.estimated_unit_bytes_max = 0
         #: fields of one unit held on the Python heap at once
         self.buffered_fields_max = 0
-        #: "per_call" or "per_group": how often a unit pays for building its gribjump request ranges
-        self.request_side = "per_call"
 
     def note_get(self, seconds: float, n_fields: int = 0) -> None:
         """One unit fetched: its duration into the total, the maximum and its bucket."""
@@ -379,14 +377,13 @@ class BlockExtractor:
         for name, count in c.get_buckets.items():
             timings[f"units_get_{name}"] = count
         timings["get_ms_max"] = round(c.get_seconds_max * 1000, 3)
-        timings["request_side"] = c.request_side
         timings["buffered_fields_max"] = c.buffered_fields_max
         timings["max_rss_bytes"] = max_rss_bytes()
         n_cov = getattr(self.encoder, "n_coverages", None)
         timings["n_coverages"] = n_cov if n_cov is not None else c.n_groups
         logger.info(
             "%s: extracted %d groups in %d units (<= %d groups / %d fields per unit,"
-            " %d gribjump calls, %d spatial sub-trees, %d ranges per field, request side %s);"
+            " %d gribjump calls, %d spatial sub-trees, %d ranges per field);"
             " estimated <= %.1f MB per unit,"
             " peak RSS %.1f MB; get %.1f ms (max %.1f ms per unit, %s), encode %.1f ms",
             self.pm.id,
@@ -397,7 +394,6 @@ class BlockExtractor:
             c.n_gribjump_calls,
             c.n_spatial_subtrees,
             c.n_ranges,
-            c.request_side,
             c.estimated_unit_bytes_max / 1e6,
             timings["max_rss_bytes"] / 1e6,
             timings["get_ms"],
@@ -512,17 +508,9 @@ class BlockExtractor:
         Points and gribjump index ranges are read off the prepared tree's bulk spatial nodes, one entry
         per spatial sub-tree (:mod:`polytope_mars.bulk_tree`); the sizing turns them into the number of
         groups one ``datacube.get`` may fetch.
-
-        Whether the groups share a spatial sub-tree decides how often one call pays the request side
-        (:meth:`~polytope_mars.sizing.UnitSizing.request_bytes`): the group axes of an EFAS ensemble
-        (``number``, ``step``) are compressed inside one branch, so a unit of any size holds one node's
-        arrays, while climate-dt's merged date/time axis gives every hourly field its own branch, so a
-        unit of ``k`` groups holds ``k`` of them.
         """
         axes = plan.group_axes()
         ranges = self.ranges
-        own_branch = self._groups_own_their_branches(groups)
-        self.counters.request_side = "per_group" if own_branch else "per_call"
         specs = []
         subtrees: set = set()
         for g in groups:
@@ -539,28 +527,14 @@ class BlockExtractor:
                 GroupSpec(
                     key=key,
                     shape=(n_points, tuple(g.params), tuple(g.levels)),
-                    max_groups=sizing.max_unit_groups(
-                        n_points, n_fields, sum(range_counts), n_subtrees=len(counts), own_branch=own_branch
-                    ),
+                    max_groups=sizing.max_unit_groups(n_points, n_fields, sum(range_counts)),
                     counts=counts,
                     range_counts=range_counts,
-                    own_branch=own_branch,
                 )
             )
         self.counters.n_ranges = max([s.n_ranges for s in specs], default=0)
         self.counters.n_spatial_subtrees = len(subtrees)
         return specs
-
-    @staticmethod
-    def _groups_own_their_branches(groups) -> bool:
-        """True when no two groups share a spatial sub-tree, so each brings its own request side."""
-        seen: set = set()
-        for g in groups:
-            for b in g.branches:
-                if b in seen:
-                    return False
-                seen.add(b)
-        return True
 
     def _multipoint_source(self, datacube, tree) -> Iterator[Any]:
         """Prepare the whole tree, plan the units on it, and refuse a field that cannot be fetched whole.
@@ -576,9 +550,7 @@ class BlockExtractor:
         sizing = self._sizing()
         specs = self._group_specs(info, plan, groups, sizing)
         for spec in specs:
-            if spec.max_groups < 1 and not sizing.fits_field(
-                spec.n_points, spec.n_fields, spec.n_ranges, n_subtrees=spec.n_subtrees
-            ):
+            if spec.max_groups < 1 and not sizing.fits_field(spec.n_points, spec.n_fields, spec.n_ranges):
                 self._refuse_field(sizing, spec)
         return self._multipoint_blocks(datacube, tree, info, plan, groups, specs, sizing)
 
@@ -589,7 +561,7 @@ class BlockExtractor:
         be served at all.  ``limits.max_points_per_field`` is the explicit cap that refuses such a
         request before it is even sliced; this is the backstop for the requests it does not cover.
         """
-        needed = sizing.field_bytes(spec.n_points, spec.n_ranges, spec.n_fields, spec.n_subtrees)
+        needed = sizing.field_bytes(spec.n_points, spec.n_ranges, spec.n_fields)
         raise ValueError(
             f"One field of this request covers {spec.n_points} grid points and needs about "
             f"{needed / 1e6:.0f} MB to extract, more than the memory budget of {sizing.budget} bytes; "
@@ -619,17 +591,14 @@ class BlockExtractor:
                 # fetching its field whole (checked to fit by :meth:`_multipoint_source`).
                 self.counters.estimated_unit_bytes_max = max(
                     self.counters.estimated_unit_bytes_max,
-                    sizing.field_bytes(spec.n_points, spec.n_ranges, spec.n_fields, spec.n_subtrees),
+                    sizing.field_bytes(spec.n_points, spec.n_ranges, spec.n_fields),
                 )
                 blocks = self._field_units(datacube, tree, info, plan, g, index, spec)
             yield from self._emit_group(blocks)
 
     def _note_estimate(self, sizing: UnitSizing, n_fields: int, spec, n_groups: int = 1) -> None:
         """Record what the planner thinks the next ``datacube.get`` costs (observability only)."""
-        branches = spec.n_subtrees * (n_groups if spec.own_branch else 1)
-        estimate = sizing.estimate_bytes(
-            n_fields, spec.n_points, spec.n_ranges, group_fields=spec.n_fields, n_branches=branches
-        )
+        estimate = sizing.estimate_bytes(n_fields, spec.n_points, spec.n_ranges, group_fields=spec.n_fields)
         self.counters.estimated_unit_bytes_max = max(self.counters.estimated_unit_bytes_max, estimate)
 
     def _emit_group(self, blocks) -> Iterator[Any]:

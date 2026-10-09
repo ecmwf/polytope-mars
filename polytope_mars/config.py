@@ -57,13 +57,11 @@ class LimitsConfig(ConfigModel):
     The unit sizing (:mod:`polytope_mars.sizing`) plans a unit of ``k`` field groups when
 
         ``buffer_cpp(unit) x safety_factor``
-        ``  + bytes_per_point_call x n_points x n_subtrees``
         ``  + bytes_per_value x python_values``
         ``  + 2 x the encoder's max_fragment_bytes  <=  memory_budget_bytes``
 
     with ``buffer_cpp(unit) = n_fields x (8 x n_points + n_points / 8 + bytes_per_range x
-    n_ranges)`` (gribjump's own residency, the only term the safety factor applies to),
-    ``n_subtrees`` the spatial sub-trees the call asks for (one array-backed bulk node each) and
+    n_ranges)`` (gribjump's own residency, the only term the safety factor applies to) and
     ``python_values`` the values the Python side holds at once: **one field group**, because a unit's
     fields arrive one at a time (``FDBDatacube.get_iter``).  Two
     hard caps apply on top, independent of the budget: ``max_fields_per_call`` and
@@ -73,7 +71,7 @@ class LimitsConfig(ConfigModel):
     (param, level) per call, and a request one field of which does not fit at all is refused
     (``max_points_per_field`` is the explicit, pre-slicing form of that refusal).
 
-    ``bytes_per_value``, ``bytes_per_point_call`` and ``bytes_per_range`` are measured
+    ``bytes_per_value`` and ``bytes_per_range`` are measured
     (MEASUREMENTS.md, ``python tools/measure_memory.py calibrate``); only
     ``memory_budget_bytes`` has to be set per deployment.
     """
@@ -91,11 +89,9 @@ class LimitsConfig(ConfigModel):
     #: measured Python-side peak bytes per value held at once (the leaf arrays plus the float64
     #: field copy handed to the encoder), the same constant for every grid
     bytes_per_value: int = 32
-    #: measured Python-side bytes per point of every spatial sub-tree a call asks for, paid once
-    #: however many fields it asks for: the bulk node's own arrays (coordinates 16 B, grid indexes
-    #: 8 B), which ``prepare`` builds and the call holds throughout, plus the sort its index ranges
-    #: come from
-    bytes_per_point_call: int = 32
+    #: Accepted for configuration compatibility and ignored: the bulk nodes a call reads its points
+    #: from are resident for the whole request and priced by ``max_tree_bytes``, not per call.
+    bytes_per_point_call: Optional[int] = None
     #: bytes one gribjump index range costs in an ``ExtractionResult``: two vector headers plus two
     #: heap allocations, for the values and the bitmap of that range
     bytes_per_range: int = 96
@@ -120,7 +116,6 @@ class LimitsConfig(ConfigModel):
     def _check_limits(self):
         for name in (
             "bytes_per_value",
-            "bytes_per_point_call",
             "bytes_per_range",
             "bytes_per_point_tree",
             "safety_factor",
@@ -134,11 +129,9 @@ class LimitsConfig(ConfigModel):
             raise ValueError(f"limits.max_tree_bytes must be positive or null, got {self.max_tree_bytes!r}")
         if self.max_fields_per_call < 1:
             raise ValueError(f"limits.max_fields_per_call must be positive, got {self.max_fields_per_call!r}")
-        if self.per_field_consumption is not None:
-            logging.debug(
-                "polytope-mars config: 'limits.per_field_consumption' is ignored; a unit's fields are "
-                "always consumed one at a time"
-            )
+        for name in ("per_field_consumption", "bytes_per_point_call"):
+            if getattr(self, name) is not None:
+                logging.debug("polytope-mars config: 'limits.%s' is ignored", name)
         return self
 
 

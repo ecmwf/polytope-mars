@@ -15,11 +15,12 @@ TOOL = Path(__file__).resolve().parents[1] / "tools" / "measure_memory.py"
 SCENARIO = "stream_efas_danube_10steps_budget200MB"
 
 
-def measure(budget) -> dict:
+def measure(budget, tree_bytes=None) -> dict:
     """The measurement's JSON line, or ``{"error": [...]}`` when the run refused the request."""
     arg = "none" if budget is None else str(budget)
+    extra = [] if tree_bytes is None else ["--tree-bytes", str(tree_bytes)]
     proc = subprocess.run(
-        [sys.executable, str(TOOL), "--run", SCENARIO, "--budget", arg],
+        [sys.executable, str(TOOL), "--run", SCENARIO, "--budget", arg] + extra,
         capture_output=True,
         text=True,
         env=dict(os.environ),
@@ -55,12 +56,12 @@ def test_unbudgeted_run_produces_the_same_output_size():
 
 
 def test_a_budget_smaller_than_one_field_refuses_the_request():
-    """A field is fetched whole: 60 MB cannot serve a 634,550-point field (65 MB), and nothing is split.
+    """A field is fetched whole: 40 MB cannot serve a 634,550-point field (45 MB), and nothing is split.
 
-    60 MB rather than 20 MB because the tree guard comes first: the request's tree (15 MB measured,
-    25 MB estimated) has to fit ``max_tree_bytes``, half the budget, before the field is sized at all.
+    ``max_tree_bytes`` is set explicitly because the tree guard comes first and would answer at this
+    budget: the request's tree is 15 MB measured, 25 MB estimated, against half of 40 MB.
     """
-    res = measure(60_000_000)
+    res = measure(40_000_000, tree_bytes=30_000_000)
     assert "error" in res, json.dumps(res)
     assert any("One field of this request covers 634550 grid points" in line for line in res["error"]), res
 

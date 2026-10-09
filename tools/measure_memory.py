@@ -15,12 +15,14 @@ Groups:
 * ``e2e``: peak RSS of ``PolytopeMars.extract`` + ``json.dumps(...).encode()`` per value (the
   fe-worker's buffered path; run against a legacy checkout it measures the legacy pipeline).
 * ``stream``: peak RSS growth of ``PolytopeMars.extract_stream`` with the output discarded, for
-  several ``limits.memory_budget_bytes``.  ``--budget N`` (bytes, or ``none``) overrides the budget.
+  several ``limits.memory_budget_bytes``.  ``--budget N`` (bytes, or ``none``) overrides the budget and
+  ``--tree-bytes N`` ``limits.max_tree_bytes`` (half the budget by default), so that the field guard and
+  the tree guard can be exercised one at a time.
 * ``ranges``: points and gribjump index ranges of one field, and what they cost in gribjump's buffer.
 * ``tree``: what a prepared tree costs resident with the spatial fold off and on (its arrays are
   16 + 8 B/point per sub-tree against the row tree's ~9 B/point).
-* ``calibrate``: peak of one unit of n fields on the per-field path, against the exact gribjump
-  term, plus the least-squares fit of ``limits.bytes_per_point_call`` and ``limits.bytes_per_value``.
+* ``calibrate``: peak of one unit of n fields, against the exact gribjump term, plus the
+  least-squares fit of ``limits.bytes_per_value``.
 * ``targets``: what the planner does with the deployment's largest requests at a 1.5 and a 1.8 GiB
   budget (3 and 3.6 GiB pods) -- fields per call and call count, without fetching anything.
 """
@@ -214,7 +216,7 @@ RANGE_SCENARIOS = {
     "ranges_efas_whole_domain_bbox": ("efas_local_regular", efas(bbox([[72.24, -25.24], [22.76, 50.24]]))),
 }
 
-#: calibration of ``limits.bytes_per_point_call`` and ``limits.bytes_per_value``: one unit of n
+#: calibration of ``limits.bytes_per_value``: one unit of n
 #: fields, consumed field by field (the production path), per request shape.  ``axes`` are the group
 #: axes a unit may batch, outermost first: the builder fills the first one, then multiplies by the
 #: next, so "48 fields" is 48 hourly HEALPix groups (24 times x 2 dates) or 12 Volga groups of 4
@@ -631,13 +633,15 @@ def run_e2e(grid, request):
     }
 
 
-def run_stream(grid, request, budget):
+def run_stream(grid, request, budget, tree_bytes=None):
     from polytope_mars.api import PolytopeMars
     from polytope_mars.testing import fake_gribjump_config_dict, make_fake_gribjump
 
     fake = make_fake_gribjump(grid)
     config = fake_gribjump_config_dict(grid, request)
     config["limits"] = {"memory_budget_bytes": budget}
+    if tree_bytes is not None:
+        config["limits"]["max_tree_bytes"] = tree_bytes
     pm = PolytopeMars(config, datacube_factory=lambda: fake)
     rss0 = rss()
     reset_peak_rss()
@@ -783,8 +787,8 @@ def run_calibrate(name, n_fields):
     costs, i.e. gribjump's buffer plus the Python terms the sizing has to cover.
 
     ``cpp_mb`` is the exact gribjump term of that call (no safety factor) and ``residual_mb`` what
-    the Python terms (``bytes_per_point_call`` x points + ``bytes_per_value`` x one group's values
-    + the encoder's fragments) must account for.  Re-run after polytope-feature changes how
+    the Python terms (``bytes_per_value`` x one group's values + the encoder's fragments) must
+    account for.  Re-run after polytope-feature changes how
     requests are built or results consumed, and after covjsonkit changes its fragment size.
     """
     from polytope_mars.api import PolytopeMars
@@ -836,8 +840,6 @@ def run_calibrate(name, n_fields):
     group_fields = min(shape["group_fields"], n_fields)
     sizing = UnitSizing(safety_factor=1.0)
     cpp = sizing.buffer_bytes(n_fields, points, pm.timings["n_ranges"])
-    # how often this call pays the request side: once, or once per group (groups in own branches)
-    branches = n_fields // group_fields if pm.timings["request_side"] == "per_group" else 1
     return {
         "shape": name,
         "fields": n_fields,
@@ -845,8 +847,6 @@ def run_calibrate(name, n_fields):
         "points": points,
         "values": n_vals,
         "group_values": group_fields * points,
-        "branches": branches,
-        "request_side": pm.timings["request_side"],
         "n_ranges": pm.timings["n_ranges"],
         "n_units": pm.timings["n_units"],
         "estimated_unit_mb": round(pm.timings["estimated_unit_bytes_max"] / 1e6, 1),
@@ -927,22 +927,14 @@ def run_targets(name):
         sized = [
             dataclasses.replace(
                 s,
-                max_groups=sizing.max_unit_groups(
-                    s.n_points, s.n_fields, s.n_ranges, n_subtrees=s.n_subtrees, own_branch=s.own_branch
-                ),
+                max_groups=sizing.max_unit_groups(s.n_points, s.n_fields, s.n_ranges),
             )
             for s in specs
         ]
         units = plan_units(sized)
         groups_max = max(length for _, length in units)
         fields_max = groups_max * first.n_fields
-        estimate = sizing.estimate_bytes(
-            fields_max,
-            first.n_points,
-            first.n_ranges,
-            group_fields=first.n_fields,
-            n_branches=first.n_subtrees * (groups_max if first.own_branch else 1),
-        )
+        estimate = sizing.estimate_bytes(fields_max, first.n_points, first.n_ranges, group_fields=first.n_fields)
         plans[f"{budget / 1024 ** 3:.2f}GiB"] = {
             "groups_per_call": groups_max,
             "fields_per_call": fields_max,
@@ -958,13 +950,12 @@ def run_targets(name):
         "subtrees_per_group": first.n_subtrees,
         "subtrees": captured["subtrees"],
         "plan_s": round(t_plan, 1),
-        "request_side": "per_group" if first.own_branch else "per_call",
         "plans": plans,
         "peak_rss_mib": round(peak_rss() / MiB, 1),
     }
 
 
-def run_one(name, budget: object = "default"):
+def run_one(name, budget: object = "default", tree_bytes=None):
     if name in RANGE_SCENARIOS:
         grid, request = RANGE_SCENARIOS[name]
         return run_ranges(grid, request)
@@ -976,7 +967,7 @@ def run_one(name, budget: object = "default"):
         return run_calibrate(*CALIBRATE_SCENARIOS[name])
     if name in STREAM_SCENARIOS:
         kind, grid, request, default_budget = STREAM_SCENARIOS[name]
-        return run_stream(grid, request, default_budget if budget == "default" else budget)
+        return run_stream(grid, request, default_budget if budget == "default" else budget, tree_bytes)
     kind, grid, request = SCENARIOS[name]
     if kind == "e2e":
         return run_e2e(grid, request)
@@ -1088,7 +1079,6 @@ TABLE_COLUMNS = {
         "ranges",
         "fields_per_group",
         "subtrees_per_group",
-        "request_side",
         "plan_s",
         "plans",
     ],
@@ -1098,10 +1088,9 @@ TABLE_COLUMNS = {
 def _fit_calibration(rows) -> str:
     """Least squares of ``peak growth - the exact gribjump term`` over the Python-side terms.
 
-    Model: ``residual = bytes_per_point_call x points + bytes_per_value x group_values +
-    fragment_bytes``, with ``fragment_bytes`` fixed at the encoder's (2 x 8 MiB), so the fit has
-    the two unknowns the config has.  Also reports, per row, what the measured growth demands of
-    each constant when the other one is at its default -- the defaults must cover the worst row.
+    Model: ``residual = bytes_per_value x group_values + fragment_bytes``, with ``fragment_bytes``
+    fixed at the encoder's (2 x 8 MiB), so the fit has the one unknown the config has.  Also reports,
+    per row, what the measured growth demands of it -- the default must cover the worst row.
     """
     import numpy as np
 
@@ -1111,40 +1100,26 @@ def _fit_calibration(rows) -> str:
     usable = [r for _, r in rows if "residual_mb" in r]
     if not usable:
         return ""
-    # The request side is paid once per branch of the call (MEASUREMENTS.md), so that is the column
-    # of the design matrix, not the points of the call.
-    points = np.array([r["points"] * r.get("branches", 1) for r in usable], dtype=float)
     group_values = np.array([r["group_values"] for r in usable], dtype=float)
     residual = np.array([r["residual_mb"] * 1e6 - DEFAULT_FRAGMENT_BYTES for r in usable], dtype=float)
-    design = np.stack([points, group_values], axis=1)
-    (bpc, bpv), *_ = np.linalg.lstsq(design, residual, rcond=None)
+    design = group_values[:, None]
+    (bpv,), *_ = np.linalg.lstsq(design, residual, rcond=None)
 
     limits = PolytopeMarsConfig().limits
     default = UnitSizing.from_limits(limits)
     lines = [
         f"Least squares over {len(usable)} runs (residual = growth - exact gribjump term - 16 MiB of"
-        f" fragments): bytes_per_point_call = {bpc:.1f}, bytes_per_value = {bpv:.1f}",
+        f" fragments): bytes_per_value = {bpv:.1f}",
         "",
-        "| run | request points | group values | residual MB | needs B/point_call | needs B/value |"
-        " estimate MB | covered |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| run | points | group values | residual MB | needs B/value | estimate MB | covered |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for (name, _), r in zip([row for row in rows if "residual_mb" in row[1]], usable):
-        request_points = r["points"] * r.get("branches", 1)
-        rest_value = default.bytes_per_value * r["group_values"] + DEFAULT_FRAGMENT_BYTES
-        rest_point = default.bytes_per_point_call * request_points + DEFAULT_FRAGMENT_BYTES
-        need_point = (r["residual_mb"] * 1e6 - rest_value) / max(request_points, 1)
-        need_value = (r["residual_mb"] * 1e6 - rest_point) / max(r["group_values"], 1)
-        estimate = default.estimate_bytes(
-            r["fields"],
-            r["points"],
-            r["n_ranges"],
-            group_fields=r["group_fields"],
-            n_branches=r.get("branches", 1),
-        )
+        need_value = (r["residual_mb"] * 1e6 - DEFAULT_FRAGMENT_BYTES) / max(r["group_values"], 1)
+        estimate = default.estimate_bytes(r["fields"], r["points"], r["n_ranges"], group_fields=r["group_fields"])
         lines.append(
-            f"| {name} | {request_points:,} | {r['group_values']:,} | {r['residual_mb']} |"
-            f" {need_point:.1f} | {need_value:.1f} | {estimate / 1e6:.1f} |"
+            f"| {name} | {r['points']:,} | {r['group_values']:,} | {r['residual_mb']} |"
+            f" {need_value:.1f} | {estimate / 1e6:.1f} |"
             f" {'yes' if estimate >= r['growth_mb'] * 1e6 else 'NO'} |"
         )
     return "\n".join(lines)
@@ -1176,7 +1151,14 @@ def main(argv):
                 budget = None if value == "none" else int(value)
             except ValueError:
                 raise SystemExit(f"--budget takes a byte count or 'none', got {value!r}") from None
-        print(json.dumps(run_one(argv[1], budget)), flush=True)
+        tree_bytes = None
+        if "--tree-bytes" in argv:
+            value = argv[argv.index("--tree-bytes") + 1]
+            try:
+                tree_bytes = int(value)
+            except ValueError:
+                raise SystemExit(f"--tree-bytes takes a byte count, got {value!r}") from None
+        print(json.dumps(run_one(argv[1], budget, tree_bytes)), flush=True)
         # Skip interpreter teardown: the pygribjump/eckit libraries can segfault at exit.
         os._exit(0)
     groups = argv or ["slice", "get", "e2e", "stream"]

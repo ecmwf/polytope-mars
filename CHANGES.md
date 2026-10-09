@@ -831,6 +831,35 @@ what the repo contains.
   `tree_summary`), `bulk_tree.RangeCounts.n_counted` and `sizing.UnitSizing.fits_group` (the planner and
   its tests ask `max_unit_groups(...) >= 1`).
 
+## What a unit is charged for
+
+- **`limits.bytes_per_point_call` is gone** (accepted and ignored, with a DEBUG line). It charged a unit
+  32 B for every point of every spatial sub-tree it touches, which is the bulk nodes' own arrays
+  (`coordinates` 16 B + `indexes` 8 B per point). Those arrays belong to the *request*: `prepare` builds
+  them once and they are resident until the request ends, which is what `limits.max_tree_bytes` prices
+  (half the memory budget by default). Charging them to every call priced them twice and made units
+  smaller for no measured reason: the 15 calibration runs of MEASUREMENTS.md fit the term at
+  **-1.4 B/point**, and the residual of a 48-field call over 48 sub-trees (23M request points) is 2.0 MB.
+- With it go `sizing.UnitSizing.request_bytes`, the `n_subtrees` / `n_branches` / `own_branch` arguments
+  of `call_bytes`, `estimate_bytes`, `max_unit_groups`, `field_bytes` and `fits_field`,
+  `BlockExtractor._groups_own_their_branches`, `GroupSpec.own_branch`, and `timings["request_side"]`.
+  A unit's estimate is now gribjump's buffer for the call, one field group's values, and the encoder's
+  two fragments.
+- **Units get larger.** At the deployed 1.5 GiB budget, groups one call may hold at one field per group:
+  the climate-dt HEALPix-1024 Europe box 258 -> **260** when the groups share a spatial sub-tree
+  (separate date/time axes, as the deployments send them) and 73 -> **260** when every group brings its
+  own; EFAS Danube 199 -> 201; O1280 Europe 565 -> 567. The EFAS Volga 4-param ensemble is unchanged at
+  196 fields per call and the Switzerland ensemble at 1,000 (their binding terms are gribjump's buffer
+  and `max_fields_per_call`). The LUMI HEALPix x 24 h request is one call either way; its estimate falls
+  from 193 MB (one sub-tree) or 546 MB (24 sub-trees) to **177 MB** (MEASUREMENTS.md sections 2, 3
+  and 5, re-measured with `tools/measure_memory.py targets`).
+- **A field refusal needs a smaller budget than it did**: one EFAS Danube field (634,550 points) is
+  priced at 45 MB instead of 65 MB, and the tree guard (half the budget against a 25 MB estimate)
+  answers first for every single-field request unless `limits.max_tree_bytes` is set explicitly.
+  `tools/measure_memory.py --run <scenario> --tree-bytes N` sets it, which is how
+  `tests/test_stream_memory.py` still exercises the field refusal on a large shape.
+- `example_config.json` loses the key; nothing a deployment sets changes.
+
 ## How a unit's fields are consumed
 
 - **A unit's fields always arrive one at a time** (`FDBDatacube.get_iter`), which is what the

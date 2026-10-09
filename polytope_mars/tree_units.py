@@ -50,9 +50,6 @@ class GroupSpec:
     counts: Any = ()
     #: gribjump index ranges of one field, per spatial sub-tree (parallel to ``counts``)
     range_counts: Any = ()
-    #: True when this group has spatial sub-trees of its own, so a unit of k groups holds k times
-    #: their arrays (:meth:`polytope_mars.sizing.UnitSizing.request_bytes`)
-    own_branch: bool = False
 
     @property
     def n_points(self) -> int:
@@ -75,7 +72,7 @@ class GroupSpec:
 
     @property
     def n_subtrees(self) -> int:
-        """Spatial sub-trees (bulk nodes) of the group: what one call holds the arrays of."""
+        """Spatial sub-trees (bulk nodes) of the group."""
         return max(1, len(self.counts))
 
 
