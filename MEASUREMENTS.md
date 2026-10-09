@@ -523,11 +523,14 @@ request with per-row ranges and a 128 B/point request side.
 
 ## 4. What the prepared tree costs resident, with the fold off and on
 
-`python tools/measure_memory.py tree`: slice (always with `_merge_union_rows`), then `prepare` with
-`bulk_grid_leaves` off and on, in a fresh subprocess each.  A bulk node holds `coordinates`
+`python tools/measure_memory.py tree`: slice (always with `_merge_union_rows`), then `prepare`, in a fresh
+subprocess each.  A bulk node holds `coordinates`
 (16 B/point) and `indexes` (8 B/point) for its whole sub-tree, where the row tree held the latitude
 nodes and the longitude leaf arrays; `tree MB` is a structural estimate (`getsizeof` of the nodes plus
 the arrays' `nbytes`, views counted once), RSS is what the process actually holds.
+
+The `fold off` rows were measured while `bulk_grid_leaves` could still be turned off (polytope
+`CHANGES.md`); the tool now measures the folded tree only, which is the `on` row of each pair.
 
 | request | fold | sub-trees | points | tree MB | tree B/point | RSS after slice | RSS after prepare | peak |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

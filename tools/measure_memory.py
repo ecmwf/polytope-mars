@@ -378,19 +378,11 @@ def dated_axes(grid: str, n_days: int) -> list:
 #: linearly in the branch count.
 HOURLY_DAYS = 30
 
-#: (grid, request, bulk, days of dates for the fake) -- a prepared tree's cost, fold off and on
+#: (grid, request, days of dates for the fake) -- what a prepared tree costs resident
 TREE_SCENARIOS = {
-    "tree_healpix1024_europe_24h_fold_off": ("healpix_1024", HEALPIX_EUROPE_24H, False, None),
-    "tree_healpix1024_europe_24h_fold_on": ("healpix_1024", HEALPIX_EUROPE_24H, True, None),
-    "tree_cdt_hourly_polygon_fold_off": (
-        "healpix_1024",
-        cdt_hourly(CDT_YEAR_POLYGON, HOURLY_DAYS),
-        False,
-        HOURLY_DAYS,
-    ),
-    "tree_cdt_hourly_polygon_fold_on": ("healpix_1024", cdt_hourly(CDT_YEAR_POLYGON, HOURLY_DAYS), True, HOURLY_DAYS),
-    "tree_cdt_hourly_bbox_fold_off": ("healpix_1024", cdt_hourly(CDT_YEAR_BBOX, HOURLY_DAYS), False, HOURLY_DAYS),
-    "tree_cdt_hourly_bbox_fold_on": ("healpix_1024", cdt_hourly(CDT_YEAR_BBOX, HOURLY_DAYS), True, HOURLY_DAYS),
+    "tree_healpix1024_europe_24h": ("healpix_1024", HEALPIX_EUROPE_24H, None),
+    "tree_cdt_hourly_polygon": ("healpix_1024", cdt_hourly(CDT_YEAR_POLYGON, HOURLY_DAYS), HOURLY_DAYS),
+    "tree_cdt_hourly_bbox": ("healpix_1024", cdt_hourly(CDT_YEAR_BBOX, HOURLY_DAYS), HOURLY_DAYS),
 }
 
 
@@ -459,8 +451,8 @@ def reset_peak_rss():
 def tree_stats(tree):
     """(spatial nodes, spatial points, result values) of a polytope request tree.
 
-    A prepared tree holds one array-backed bulk node per spatial sub-tree (``bulk_grid_leaves``); with
-    the fold off it holds one latitude node per grid row, each with its longitude leaves.
+    A prepared tree holds one array-backed bulk node per spatial sub-tree; a sliced one holds a latitude
+    node per grid row, each with its longitude leaves.
     """
     from polytope_feature.datacube.tensor_index_tree import (
         BulkMergedTensorIndexNode,
@@ -539,12 +531,11 @@ def datacube_of(api) -> Any:
     return datacube
 
 
-def _prepare(grid, request, bulk=True, axes=None):
+def _prepare(grid, request, axes=None):
     """``(fake, api, preq)``: everything ``PolytopeMars`` does up to (not including) the slice.
 
-    The ``Polytope`` is built exactly as :meth:`BlockExtractor._slice` builds it -- merged union rows
-    and, unless ``bulk`` is false, one bulk node per spatial sub-tree -- so a measurement taken here
-    is a measurement of the production path.
+    The ``Polytope`` is built exactly as :meth:`BlockExtractor._slice` builds it (merged union rows), so
+    a measurement taken here is a measurement of the production path.
     """
     from polytope_feature.polytope import Polytope, Request
 
@@ -563,7 +554,6 @@ def _prepare(grid, request, bulk=True, axes=None):
     shapes = pm._create_base_shapes(request, feature_type) + feature.get_shapes()
     preq = Request(*shapes)
     options = conf.options.model_dump()
-    options["bulk_grid_leaves"] = bulk
     api = Polytope(datacube=fake, options=options)
     api._merge_union_rows = True
     # Polytope.retrieve minus the nearest-point bookkeeping (no Point shapes here) and the get.
@@ -740,15 +730,15 @@ def run_ranges(grid, request):
     }
 
 
-def run_tree(grid, request, bulk, axes=None):
-    """What a prepared request tree costs resident, with the spatial fold off and on.
+def run_tree(grid, request, axes=None):
+    """What a prepared request tree costs resident.
 
     A bulk node holds ``coordinates`` (16 B/point) and ``indexes`` (8 B/point) of its sub-tree for the
-    whole request, where the row tree held ~9 B/point: on a request with thousands of sub-trees that
-    difference is the price of the fold, and this is where it is measured.  RSS is the number that
-    counts; ``tree_mb`` says where it sits (see :func:`tree_bytes`).
+    whole request: on a request with thousands of sub-trees that is what the tree guard prices, and this
+    is where it is measured.  RSS is the number that counts; ``tree_mb`` says where it sits (see
+    :func:`tree_bytes`).
     """
-    fake, api, preq = _prepare(grid, request, bulk=bulk, axes=axes)
+    fake, api, preq = _prepare(grid, request, axes=axes)
     gc.collect()
     rss0 = rss()
     reset_peak_rss()
@@ -767,7 +757,6 @@ def run_tree(grid, request, bulk, axes=None):
     prepared_mb = tree_bytes(tree) / 1e6
     metrics = getattr(api.datacube, "prototype_metrics", {}) or {}
     return {
-        "bulk": bulk,
         "subtrees": n_spatial,
         "points": n_pts,
         "ranges_per_field": metrics.get("ranges_per_field"),
@@ -1065,7 +1054,6 @@ TABLE_COLUMNS = {
         "peak_rss_mib",
     ],
     "tree": [
-        "bulk",
         "subtrees",
         "points",
         "ranges_per_field",

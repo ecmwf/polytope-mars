@@ -534,8 +534,8 @@ latitude bands.
 
 ## Behaviour changes
 
-- **Every request is sliced and prepared with `options["bulk_grid_leaves"] = True`** (set in
-  `BlockExtractor._slice`, next to `_merge_union_rows`). The spatial walk is
+- **Every request is sliced and prepared with one array-backed node per spatial sub-tree** (what
+  polytope-feature's `bulk_grid_leaves` introduced and now always does). The spatial walk is
   :mod:`polytope_mars.bulk_tree`: `node.coordinates` (float64 (N, 2), output order),
   `node.point_count`, `node.indexes`, one `node.result` array per field of the call. Nothing in the
   extraction holds a Python object per point any more, and `polytope_mars.grid_ranges` (which
@@ -543,7 +543,7 @@ latitude bands.
   `np.diff(np.sort(node.indexes)) > 1` plus one, exact and cheap.
 - **Output bytes are unchanged.** The fold happens in `prepare` in the order the legacy encoders read
   the tree in (rows in tree order, each row's points in grid-index order), which
-  `../polytope/performance/bulk_order.py` asserts for all 28 golden cases. The whole corpus is
+  polytope-feature's `tests/test_bulk_fold.py` pins against the rows of the sliced tree. The whole corpus is
   byte-identical in both consumption modes and both missing-field reporting modes.
 - **Latitude banding is removed.** Gone: `BlockExtractor._banded`, `_prepared_band`, the band-0 peek,
   `_prepare_whole_tree` (the whole tree is always prepared now - it is what folds the nodes and plans
@@ -806,6 +806,12 @@ what the repo contains.
   table that `limits.bytes_per_value` replaced with one constant plus the index-range count read off the
   prepared tree; no deployment set it. `coverageconfig` and `polygonrules` remain accepted as aliases of
   `encoders.covjson` and `limits` -- polytope-config sets both.
+- **`BlockExtractor._slice` sets no `bulk_grid_leaves` option**: polytope-feature always
+  folds the spatial layers of a prepared tree into one array-backed node per sub-tree, and accepts the
+  option only so that deployed configurations keep validating (`../polytope/CHANGES.md`). The quadtree
+  slicer's bulk leaf is on for the same reason, as it was designed to be.
+- `tools/measure_memory.py tree` measures the folded tree only (no `fold off` column); the fold-off rows of
+  MEASUREMENTS.md section 4 say when they were taken.
 
 ## Observability
 

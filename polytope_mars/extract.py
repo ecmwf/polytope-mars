@@ -427,15 +427,14 @@ class BlockExtractor:
             raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")
         handle = self.pm.datacube_factory() if self.pm.datacube_factory is not None else self.pm._default_gribjump()
         options = self.conf.options.model_dump()
-        # One array-backed node per spatial sub-tree instead of a latitude -> longitude layer per grid row:
-        # the gribjump index ranges come from one sort of the whole field's indexes (hundreds instead of
-        # hundreds of thousands on HEALPix nested) and nothing of the spatial walk is per point
-        # (:mod:`polytope_mars.bulk_tree`).  Required: every tree reader here expects bulk nodes.
-        options["bulk_grid_leaves"] = True
+        # polytope-feature gives every spatial sub-tree of a prepared tree one array-backed node
+        # (:mod:`polytope_mars.bulk_tree`), which every tree reader here expects: the gribjump index ranges
+        # come from one sort of the whole field's indexes (hundreds instead of hundreds of thousands on
+        # HEALPix nested) and nothing of the spatial walk is per point.
         api = Polytope(datacube=handle, options=options, context=self.pm.log_context)
         # The block walker reads any number of points per longitude leaf, so polygons and paths can be
-        # sliced into one leaf per latitude line instead of one node per point (which is also what the
-        # fold above turns into one node per sub-tree).
+        # sliced into one leaf per latitude line instead of one node per point (which the fold in prepare
+        # turns into one node per sub-tree).
         api._merge_union_rows = True
         self._count_extract_calls(api.datacube)
         self.pm._add_timing("datacube_init_ms", time.perf_counter() - t0)
