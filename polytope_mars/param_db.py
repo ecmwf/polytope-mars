@@ -1,12 +1,13 @@
 """Parameter metadata lookups (id, short name, long name, units).
 
-A copy of ``covjsonkit.param_db`` so that polytope-mars resolves parameter metadata itself and hands
-encoders plain :class:`~polytope_mars.blocks.ParamInfo` objects.  The data files live in
-``polytope_mars/data/<param_db>/{param,param_id,unit}.json``; ``<param_db>`` is the config name
-(``encoders.covjson.param_db``, ``"ecmwf"`` or ``"dwd"``).
+polytope-mars resolves parameter metadata itself and hands encoders plain
+:class:`~polytope_mars.blocks.ParamInfo` objects.  The data files are covjsonkit's copy of the ECMWF
+parameter database, ``covjsonkit/data/<param_db>/{param,param_id,unit}.json``, read here directly:
+``covjsonkit.param_db`` loads its configuration at import time and re-reads the files on every call.
+``<param_db>`` is the config name (``encoders.covjson.param_db``, ``"ecmwf"`` or ``"dwd"``).
 
 Every function accepts either the database name or a config object with a ``param_db`` attribute
-(the shape of covjsonkit's ``CovjsonKitConfig``), so call sites ported from covjsonkit keep working.
+(the shape of covjsonkit's ``CovjsonKitConfig``).
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
+
+import covjsonkit
 
 __all__ = [
     "get_param_from_db",
@@ -24,7 +27,7 @@ __all__ = [
     "get_units",
 ]
 
-_DATA = Path(__file__).parent / "data"
+_DATA = Path(covjsonkit.__file__).parent / "data"
 
 
 def _db_name(conf) -> str:

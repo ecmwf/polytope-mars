@@ -26,7 +26,7 @@ class PolygonRulesConfig(ConfigModel):
 
 
 class CovjsonEncoderConfig(ConfigModel):
-    #: name of the parameter database (``polytope_mars/data/<param_db>``)
+    #: name of the parameter database (``covjsonkit/data/<param_db>``)
     param_db: str = "ecmwf"
 
 
