@@ -14,7 +14,7 @@ so every per-point walk of the tree is an array read.  This module is the only p
 their attribute names; everything else in polytope-mars goes through it.
 
 The gribjump index ranges a field costs come from the same arrays: ``FDBDatacube`` derives them from
-one sort of the node's indexes (``get_bulk_merged_values``), so the count is the number of gaps in
+one sort of the node's indexes (``get_spatial_node_values``), so the count is the number of gaps in
 those indexes plus one -- exact, not estimated, and the only input the memory model
 (:mod:`polytope_mars.sizing`) needs besides the point count.
 """
@@ -56,7 +56,7 @@ def point_count(node) -> int:
 def range_count(node) -> int:
     """gribjump index ranges one field of ``node`` asks for: the gaps in its sorted grid indexes.
 
-    Mirrors ``FDBDatacube.get_bulk_merged_values``, including its shortcut: on a grid a request
+    Mirrors ``FDBDatacube.get_spatial_node_values``, including its shortcut: on a grid a request
     covers in ascending index order (anything but HEALPix nested, in practice) the node's indexes are
     already sorted, so the count needs no sort at all.
     """

@@ -5,7 +5,7 @@ The split assumes one rule about ``polytope_feature``: a spatial node's ``result
 of its points per field of the branch, the fields in C-order over the branch's compressed axes in tree
 order (root to leaf).  ``FDBDatacube._gribjump_requests`` builds the requests with ``product()`` over
 the leaf path's keys, which ``get_fdb_requests`` inserts while it descends the tree, and
-``assign_bulk_result`` appends the results in that order.  The first test pins it on real
+``assign_result`` appends the results in that order.  The first test pins it on real
 ``FDBDatacube`` output instead of trusting the reading.
 """
 

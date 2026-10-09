@@ -567,7 +567,7 @@ The `fold off` rows were measured while `bulk_grid_leaves` could still be turned
   rows repeated over many sub-trees -- and there it is 169 MB against a 1,035 MB fall in the peak. If
   it ever has to come down, the cheap fix is not laziness but **sharing**: the sub-trees of such a
   request are the same spatial selection repeated per datetime (identical `lat_values`, `row_lengths`
-  and `indexes`), so `fold_into_bulk_grid` could keep one set of arrays per distinct row structure and
+  and `indexes`), so `fold_spatial_rows` could keep one set of arrays per distinct row structure and
   let the other sub-trees reference it -- 277 MB -> ~12 MB for the request above, and the per-call sort
   of the ranges would be shared too. Making `coordinates` itself lazy (keeping `indexes` and asking the
   mapper for the latitudes/longitudes when the coordinate block is emitted) saves only 16 of the
