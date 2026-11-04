@@ -7,12 +7,13 @@ from ..utils.areas import field_area
 
 
 class TimeSeries(Feature):
-    def __init__(self, feature_config, client_config):
+    def __init__(self, feature_config, client_config, grid_interpolation=None):
         assert feature_config.pop("type") == "timeseries"
         # self.start_step = config.pop("start", None)
         # self.end_step = config.pop("end", None)
         self.axes = feature_config.pop("axes", [])
         self.time_axis = feature_config.pop("time_axis", [])
+        self.grid_interpolation = grid_interpolation
 
         self.max_size = client_config.polygonrules.max_area
 

@@ -4,7 +4,7 @@ from ..feature import Feature
 
 
 class VerticalProfile(Feature):
-    def __init__(self, feature_config, client_config):
+    def __init__(self, feature_config, client_config, grid_interpolation=None):
         assert feature_config.pop("type") == "verticalprofile"
         # self.start_step = config.pop("start", None)
         # self.end_step = config.pop("end", None)
@@ -19,6 +19,7 @@ class VerticalProfile(Feature):
             self.axes = ["latitude", "longitude"]
 
         self.points = feature_config.pop("points", [])
+        self.grid_interpolation = grid_interpolation
 
         if "range" in feature_config:
             feature_config.pop("range")

@@ -5,12 +5,13 @@ from ..utils.areas import field_area, get_circle_area_from_coords
 
 
 class Circle(Feature):
-    def __init__(self, feature_config, client_config):
+    def __init__(self, feature_config, client_config, grid_interpolation=None):
         assert feature_config.pop("type") == "circle"
         if len(feature_config["center"][0]) < 2 or len(feature_config["center"][0]) > 3:
             raise ValueError("Circle center must have two values, latitude and longitude")
         self.center = feature_config.pop("center")
         self.max_area = client_config.polygonrules.max_area
+        self.grid_interpolation = grid_interpolation
         self.radius = feature_config.pop("radius")
         self.area = get_circle_area_from_coords(
             self.center[0][0], self.center[0][1], self.center[0][0] + self.radius, self.center[0][1] + self.radius

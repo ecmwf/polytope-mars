@@ -22,10 +22,11 @@ def get_coords(geom):
 
 
 class Shapefile(Feature):
-    def __init__(self, feature_config, client_config):
+    def __init__(self, feature_config, client_config, grid_interpolation=None):
         assert feature_config.pop("type") == "shapefile"
         self.file = feature_config.pop("file")
         self.df = gpd.read_file(self.file)
+        self.grid_interpolation = grid_interpolation
 
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 

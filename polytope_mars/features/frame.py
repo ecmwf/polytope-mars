@@ -4,11 +4,12 @@ from ..feature import Feature
 
 
 class Frame(Feature):
-    def __init__(self, feature_config, client_config):
+    def __init__(self, feature_config, client_config, grid_interpolation=None):
         assert feature_config.pop("type") == "frame"
         self.points = feature_config.pop("points", [])
         self.outer_box = feature_config.pop("outer_box", [])
         self.inner_box = feature_config.pop("inner_box", [])
+        self.grid_interpolation = grid_interpolation
 
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 

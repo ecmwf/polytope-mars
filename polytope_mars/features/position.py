@@ -7,11 +7,12 @@ from ..utils.areas import field_area
 
 
 class Position(Feature):
-    def __init__(self, feature_config, client_config):
+    def __init__(self, feature_config, client_config, grid_interpolation=None):
         assert feature_config.pop("type") == "position"
         self.axes = feature_config.pop("axes", [])
 
         self.max_size = client_config.polygonrules.max_area
+        self.grid_interpolation = grid_interpolation
 
         if self.axes != []:
             if not isinstance(self.axes, list):

@@ -5,12 +5,13 @@ from ..utils.areas import field_area, get_polygon_area
 
 
 class Polygons(Feature):
-    def __init__(self, feature_config, client_config):
+    def __init__(self, feature_config, client_config, grid_interpolation=None):
         assert feature_config.pop("type") == "polygon"
         self.shape = feature_config.pop("shape")
         self.max_area = client_config.polygonrules.max_area
         self.area = 0
         self.field_area = 0
+        self.grid_interpolation = grid_interpolation
         if type(self.shape[0][0]) is not list:
             self.area = get_polygon_area(self.shape)
             if len(self.shape) > client_config.polygonrules.max_points:

@@ -7,7 +7,7 @@ from ..utils.areas import field_area, get_boundingbox_area
 
 
 class BoundingBox(Feature):
-    def __init__(self, feature_config, client_config):
+    def __init__(self, feature_config, client_config, grid_interpolation=None):
         assert feature_config.pop("type") == "boundingbox"
         if "points" not in feature_config:
             raise KeyError("Bounding box must have points in feature")
@@ -17,6 +17,7 @@ class BoundingBox(Feature):
         self.axes = feature_config.pop("axes", [])
         self.max_area = client_config.polygonrules.max_area
         self.field_area = 0
+        self.grid_interpolation = grid_interpolation
 
         if "axes" in feature_config:
             raise ValueError("Bounding box does not have axes in feature, did you mean axes?")  # noqa: E501
@@ -28,25 +29,52 @@ class BoundingBox(Feature):
 
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501
+        if len(self.axes) > 2 and self.grid_interpolation:
+            raise ValueError(
+                "Bounding box cannot have more than 2 axes when grid interpolation is requested"
+            )  # noqa: E501
+
         if len(self.points[0]) == 2:
-            return [
-                shapes.Union(
-                    ["latitude", "longitude"],
-                    *[
-                        shapes.Box(
-                            ["latitude", "longitude"],
-                            lower_corner=[
-                                self.points[0][self.axes.index("latitude")],
-                                self.points[0][self.axes.index("longitude")],
-                            ],  # noqa: E501
-                            upper_corner=[
-                                self.points[1][self.axes.index("latitude")],
-                                self.points[1][self.axes.index("longitude")],
-                            ],  # noqa: E501
-                        )
-                    ],
-                )
-            ]
+            if self.grid_interpolation:
+                return [
+                    shapes.Union(
+                        ["latitude", "longitude"],
+                        *[
+                            shapes.Box(
+                                ["latitude", "longitude"],
+                                lower_corner=[
+                                    self.points[0][self.axes.index("latitude")],
+                                    self.points[0][self.axes.index("longitude")],
+                                ],  # noqa: E501
+                                upper_corner=[
+                                    self.points[1][self.axes.index("latitude")],
+                                    self.points[1][self.axes.index("longitude")],
+                                ],  # noqa: E501
+                                method="surrounding"
+                            )
+                        ],
+                    )
+                ]
+
+            else:
+                return [
+                    shapes.Union(
+                        ["latitude", "longitude"],
+                        *[
+                            shapes.Box(
+                                ["latitude", "longitude"],
+                                lower_corner=[
+                                    self.points[0][self.axes.index("latitude")],
+                                    self.points[0][self.axes.index("longitude")],
+                                ],  # noqa: E501
+                                upper_corner=[
+                                    self.points[1][self.axes.index("latitude")],
+                                    self.points[1][self.axes.index("longitude")],
+                                ],  # noqa: E501
+                            )
+                        ],
+                    )
+                ]
         else:
             return [
                 shapes.Union(

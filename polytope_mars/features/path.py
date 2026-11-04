@@ -4,7 +4,7 @@ from ..feature import Feature
 
 
 class Path(Feature):
-    def __init__(self, feature_config, client_config):
+    def __init__(self, feature_config, client_config, grid_interpolation=None):
         assert feature_config.pop("type") == "trajectory"
         self.points = feature_config.pop("points", [])
         if "axes" in feature_config:
@@ -29,6 +29,8 @@ class Path(Feature):
             self.inflate = "round"
         if "axis" in feature_config:
             raise ValueError("Trajectory does not have axis in feature, did you mean axes?")  # noqa: E501
+
+        self.grid_interpolation = grid_interpolation
 
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 

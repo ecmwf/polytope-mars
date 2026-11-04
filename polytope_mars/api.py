@@ -128,6 +128,11 @@ class PolytopeMars:
         except KeyError:
             raise KeyError("The 'feature' does not contain a 'type' keyword")
 
+        grid_interpolation = feature_config.get("grid", None)
+
+        if grid_interpolation and feature_type != "boundingbox":
+            raise ValueError("Grid interpolation is only supported for bounding box features")  # noqa: E501
+
         if feature_type == "timeseries":
             try:
                 if "time_axis" in feature_config:
@@ -157,7 +162,7 @@ class PolytopeMars:
         else:
             timeseries_type = None  # noqa: F841
 
-        feature = self._feature_factory(feature_type, feature_config, self.conf)  # noqa: E501
+        feature = self._feature_factory(feature_type, feature_config, self.conf, grid_interpolation)  # noqa: E501
 
         feature.validate(request, feature_config_copy)
 
@@ -546,10 +551,10 @@ class PolytopeMars:
 
         return base_shapes
 
-    def _feature_factory(self, feature_name, feature_config, config=None):
+    def _feature_factory(self, feature_name, feature_config, config=None, grid_interpolation=None):
         feature_class = features.get(feature_name)
         if feature_class:
-            return feature_class(feature_config, config)
+            return feature_class(feature_config, config, grid_interpolation)
         else:
             raise NotImplementedError(f"Feature '{feature_name}' not found")
 
@@ -595,6 +600,7 @@ class PolytopeMars:
         logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
         result = self.api.retrieve(preq)
+        # TODO: if we have the interpolation option, need to interpolate the lat-lon values before or during encoding.
         print(result.pprint())
 
         end = time.time()
