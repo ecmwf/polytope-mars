@@ -1,6 +1,7 @@
 """Tests for the optional 'labels' field in the timeseries feature dictionary."""
 
 import copy
+import inspect
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -709,6 +710,17 @@ CELL_2 = (47.663246264843, 12.857142857143)
 CELL_3 = (48.784729330535, 10.975609756098)
 
 
+def _polytope_lacks_nearest_retag():
+    try:
+        from polytope_feature.datacube.backends.fdb import FDBDatacube
+    except ImportError:
+        return False
+    return not hasattr(FDBDatacube, "_retag_nearest_lons")
+
+
+_POLYTOPE_LACKS_NEAREST_RETAG = _polytope_lacks_nearest_retag()
+
+
 def _in_memory_tree(feature, compressed_axes, nearest):
     """Slice the feature's shapes on an in-memory O80 grid; returns the polytope result tree."""
     xr = pytest.importorskip("xarray")
@@ -756,6 +768,10 @@ def _in_memory_tree(feature, compressed_axes, nearest):
         stub = SimpleNamespace(
             nearest_search=api.datacube.nearest_search, grid_transformation=SimpleNamespace(is_irregular=False)
         )
+        # Polytope's own helpers that the search calls on ``self`` (e.g. _retag_nearest_lons, newer releases only)
+        for name in ("_retag_nearest_lons",):
+            if hasattr(FDBDatacube, name):
+                setattr(stub, name, inspect.getattr_static(FDBDatacube, name).__get__(stub, FDBDatacube))
         FDBDatacube.nearest_lat_lon_search(stub, tree.children[0])
     return tree
 
@@ -884,9 +900,11 @@ class TestInMemoryPipeline:
         assert summary[0][1:] == summary[1][1:]
 
     @pytest.mark.xfail(
+        _POLYTOPE_LACKS_NEAREST_RETAG,
         strict=True,
         reason="polytope's nearest-neighbour search leaves tags on cells it examined but did not choose; "
-        "needs retagging in polytope's FDB backend (see TIMESERIES_LABELS.md, Problem 2)",
+        "needs retagging in polytope's FDB backend (FDBDatacube._retag_nearest_lons, polytope-python >= 2.1.21; "
+        "see TIMESERIES_LABELS.md, Problem 2)",
     )
     @pytest.mark.parametrize(
         "points, want",
@@ -900,7 +918,8 @@ class TestInMemoryPipeline:
         _, covjson = self._run(validation, points, ["A", "B"], nearest=True)
         summary = _coverage_summary(covjson)
         assert len(summary) == 2
-        assert [(lat, lon) for _, lat, lon, _ in summary] == pytest.approx(want)
+        assert [s[0] for s in summary] == ["A", "B"]
+        assert [c for s in summary for c in s[1:3]] == pytest.approx([c for cell in want for c in cell])
 
 
 # -- Polygon labels: nesting depth and rings --
