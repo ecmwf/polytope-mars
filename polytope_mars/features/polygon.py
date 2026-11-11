@@ -2,12 +2,14 @@ from polytope_feature import shapes
 
 from ..feature import Feature
 from ..utils.areas import field_area, get_polygon_area
+from ..utils.labels import validate_labels
 
 
 class Polygons(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "polygon"
         self.shape = feature_config.pop("shape")
+        self.labels = feature_config.pop("labels", None)
         self.max_area = client_config.polygonrules.max_area
         self.area = 0
         self.field_area = 0
@@ -38,6 +40,8 @@ class Polygons(Feature):
             #        f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees\u00b2"  # noqa: E501
             #    )
 
+        validate_labels(self.labels, len(self.shape), "Polygon", "polygons")
+
         if "axes" not in feature_config:
             self.axes = ["latitude", "longitude"]
         else:
@@ -46,12 +50,16 @@ class Polygons(Feature):
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
+        # Each polygon is tagged (index, label) so its points can be grouped per polygon downstream.
+        # Output is the same with or without labels; labels only add metadata.
+        labels = self.labels if self.labels is not None else [None] * len(self.shape)
+        tags = list(enumerate(labels))
         polygons = []
-        for polygon in self.shape:
+        for polygon, tag in zip(self.shape, tags):
             points = []
             for point in polygon:
                 points.append([point[0], point[1]])
-            polygons.append(shapes.Polygon([self.axes[0], self.axes[1]], points))
+            polygons.append(shapes.Polygon([self.axes[0], self.axes[1]], points, tag=tag))
         return [shapes.Union([self.axes[0], self.axes[1]], *polygons)]
 
     def incompatible_keys(self):

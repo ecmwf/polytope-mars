@@ -578,10 +578,17 @@ class PolytopeMars:
         else:
             raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
 
+        options = self.conf.options.model_dump()
+        uncompressed = feature.uncompressed_axes()
+        if uncompressed:
+            options["compressed_axes_config"] = [
+                axis for axis in options.get("compressed_axes_config", []) if axis not in uncompressed
+            ]
+
         logging.debug(f"Send log_context to polytope: {self.log_context}")
         self.api = Polytope(
             datacube=fdbdatacube,
-            options=self.conf.options.model_dump(),
+            options=options,
             context=self.log_context,
         )
 
@@ -595,7 +602,6 @@ class PolytopeMars:
         logging.info(f"{self.id}: Polytope time start: {start}")  # noqa: E501
 
         result = self.api.retrieve(preq)
-        print(result.pprint())
 
         end = time.time()
         delta = end - start

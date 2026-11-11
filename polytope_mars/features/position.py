@@ -1,9 +1,8 @@
 import logging
 
-from polytope_feature import shapes
-
 from ..feature import Feature
 from ..utils.areas import field_area
+from ..utils.labels import tagged_point_union, validate_labels
 
 
 class Position(Feature):
@@ -27,30 +26,12 @@ class Position(Feature):
             self.axes = ["latitude", "longitude"]
 
         self.points = feature_config.pop("points", [])
+        self.labels = feature_config.pop("labels", None)
 
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
-        # return [
-        #     shapes.Union(
-        #         [self.axes[0], self.axes[1]],
-        #         *[
-        #             shapes.Point(
-        #                 [self.axes[0], self.axes[1]],
-        #                 [[p[0], p[1]]],
-        #                 method="nearest",  # noqa: E501
-        #             )
-        #             for p in self.points
-        #         ],
-        #     ),
-        # ]
-        return [
-            shapes.Point(
-                [self.axes[0], self.axes[1]],
-                [list(p) for p in self.points],
-                method="nearest",
-            )
-        ]
+        return [tagged_point_union([self.axes[0], self.axes[1]], self.points, self.labels)]
 
     def incompatible_keys(self):
         return []
@@ -60,6 +41,12 @@ class Position(Feature):
 
     def name(self):
         return "Position"
+
+    def uncompressed_axes(self):
+        # Workaround until polytope keeps tags per value: a compressed longitude node can hold the
+        # cells of several requested points with one combined tag set, so labels can't be assigned
+        # per cell. With longitude uncompressed each cell has its own node and tags.
+        return ["longitude"]
 
     def required_keys(self):
         return ["type", "points"]
@@ -79,6 +66,7 @@ class Position(Feature):
 
         if len(feature_config["points"][0]) != 2:
             raise ValueError("Position must have only two values in points")
+        validate_labels(self.labels, len(feature_config["points"]), "Position", "points")
 
         logging.debug("After parse request: %s", request)
 
