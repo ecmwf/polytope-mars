@@ -236,12 +236,12 @@ class TestLabelsValidation:
         with pytest.raises((ValueError, IndexError)):
             self._build_request_shapes(request)
 
-    def test_labels_duplicate_values_allowed(self):
-        """The same label may be used for more than one point; tags stay unique by index."""
+    def test_labels_duplicate_values_rejected(self):
+        """The same label may not be used for more than one point."""
         request = copy.deepcopy(self.request)
         request["feature"]["labels"] = ["Airport", "Airport"]
-        preq, feature = self._build_request_shapes(request)
-        assert self._tags(preq) == [(0, "Airport"), (1, "Airport")]
+        with pytest.raises(ValueError, match="unique"):
+            self._build_request_shapes(request)
 
     def test_per_point_tags_reach_result_tree(self):
         """Every requested point's tag reaches the tree; points snapping to one grid point keep both tags."""

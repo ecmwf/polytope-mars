@@ -12,6 +12,14 @@ def validate_labels(labels, n_units, feature_name, unit_name):
     for label in labels:
         if isinstance(label, bool) or not isinstance(label, (str, int)):
             raise ValueError(f"{feature_name} labels must be strings or integers, got {label!r}")
+    seen = set()
+    duplicates = []
+    for label in labels:
+        if label in seen and label not in duplicates:
+            duplicates.append(label)
+        seen.add(label)
+    if duplicates:
+        raise ValueError(f"{feature_name} labels must be unique, duplicated: {duplicates!r}")
 
 
 def tagged_point_union(axes, points, labels=None):
