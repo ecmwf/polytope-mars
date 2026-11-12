@@ -27,6 +27,8 @@ class Shapefile(Feature):
         self.file = feature_config.pop("file")
         self.df = gpd.read_file(self.file)
 
+        self._pop_grid_option(feature_config, ["latitude", "longitude"])
+
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):

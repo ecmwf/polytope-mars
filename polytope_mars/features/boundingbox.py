@@ -17,34 +17,15 @@ class BoundingBox(Feature):
         self.axes = feature_config.pop("axes", [])
         self.max_area = client_config.polygonrules.max_area
         self.field_area = 0
-        self.grid = feature_config.pop("grid", None)
+        self._pop_grid_option(feature_config, self.axes)
 
         if "axes" in feature_config:
             raise ValueError("Bounding box does not have axes in feature, did you mean axes?")  # noqa: E501
 
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
-        if self.grid is not None:
-            if len(self.axes) != 2:
-                raise ValueError(
-                    "Grid interpolation is only supported for 2D (latitude/longitude) bounding boxes"
-                )
-            if "type" not in self.grid or "resolution" not in self.grid:
-                raise ValueError(
-                    "Bounding box 'grid' must specify a 'type' and 'resolution', "
-                    "eg. {'type': 'octahedral', 'resolution': 1280}"
-                )
-
         self.area_bb = get_boundingbox_area(self.points)
         logging.info(f"Area of bounding box: {self.area_bb} km\u00b2")
-
-    def interpolation_options(self):
-        if self.grid is None:
-            return None
-        return {
-            "method": self.grid.get("method", "linear"),
-            "out_grid": {"type": self.grid["type"], "resolution": self.grid["resolution"]},
-        }
 
     def get_shapes(self):
         # Time-series is a squashed box from start_step to start_end for each point  # noqa: E501

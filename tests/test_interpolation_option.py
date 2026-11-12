@@ -178,3 +178,94 @@ class TestRetrieveDataWiresInterpolationOptions:
         pm.retrieve_data(request, "boundingbox", feature)
 
         assert captured["options"].get("interpolation") is None
+
+
+class TestOtherFeaturesInterpolationOption:
+    """Verifies the "grid" option (via Feature._pop_grid_option/interpolation_options)
+    also works for shapes other than BoundingBox, since the polytope engine now
+    supports interpolating any 2D lat/lon shape (Disk, Polygon, Point, ...).
+    """
+
+    def test_circle_grid_option(self):
+        from polytope_mars.features.circle import Circle
+
+        circle = Circle(
+            {
+                "type": "circle",
+                "center": [[10, 20]],
+                "radius": 5,
+                "grid": {"type": "octahedral", "resolution": 1280, "method": "linear"},
+            },
+            _make_conf(),
+        )
+        assert circle.interpolation_options() == {
+            "method": "linear",
+            "out_grid": {"type": "octahedral", "resolution": 1280},
+        }
+
+    def test_circle_grid_option_rejects_3d(self):
+        import pytest
+
+        from polytope_mars.features.circle import Circle
+
+        with pytest.raises(ValueError):
+            Circle(
+                {
+                    "type": "circle",
+                    "center": [[10, 20, 5]],
+                    "radius": 5,
+                    "axes": ["latitude", "longitude", "levelist"],
+                    "grid": {"type": "octahedral", "resolution": 1280},
+                },
+                _make_conf(),
+            )
+
+    def test_polygon_grid_option(self):
+        from polytope_mars.features.polygon import Polygons
+
+        polygon = Polygons(
+            {
+                "type": "polygon",
+                "shape": [[0, 0], [1, 0], [1, 1]],
+                "grid": {"type": "regular", "resolution": [0.25, 0.25], "method": "nearest-neighbour"},
+            },
+            _make_conf(),
+        )
+        assert polygon.interpolation_options() == {
+            "method": "nearest-neighbour",
+            "out_grid": {"type": "regular", "resolution": [0.25, 0.25]},
+        }
+
+    def test_position_grid_option(self):
+        from polytope_mars.features.position import Position
+
+        position = Position(
+            {
+                "type": "position",
+                "points": [[10, 20]],
+                "grid": {"type": "octahedral", "resolution": 1280},
+            },
+            _make_conf(),
+        )
+        assert position.interpolation_options() == {
+            "method": "linear",
+            "out_grid": {"type": "octahedral", "resolution": 1280},
+        }
+        # Position's shapes are unaffected by the grid option: still a nearest-neighbour
+        # Point shape, which the interpolated-retrieval path knows how to slice too.
+        shapes = position.get_shapes()
+        assert len(shapes) == 1
+        assert shapes[0].method == "nearest"
+
+    def test_no_grid_option_for_any_feature_is_none(self):
+        from polytope_mars.features.circle import Circle
+        from polytope_mars.features.polygon import Polygons
+        from polytope_mars.features.position import Position
+
+        circle = Circle({"type": "circle", "center": [[10, 20]], "radius": 5}, _make_conf())
+        polygon = Polygons({"type": "polygon", "shape": [[0, 0], [1, 0], [1, 1]]}, _make_conf())
+        position = Position({"type": "position", "points": [[10, 20]]}, _make_conf())
+
+        assert circle.interpolation_options() is None
+        assert polygon.interpolation_options() is None
+        assert position.interpolation_options() is None

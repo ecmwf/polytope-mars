@@ -33,13 +33,38 @@ class Feature(ABC):
     def required_axes(self):
         pass
 
+    def _pop_grid_option(self, feature_config, axes):
+        """Pop and validate an optional "grid" keyword from a feature config, eg.:
+            {"type": "octahedral", "resolution": 1280, "method": "linear"}
+        Stores it on `self.grid` (None if absent) for `interpolation_options()` to
+        pick up. Only supported for 2D (latitude/longitude) shapes.
+        """
+        grid = feature_config.pop("grid", None)
+        if grid is not None:
+            if list(axes) != ["latitude", "longitude"]:
+                raise ValueError("Grid interpolation is only supported for 2D (latitude/longitude) shapes")
+            if "type" not in grid or "resolution" not in grid:
+                raise ValueError(
+                    "'grid' must specify a 'type' and 'resolution', "
+                    "eg. {'type': 'octahedral', 'resolution': 1280}"
+                )
+        self.grid = grid
+        return grid
+
     def interpolation_options(self):
         """Return a dict suitable for polytope_feature's "interpolation" option
         (`{"method": ..., "out_grid": {...}, "in_grid": {...}}`), or `None` if this
-        request doesn't use grid interpolation. Only features that support a "grid"
-        keyword (eg. BoundingBox) override this.
+        request doesn't use grid interpolation. Driven by `self.grid`, as set by
+        `_pop_grid_option()` - features that support a "grid" keyword call that
+        from their `__init__`; others keep the default `None` here.
         """
-        return None
+        grid = getattr(self, "grid", None)
+        if grid is None:
+            return None
+        return {
+            "method": grid.get("method", "linear"),
+            "out_grid": {"type": grid["type"], "resolution": grid["resolution"]},
+        }
 
     def split_request(self):
         """
