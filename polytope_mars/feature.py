@@ -33,6 +33,14 @@ class Feature(ABC):
     def required_axes(self):
         pass
 
+    def interpolation_options(self):
+        """Return a dict suitable for polytope_feature's "interpolation" option
+        (`{"method": ..., "out_grid": {...}, "in_grid": {...}}`), or `None` if this
+        request doesn't use grid interpolation. Only features that support a "grid"
+        keyword (eg. BoundingBox) override this.
+        """
+        return None
+
     def split_request(self):
         """
         Determines if the request should be split based on the feature configuration.
