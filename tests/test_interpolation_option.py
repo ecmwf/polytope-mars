@@ -296,3 +296,127 @@ class TestOtherFeaturesInterpolationOption:
         assert circle.interpolation_options() is None
         assert polygon.interpolation_options() is None
         assert position.interpolation_options() is None
+
+
+class TestRemainingFeaturesInterpolationOption:
+    """Frame, Path (trajectory), TimeSeries and VerticalProfile also support the
+    "grid" keyword via the shared Feature._pop_grid_option()/interpolation_options().
+    """
+
+    def test_frame_grid_option(self):
+        from polytope_mars.features.frame import Frame
+
+        frame = Frame(
+            {
+                "type": "frame",
+                "outer_box": [[0, 0], [10, 10]],
+                "inner_box": [[2, 2], [8, 8]],
+                "grid": {"type": "octahedral", "resolution": 1280},
+            },
+            _make_conf(),
+        )
+        assert frame.interpolation_options() == {
+            "method": "linear",
+            "out_grid": {"type": "octahedral", "resolution": 1280},
+        }
+
+    def test_frame_no_grid_option(self):
+        from polytope_mars.features.frame import Frame
+
+        frame = Frame(
+            {"type": "frame", "outer_box": [[0, 0], [10, 10]], "inner_box": [[2, 2], [8, 8]]},
+            _make_conf(),
+        )
+        assert frame.interpolation_options() is None
+
+    def test_path_grid_option_2d(self):
+        from polytope_mars.features.path import Path
+
+        path = Path(
+            {
+                "type": "trajectory",
+                "points": [[0, 0], [1, 1]],
+                "axes": ["latitude", "longitude"],
+                "inflation": 1,
+                "grid": {"type": "octahedral", "resolution": 1280, "method": "nearest-neighbour"},
+            },
+            _make_conf(),
+        )
+        assert path.interpolation_options() == {
+            "method": "nearest-neighbour",
+            "out_grid": {"type": "octahedral", "resolution": 1280},
+        }
+
+    def test_path_grid_option_4d(self):
+        """A higher-dimensional trajectory (lat/lon/levelist/step) can use the grid
+        option too - the polytope engine slices lat/lon against the output grid and
+        levelist/step normally, in a single pass.
+        """
+        from polytope_mars.features.path import Path
+
+        path = Path(
+            {
+                "type": "trajectory",
+                "points": [[0, 0, 0, 0], [1, 1, 1, 1]],
+                "inflation": 1,
+                "grid": {"type": "octahedral", "resolution": 1280},
+            },
+            _make_conf(),
+        )
+        assert path.interpolation_options() == {
+            "method": "linear",
+            "out_grid": {"type": "octahedral", "resolution": 1280},
+        }
+
+    def test_timeseries_grid_option(self):
+        from polytope_mars.features.timeseries import TimeSeries
+
+        ts = TimeSeries(
+            {
+                "type": "timeseries",
+                "points": [[0, 0]],
+                "time_axis": "step",
+                "grid": {"type": "regular", "resolution": [0.25, 0.25]},
+            },
+            _make_conf(),
+        )
+        assert ts.interpolation_options() == {
+            "method": "linear",
+            "out_grid": {"type": "regular", "resolution": [0.25, 0.25]},
+        }
+        # Still a nearest-neighbour Point shape, which interpolated retrieval handles too.
+        shapes = ts.get_shapes()
+        assert len(shapes) == 1
+        assert shapes[0].method == "nearest"
+
+    def test_verticalprofile_grid_option(self):
+        from polytope_mars.features.verticalprofile import VerticalProfile
+
+        vp = VerticalProfile(
+            {
+                "type": "verticalprofile",
+                "points": [[0, 0]],
+                "grid": {"type": "octahedral", "resolution": 1280},
+            },
+            _make_conf(),
+        )
+        assert vp.interpolation_options() == {
+            "method": "linear",
+            "out_grid": {"type": "octahedral", "resolution": 1280},
+        }
+
+    def test_no_grid_option_defaults_to_none(self):
+        from polytope_mars.features.path import Path
+        from polytope_mars.features.timeseries import TimeSeries
+        from polytope_mars.features.verticalprofile import VerticalProfile
+
+        path = Path(
+            {"type": "trajectory", "points": [[0, 0], [1, 1]], "axes": ["latitude", "longitude"], "inflation": 1},
+            _make_conf(),
+        )
+        ts = TimeSeries({"type": "timeseries", "points": [[0, 0]], "time_axis": "step"}, _make_conf())
+        vp = VerticalProfile({"type": "verticalprofile", "points": [[0, 0]]}, _make_conf())
+
+        assert path.interpolation_options() is None
+        assert ts.interpolation_options() is None
+        assert vp.interpolation_options() is None
