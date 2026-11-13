@@ -37,12 +37,15 @@ class Feature(ABC):
         """Pop and validate an optional "grid" keyword from a feature config, eg.:
             {"type": "octahedral", "resolution": 1280, "method": "linear"}
         Stores it on `self.grid` (None if absent) for `interpolation_options()` to
-        pick up. Only supported for 2D (latitude/longitude) shapes.
+        pick up. Works for any shape and any number of axes (eg. a 3D bounding box
+        over latitude/longitude/levelist): the polytope engine slices the lat/lon
+        part of the shape against the output grid and every other axis normally,
+        in a single pass, regardless of how many axes the shape spans.
         """
         grid = feature_config.pop("grid", None)
         if grid is not None:
-            if list(axes) != ["latitude", "longitude"]:
-                raise ValueError("Grid interpolation is only supported for 2D (latitude/longitude) shapes")
+            if "latitude" not in axes or "longitude" not in axes:
+                raise ValueError("Grid interpolation requires both 'latitude' and 'longitude' in axes")
             if "type" not in grid or "resolution" not in grid:
                 raise ValueError(
                     "'grid' must specify a 'type' and 'resolution', "

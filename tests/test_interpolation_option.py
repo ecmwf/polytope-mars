@@ -53,19 +53,24 @@ class TestBoundingBoxInterpolationOption:
         )
         assert bb.interpolation_options()["method"] == "linear"
 
-    def test_grid_keyword_requires_2d_bbox(self):
-        import pytest
-
-        with pytest.raises(ValueError):
-            BoundingBox(
-                {
-                    "type": "boundingbox",
-                    "points": [[0, 0, 0], [1, 1, 10]],
-                    "axes": ["latitude", "longitude", "levelist"],
-                    "grid": {"type": "octahedral", "resolution": 1280},
-                },
-                _make_conf(),
-            )
+    def test_grid_keyword_allows_3d_bbox(self):
+        """Higher-dimensional bounding boxes (lat/lon + levelist) are supported: the
+        polytope engine slices lat/lon against the output grid and levelist normally,
+        in a single pass.
+        """
+        bb = BoundingBox(
+            {
+                "type": "boundingbox",
+                "points": [[0, 0, 0], [1, 1, 10]],
+                "axes": ["latitude", "longitude", "levelist"],
+                "grid": {"type": "octahedral", "resolution": 1280},
+            },
+            _make_conf(),
+        )
+        assert bb.interpolation_options() == {
+            "method": "linear",
+            "out_grid": {"type": "octahedral", "resolution": 1280},
+        }
 
     def test_grid_keyword_requires_type_and_resolution(self):
         import pytest
@@ -203,7 +208,29 @@ class TestOtherFeaturesInterpolationOption:
             "out_grid": {"type": "octahedral", "resolution": 1280},
         }
 
-    def test_circle_grid_option_rejects_3d(self):
+    def test_circle_grid_option_allows_3d(self):
+        """Higher-dimensional shapes (eg. a circle spanning latitude/longitude/levelist)
+        are supported too - the polytope engine slices the lat/lon part of the shape
+        against the output grid and the rest (eg. levelist) normally, in one pass.
+        """
+        from polytope_mars.features.circle import Circle
+
+        circle = Circle(
+            {
+                "type": "circle",
+                "center": [[10, 20, 5]],
+                "radius": 5,
+                "axes": ["latitude", "longitude", "levelist"],
+                "grid": {"type": "octahedral", "resolution": 1280},
+            },
+            _make_conf(),
+        )
+        assert circle.interpolation_options() == {
+            "method": "linear",
+            "out_grid": {"type": "octahedral", "resolution": 1280},
+        }
+
+    def test_circle_grid_option_requires_lat_lon_axes(self):
         import pytest
 
         from polytope_mars.features.circle import Circle
@@ -212,9 +239,9 @@ class TestOtherFeaturesInterpolationOption:
             Circle(
                 {
                     "type": "circle",
-                    "center": [[10, 20, 5]],
+                    "center": [[10, 5]],
                     "radius": 5,
-                    "axes": ["latitude", "longitude", "levelist"],
+                    "axes": ["latitude", "levelist"],
                     "grid": {"type": "octahedral", "resolution": 1280},
                 },
                 _make_conf(),
