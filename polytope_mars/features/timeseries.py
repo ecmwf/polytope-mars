@@ -29,6 +29,8 @@ class TimeSeries(Feature):
         if "range" in feature_config:
             feature_config.pop("range")
 
+        self._pop_grid_option(feature_config, self.axes)
+
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):

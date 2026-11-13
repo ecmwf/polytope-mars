@@ -17,6 +17,7 @@ class BoundingBox(Feature):
         self.axes = feature_config.pop("axes", [])
         self.max_area = client_config.polygonrules.max_area
         self.field_area = 0
+        self._pop_grid_option(feature_config, self.axes)
 
         if "axes" in feature_config:
             raise ValueError("Bounding box does not have axes in feature, did you mean axes?")  # noqa: E501
