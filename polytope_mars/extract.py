@@ -422,10 +422,6 @@ class BlockExtractor:
         # come from one sort of the whole field's indexes (hundreds instead of hundreds of thousands on
         # HEALPix nested) and nothing of the spatial walk is per point.
         api = Polytope(datacube=handle, options=options, context=self.pm.log_context)
-        # The block walker reads any number of points per longitude leaf, so polygons and paths can be
-        # sliced into one leaf per latitude line instead of one node per point (which the fold in prepare
-        # turns into one node per sub-tree).
-        api._merge_union_rows = True
         self._count_extract_calls(api.datacube)
         self.pm._add_timing("datacube_init_ms", time.perf_counter() - t0)
 

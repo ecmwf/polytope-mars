@@ -531,7 +531,7 @@ request with per-row ranges and a 128 B/point request side.
 
 ## 4. What the prepared tree costs resident, with the fold off and on
 
-`python tools/measure_memory.py tree`: slice (always with `_merge_union_rows`), then `prepare`, in a fresh
+`python tools/measure_memory.py tree`: slice (union rows merged), then `prepare`, in a fresh
 subprocess each.  A bulk node holds `coordinates`
 (16 B/point) and `indexes` (8 B/point) for its whole sub-tree, where the row tree held the latitude
 nodes and the longitude leaf arrays; `tree MB` is a structural estimate (`getsizeof` of the nodes plus

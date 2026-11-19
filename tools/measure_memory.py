@@ -557,7 +557,6 @@ def _prepare(grid, request, axes=None):
     preq = Request(*shapes)
     options = conf.options.model_dump()
     api = Polytope(datacube=fake, options=options)
-    api._merge_union_rows = True
     # Polytope.retrieve minus the nearest-point bookkeeping (no Point shapes here) and the get.
     datacube_of(api).check_branching_axes(preq)
     api.switch_polytope_dim(preq)

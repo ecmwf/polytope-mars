@@ -303,7 +303,6 @@ def test_polygons_use_merged_rows_and_stay_identical(name, monkeypatch):
 
     def spy(self):
         api, tree = original(self)
-        assert api._merge_union_rows
         leaf_sizes.extend(len(leaf.values) for leaf in tree.leaves)
         return api, tree
 
