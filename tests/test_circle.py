@@ -137,7 +137,7 @@ class TestFeatureFactory:
             PolytopeMars(self.cf).extract(self.request)
 
     def test_circle_too_large(self):
-        # polygonrules.max_area is ignored; the per-field point limit replaces it
+        # a circle is bounded by the points of one field, not by its area
         self.cf["limits"] = {"max_points_per_field": 1}
         with pytest.raises(ValueError, match="grid points per field"):
             PolytopeMars(self.cf).extract(self.request)

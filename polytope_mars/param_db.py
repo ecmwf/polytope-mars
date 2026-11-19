@@ -7,7 +7,7 @@ parameter database, ``covjsonkit/data/<param_db>/{param,param_id,unit}.json``, r
 ``<param_db>`` is the config name (``encoders.covjson.param_db``, ``"ecmwf"`` or ``"dwd"``).
 
 Every function accepts either the database name or a config object with a ``param_db`` attribute
-(the shape of covjsonkit's ``CovjsonKitConfig``).
+(``encoders.covjson``).
 """
 
 from __future__ import annotations

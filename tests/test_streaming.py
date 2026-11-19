@@ -413,18 +413,10 @@ def test_max_polygon_points():
         pm.extract(request)
 
 
-def test_deprecated_config_keys_map_onto_new_sections():
-    conf = PolytopeMarsConfig.model_validate(
-        {"coverageconfig": {"param_db": "dwd"}, "polygonrules": {"max_points": 10, "max_area": 1.0}}
-    )
-    assert conf.encoders.covjson.param_db == "dwd"
-    assert conf.limits.max_polygon_points == 10
-    assert conf.limits.memory_budget_bytes is None and conf.limits.max_points_per_field is None
-    conf = PolytopeMarsConfig.model_validate(
-        {"coverageconfig": {"param_db": "dwd"}, "encoders": {"covjson": {"param_db": "ecmwf"}}}
-    )
-    assert conf.encoders.covjson.param_db == "ecmwf"  # explicit new section wins
+def test_config_defaults():
     conf = PolytopeMarsConfig.model_validate({})
+    assert conf.encoders.covjson.param_db == "ecmwf"
+    assert conf.limits.memory_budget_bytes is None and conf.limits.max_points_per_field is None
     assert conf.limits.max_polygon_points == 3600
     assert conf.limits.bytes_per_value == 32 and conf.limits.bytes_per_range == 96
     assert conf.limits.max_fields_per_call == 1024

@@ -84,7 +84,7 @@ _EFAS = {
         "pre_path": ["class", "stream", "type", "levtype", "expver", "date", "origin", "domain", "model"],
         "alternative_axes": [],
     },
-    "polygonrules": {"max_points": 3600, "max_area": 1800000000},
+    "limits": {"max_polygon_points": 3600},
     "separate_datetime": False,
 }
 
@@ -122,7 +122,7 @@ _O1280 = {
         "pre_path": ["class", "stream", "type", "levtype", "expver", "date", "time", "domain", "model"],
         "alternative_axes": [],
     },
-    "polygonrules": {"max_points": 3600, "max_area": 1800000000},
+    "limits": {"max_polygon_points": 3600},
     "separate_datetime": False,
 }
 
@@ -177,7 +177,7 @@ _HEALPIX_1024 = {
             "year",
         ],
     },
-    "polygonrules": {"max_points": 3600, "max_area": 300000000},
+    "limits": {"max_polygon_points": 3600},
     "separate_datetime": True,
 }
 
@@ -245,7 +245,7 @@ _ON_DEMAND_EXTREMES_DT = {
             "longitude": "quadtree",
         },
     },
-    "polygonrules": {"max_points": 3600, "max_area": 300000000},
+    "limits": {"max_polygon_points": 3600},
     "separate_datetime": True,
 }
 
@@ -491,8 +491,8 @@ def fake_gribjump_config_dict(grid: str, request: dict | None = None) -> dict:
     return {
         "datacube": {"type": "gribjump"},
         "options": options,
-        "coverageconfig": {"param_db": "ecmwf"},
-        "polygonrules": block["polygonrules"],
+        "encoders": {"covjson": {"param_db": "ecmwf"}},
+        "limits": dict(block["limits"]),
     }
 
 

@@ -1,4 +1,3 @@
-import logging
 from typing import Optional
 
 from conflator import ConfigModel
@@ -10,19 +9,6 @@ class DatacubeConfig(ConfigModel):
     type: str = "gribjump"
     config: str = "config.yaml"
     uri: str = "http://localhost:8000"
-
-
-class CovjsonKitConfig(ConfigModel):
-    param_db: str = "ecmwf"
-
-
-class PolygonRulesConfig(ConfigModel):
-    """Deprecated: use ``limits``. ``max_points`` maps to ``limits.max_polygon_points``; ``max_area`` is ignored."""
-
-    # Max points is the max number of points in all polygons requested allowed
-    max_points: Optional[int] = None
-    # Ignored (the split_request machinery it drove is gone; memory is bounded by limits.memory_budget_bytes)
-    max_area: Optional[float] = None
 
 
 class CovjsonEncoderConfig(ConfigModel):
@@ -131,20 +117,3 @@ class PolytopeMarsConfig(ConfigModel):
     options: Config = Config()
     encoders: EncodersConfig = EncodersConfig()
     limits: LimitsConfig = LimitsConfig()
-    #: Deprecated alias of ``encoders.covjson``.
-    coverageconfig: Optional[CovjsonKitConfig] = None
-    #: Deprecated alias of ``limits`` (``max_points`` -> ``max_polygon_points``; ``max_area`` ignored).
-    polygonrules: Optional[PolygonRulesConfig] = None
-
-    @model_validator(mode="after")
-    def _apply_deprecated_aliases(self):
-        # The deprecated keys only fill in what the new sections do not set explicitly.
-        if self.coverageconfig is not None and "covjson" not in self.encoders.model_fields_set:
-            logging.debug("polytope-mars config: 'coverageconfig' is deprecated, use 'encoders.covjson'")
-            covjson = CovjsonEncoderConfig(param_db=self.coverageconfig.param_db)
-            object.__setattr__(self.encoders, "covjson", covjson)
-        if self.polygonrules is not None:
-            logging.debug("polytope-mars config: 'polygonrules' is deprecated, use 'limits'")
-            if self.polygonrules.max_points is not None and "max_polygon_points" not in self.limits.model_fields_set:
-                object.__setattr__(self.limits, "max_polygon_points", self.polygonrules.max_points)
-        return self

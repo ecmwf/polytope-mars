@@ -15,10 +15,6 @@ class Polygons(Feature):
                 raise ValueError(
                     f"Number of points {len(self.shape)} exceeds the maximum of {client_config.limits.max_polygon_points}"  # noqa: E501
                 )
-            # if self.area > client_config.polygonrules.max_area:
-            #    raise ValueError(
-            #        f"Area of polygon {self.area} km\u00b2 exceeds the maximum of size of {client_config.polygonrules.max_area} km\u00b2"  # noqa: E501
-            #    )
             self.shape = [self.shape]
         else:
             len_polygons = 0
@@ -31,10 +27,6 @@ class Polygons(Feature):
                 raise ValueError(
                     f"Number of points {len_polygons} exceeds the maximum of {client_config.limits.max_polygon_points}"  # noqa: E501
                 )
-            # if area_polygons > client_config.polygonrules.max_area:
-            #    raise ValueError(
-            #        f"Area of polygon {area_polygons} exceeds the maximum of size of {client_config.polygonrules.max_area} degrees\u00b2"  # noqa: E501
-            #    )
 
         if "axes" not in feature_config:
             self.axes = ["latitude", "longitude"]
