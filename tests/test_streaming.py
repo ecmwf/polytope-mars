@@ -233,6 +233,29 @@ def test_one_call_per_field_gives_the_same_bytes(name):
 
 
 @pytest.mark.parametrize("name", ["efas_bbox_multiparam", "cdt_bbox_levelist"])
+def test_one_call_per_field_writes_each_field_before_the_next_call(name):
+    """On the one-field-per-call path a field is written before the next field is fetched.
+
+    So the worker holds one field however many params and levels a group has.  A param's range spans
+    its levels and opens with its first level: with ``L`` levels the n-th range of the output appears
+    after exactly ``(n - 1) x L + 1`` gribjump calls.
+    """
+    c = case(name)
+    fake = build_fake(c)
+    update = {"limits": {"memory_budget_bytes": 10**12, **SIZING, "max_fields_per_call": 1}}
+    pm, request = make_polytope_mars(c, fake, update)
+    out, calls_at_range = b"", []
+    for chunk in pm.extract_stream(request):
+        new_ranges = (out + chunk).count(b'"NdArray"') - out.count(b'"NdArray"')
+        calls_at_range += [fake.n_extract_calls] * new_ranges
+        out += chunk
+    assert out == expected(name)
+    assert fields_per_group(name) > 1
+    n_levels = len({v[2] for v in parsed(out)["coverages"][0]["domain"]["axes"]["composite"]["values"]})
+    assert calls_at_range == [n * n_levels + 1 for n in range(len(calls_at_range))]
+
+
+@pytest.mark.parametrize("name", ["efas_bbox_multiparam", "cdt_bbox_levelist"])
 def test_a_field_too_large_for_the_budget_is_refused(name):
     """A field is never split, so one that does not fit the budget is a client error, not a smaller call.
 

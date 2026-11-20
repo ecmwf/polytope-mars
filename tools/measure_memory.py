@@ -338,6 +338,14 @@ CDT_YEAR_POLYGON = {
 #: whole-world and whole-domain single fields: the largest requests a deployment serves
 WHOLE_WORLD_HEALPIX = {**CDT, "date": "20200101", "time": "0000", "param": "167", "feature": GLOBAL_BBOX}
 EFAS_WHOLE_DOMAIN = {**EFAS, "step": "6", "param": "240023", "feature": bbox([[72.24, -25.24], [22.76, 50.24]])}
+#: the same domain with four parameters of the ensemble: one coverage too large for one call at 1.5 GiB,
+#: fetched one field per call
+EFAS_WHOLE_DOMAIN_4_PARAMS = {
+    **EFAS_WHOLE_DOMAIN,
+    "type": "pf",
+    "number": "1",
+    "param": "228141/231002/231026/240023",
+}
 
 
 #: the same rectangle as a bounding box: a box keeps climate-dt's merged date/time axis, which puts
@@ -398,6 +406,12 @@ STREAM_SCENARIOS = {
     # the two largest single fields of the corpus, each whole in one call at the deployed budget
     "stream_healpix1024_whole_world_1_5GiB": ("stream", "healpix_1024", WHOLE_WORLD_HEALPIX, 3 * 1024**3 // 2),
     "stream_efas_whole_domain_1_5GiB": ("stream", "efas_local_regular", EFAS_WHOLE_DOMAIN, 3 * 1024**3 // 2),
+    "stream_efas_whole_domain_4params_1_5GiB": (
+        "stream",
+        "efas_local_regular",
+        EFAS_WHOLE_DOMAIN_4_PARAMS,
+        3 * 1024**3 // 2,
+    ),
     "stream_efas_danube_40steps_1GiB": ("stream", "efas_local_regular", DANUBE_40_STEPS, 1024**3),
     "stream_efas_danube_10steps_budget200MB": ("stream", "efas_local_regular", DANUBE_10_STEPS, 200_000_000),
     "stream_efas_danube_10steps_budget20MB": ("stream", "efas_local_regular", DANUBE_10_STEPS, 20_000_000),

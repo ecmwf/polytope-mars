@@ -546,7 +546,7 @@ class BlockExtractor:
         sizing = self._sizing()
         specs = self._group_specs(info, plan, groups, sizing)
         for spec in specs:
-            if spec.max_groups < 1 and not sizing.fits_field(spec.n_points, spec.n_fields, spec.n_ranges):
+            if spec.max_groups < 1 and not sizing.fits_field(spec.n_points, spec.n_ranges):
                 self._refuse_field(sizing, spec)
         return self._multipoint_blocks(datacube, tree, info, plan, groups, specs, sizing)
 
@@ -557,11 +557,11 @@ class BlockExtractor:
         be served at all.  ``limits.max_points_per_field`` is the explicit cap that refuses such a
         request before it is even sliced; this is the backstop for the requests it does not cover.
         """
-        needed = sizing.field_bytes(spec.n_points, spec.n_ranges, spec.n_fields)
+        needed = sizing.field_bytes(spec.n_points, spec.n_ranges)
         raise ValueError(
             f"One field of this request covers {spec.n_points} grid points and needs about "
             f"{needed / 1e6:.0f} MB to extract, more than the memory budget of {sizing.budget} bytes; "
-            "request a smaller area or fewer parameters per request"
+            "request a smaller area"
         )
 
     def _multipoint_blocks(self, datacube, tree, info, plan, groups, specs, sizing) -> Iterator[Any]:
@@ -587,7 +587,7 @@ class BlockExtractor:
                 # fetching its field whole (checked to fit by :meth:`_multipoint_source`).
                 self.counters.estimated_unit_bytes_max = max(
                     self.counters.estimated_unit_bytes_max,
-                    sizing.field_bytes(spec.n_points, spec.n_ranges, spec.n_fields),
+                    sizing.field_bytes(spec.n_points, spec.n_ranges),
                 )
                 blocks = self._field_units(datacube, tree, info, plan, g, index, spec)
             yield from self._emit_group(blocks)
@@ -732,28 +732,69 @@ class BlockExtractor:
     def _field_units(self, datacube, tree, info, plan, g, index, spec) -> Iterator[Any]:
         """One ``datacube.get`` per (param, level) of a group whose fields do not fit one call together.
 
-        Each call fetches one whole field -- a field is never split -- so gribjump's own buffer holds one
-        field instead of the group's, while the Python side still holds the group (its params have to be
-        known before the coverage is opened).  A ``DataNotFound`` on such a call therefore says that this
-        one field has no GRIB message, which is how a missing field is reported.
+        Each call fetches one whole field -- a field is never split -- and its block is handed on before
+        the next call, so gribjump's buffer and the Python side each hold one field.  The blocks are those
+        :meth:`_group_blocks` writes for a group fetched in one call:
+
+        * the coverage is opened (``CoordsBlock``) with the first field that has data, and a group without
+          any writes nothing;
+        * a param with no data at any level writes no range;
+        * a param missing at some of its levels gets NaN there.  Its leading levels without data are
+          counted rather than held, and written as NaN once the param's first level with data arrives.
+
+        The group is opened before its params with data are all known, so its ``FieldGroup.params`` lists
+        every planned param; the area encoders write ranges from the ``ValuesBlock`` s they receive.  A
+        ``DataNotFound`` on one of these calls says that this one field has no GRIB message, which is how a
+        missing field is reported.
         """
         has_levels = bool(g.levels)
-        fields: dict = {}
+        levels = g.levels or [None]
+        n_points = spec.n_points
+        fg = None
         for p in g.params:
-            for lev in g.levels or [None]:
-                sel = dict(g.select)
-                sel["param"] = p
-                if has_levels:
-                    sel["levelist"] = lev
-                got = self._get_fields(datacube, tree, [], label=sel, n_fields=1, select=sel)
-                # {} (gribjump matched no field of the call) or None (an unreadable DataNotFound message):
-                # with one field per call both mean that this field is missing, and nothing smaller is left
-                # to try.  Leaving the key out is how :meth:`_group_blocks` reports it.
-                if got:
-                    vals = got.get(())
-                    if vals is not None:
-                        fields[(p, lev if has_levels else None)] = vals
-        yield from self._group_blocks(info, plan, g, index, spec.n_points, fields, ())
+            leading_missing = []  # levels of p without data before its first level with data
+            p_has_data = False
+            for lev in levels:
+                vals = self._one_field(datacube, tree, g, p, lev if has_levels else None)
+                has_data = vals is not None and not vals[1]
+                if not has_data:
+                    self._note_missing(g.select, p, lev)
+                    if not p_has_data:
+                        leading_missing.append(lev)
+                        continue
+                if fg is None:
+                    fg = self._field_group(plan, g, index, g.params, n_points)
+                    lat, lon = group_coordinates(info, g.branches)
+                    if len(lat) != n_points:
+                        raise RuntimeError(f"Group {g.select}: {len(lat)} coordinates for {n_points} points")
+                    logger.debug(
+                        "%s: group %d %s: %d points, one field per call", self.pm.id, index, g.select, n_points
+                    )
+                    yield CoordsBlock(fg, lat, lon)
+                if not p_has_data:
+                    p_has_data = True
+                    for missing in leading_missing:
+                        level = plan.level_out(missing) if has_levels else None
+                        yield ValuesBlock(fg, str(p), level, np.full(n_points, np.nan))
+                arr = vals[0] if vals is not None and len(vals[0]) == n_points else np.full(n_points, np.nan)
+                yield ValuesBlock(fg, str(p), plan.level_out(lev) if has_levels else None, arr)
+        if fg is None:
+            logger.debug("%s: group %s has no data, skipped", self.pm.id, g.select)
+            return
+        yield GroupEnd(fg)
+
+    def _one_field(self, datacube, tree, g, param, level):
+        """``(values, missing)`` of one field of group ``g`` fetched on its own, or None when it has no message."""
+        sel = dict(g.select)
+        sel["param"] = param
+        if level is not None:
+            sel["levelist"] = level
+        got = self._get_fields(datacube, tree, [], label=sel, n_fields=1, select=sel)
+        # {} (gribjump matched no field of the call) or None (an unreadable DataNotFound message): with one
+        # field per call both mean that this field is missing, and nothing smaller is left to try.
+        if not got:
+            return None
+        return got.get(())
 
     # -- point features: one get for the whole tree --------------------------------------------------------
 

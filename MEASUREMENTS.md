@@ -419,6 +419,7 @@ Same machine and fake gribjump as above, `.venv` with polytope-feature `6ac17964
     python tools/measure_memory.py tree        # what a prepared tree costs
     python tools/measure_memory.py --run stream_healpix1024_whole_world_1_5GiB
     python tools/measure_memory.py --run stream_efas_whole_domain_1_5GiB
+    python tools/measure_memory.py --run stream_efas_whole_domain_4params_1_5GiB
 
 ## 1. Whole-field index ranges
 
@@ -583,6 +584,7 @@ tool now measures the folded tree only, which is the `on` row of each pair.
 | climate-dt HEALPix-1024 Europe box x 24 hourly | 1.5 GiB | 11,516,760 | **1** (24) | 177 MB | **803 MB** | 616 MB | 601.6 MiB | 49 s |
 | HEALPix-1024 whole world, one field | 1.5 GiB | 12,582,912 | **1** (1) | 573 MB | **1,242 MB** | 1,055 MB | 655.5 MiB | 39 s |
 | EFAS whole domain, one field | 1.5 GiB | 13,439,104 | **1** (1) | 611 MB | **1,192 MB** | 1,005 MB | 704.7 MiB | 81 s |
+| EFAS whole domain, four params of one coverage | 1.5 GiB | 53,756,416 | **4** (1) | 611 MB | **1,363 MB** | 1,176 MB | 1,354.2 MiB | 79 s |
 | EFAS Danube box x 40 steps | 1 GiB | 25,382,000 | **1** (40) | 349 MB | 466 MB | 279 MB | 1,347.7 MiB | 8 s |
 | EFAS Danube box x 10 steps | 200 MB | 6,345,500 | 1 (10) | 115 MB | 311 MB | 124 MB | 337.2 MiB | 5 s |
 | EFAS Danube box x 10 steps | none | 6,345,500 | 10 (1) | 45 MB | 273 MB | 86 MB | 337.2 MiB | 5 s |
@@ -599,6 +601,11 @@ zero. The call pattern of every row is unchanged by that: the shapes that fit on
 - **The two largest single fields of the corpus are served whole**, 1,242 MB and 1,192 MB of peak
   against a 1.5 GiB budget in a 3 GiB pod -- which is what lets a field be extracted whole. Both are
   one gribjump call of one field (1 and 2,968 index ranges).
+- **A coverage too large for one call is fetched one field per call and written field by field**: the
+  four params of the whole EFAS domain (one coverage, 1.72 GB of values at 32 B/value) need 1.90 GB when
+  the coverage is held until its last field, more than the 1.5 GiB budget; written as each field
+  arrives they cost one field, 611 MB estimated per call and 1,363 MB of peak for the whole process,
+  the prepared tree of 13.4M points included. 73 of the 79 s are the slice.
 - **A budget that cannot hold one field refuses the request** instead of banding it: 40 MB against the
   634,550-point Danube field raises `One field of this request covers 634550 grid points and needs
   about 45 MB to extract, more than the memory budget of 40000000 bytes` before any call (with

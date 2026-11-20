@@ -191,20 +191,28 @@ def test_the_largest_single_fields_fit_one_call_at_the_deployed_budget(shape):
     """A field is fetched whole, so the two largest requests of the corpus have to fit 1.5 GiB."""
     points, ranges = SHAPES[shape]
     s = sizing(BUDGET_1_5_GiB)
-    assert s.fits_field(points, 1, ranges) and s.max_unit_groups(points, 1, ranges) >= 1
+    assert s.fits_field(points, ranges) and s.max_unit_groups(points, 1, ranges) >= 1
     assert s.field_bytes(points, ranges) <= BUDGET_1_5_GiB
     assert s.estimate_bytes(1, points, ranges, group_fields=1) <= BUDGET_1_5_GiB
 
 
 def test_a_group_that_does_not_fit_is_fetched_one_field_per_call():
-    """One (param, level) per call costs one field's gribjump buffer and the group's values."""
+    """One (param, level) per call costs one field: its gribjump buffer and its values."""
     points, ranges = SHAPES["healpix1024_europe"]
-    s = sizing(90_000_000)  # fits one field of a 4-param group, not all four
+    s = sizing(40_000_000)  # fits one field, not a 4-param group
     assert s.max_unit_groups(points, 4, ranges) == 0
-    assert s.fits_field(points, 4, ranges)
-    assert s.field_bytes(points, ranges, 4) <= 90_000_000
-    # one field of the group costs its buffer once, not four times
-    assert s.field_bytes(points, ranges, 4) < s.estimate_bytes(4, points, ranges, group_fields=4)
+    assert s.fits_field(points, ranges)
+    assert s.field_bytes(points, ranges) <= 40_000_000
+    assert s.field_bytes(points, ranges) == s.estimate_bytes(1, points, ranges, group_fields=1)
+
+
+def test_a_multi_param_group_of_the_whole_efas_domain_is_served_one_field_per_call():
+    """Four params of the whole EFAS domain do not fit one call at 1.5 GiB, but one field at a time does."""
+    points, ranges = SHAPES["efas_whole_domain"]
+    s = sizing(BUDGET_1_5_GiB)
+    assert s.max_unit_groups(points, 4, ranges) == 0
+    assert s.fits_field(points, ranges)
+    assert s.field_bytes(points, ranges) < 700_000_000
 
 
 @pytest.mark.parametrize("shape", ["healpix1024_global", "efas_whole_domain"])
@@ -213,10 +221,8 @@ def test_a_field_that_does_not_fit_is_refused(shape):
     points, ranges = SHAPES[shape]
     s = sizing(500_000_000)
     assert s.max_unit_groups(points, 1, ranges) == 0
-    assert not s.fits_field(points, 1, ranges)
+    assert not s.fits_field(points, ranges)
     assert s.field_bytes(points, ranges) > 500_000_000
-    # ... and so is a multi-param group of such a field, whose params are all held at once
-    assert not sizing(BUDGET_1_5_GiB).fits_field(points, 4, ranges)
 
 
 def test_sizing_reads_the_config():

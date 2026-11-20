@@ -47,10 +47,10 @@ where ``python_values`` is one group's values.  Without a budget a unit is a sin
 bounds a larger call.
 
 **A field is never split.**  When the fields of a *single* group do not fit one call, the group is
-fetched one (param, level) at a time: gribjump's buffer then holds one field while the Python side
-still holds the group, which is :meth:`UnitSizing.field_bytes` (and :meth:`UnitSizing.fits_field`).
-A field that does not fit even on its own is refused,
-which ``limits.max_points_per_field`` is the explicit, pre-slicing form of.
+fetched one (param, level) at a time and each field is written before the next is fetched, so
+gribjump's buffer and the Python side each hold one field: :meth:`UnitSizing.field_bytes` (and
+:meth:`UnitSizing.fits_field`).  A field that does not fit even on its own is refused, which
+``limits.max_points_per_field`` is the explicit, pre-slicing form of.
 
 The sizing is a pure function of (request, config, prepared tree).  Nothing here reads the process
 RSS, a cgroup or any other runtime signal; ``timings`` *reports* the estimate and the observed peak
@@ -213,21 +213,20 @@ class UnitSizing:
             limits.append(_floor_div(room, per_group))
         return max(0, min(limits))
 
-    def field_bytes(self, n_points: int, n_ranges: int, group_fields: int = 1) -> int:
-        """Estimated peak of fetching one field of a group, one (param, level) per call.
+    def field_bytes(self, n_points: int, n_ranges: int) -> int:
+        """Estimated peak of fetching one field on its own, one (param, level) per call.
 
-        gribjump's buffer holds the one field the call asks for, but the Python side still holds the
-        whole group: a coverage lists the params that have data, so every field of the group is
-        fetched before the first block of it is emitted.  That is the cost of the smallest unit
-        there is -- a field is never split -- and what :meth:`fits_field` holds against the budget.
+        gribjump's buffer holds the one field the call asks for, and the field's block is written
+        before the next call, so the Python side holds that field too, whatever the number of params
+        and levels of its group.  That is the cost of the smallest unit there is -- a field is never
+        split -- and what :meth:`fits_field` holds against the budget.
         """
-        live_values = max(1, group_fields) * max(0, n_points)
-        return self.buffer_bytes(1, n_points, n_ranges) + self.call_bytes(n_points, live_values)
+        return self.buffer_bytes(1, n_points, n_ranges) + self.call_bytes(n_points, max(0, n_points))
 
-    def fits_field(self, n_points: int, group_fields: int, n_ranges: int) -> bool:
-        """True when one field of this group can be fetched at all; False means the request is refused."""
+    def fits_field(self, n_points: int, n_ranges: int) -> bool:
+        """True when one field can be fetched at all; False means the request is refused."""
         if self.max_values_per_unit is not None and n_points > self.max_values_per_unit:
             return False
         if self.budget is None:
             return True
-        return self.field_bytes(n_points, n_ranges, group_fields) <= self.budget
+        return self.field_bytes(n_points, n_ranges) <= self.budget

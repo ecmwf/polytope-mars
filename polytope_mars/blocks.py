@@ -9,9 +9,9 @@ structurally).
 Emission order per field group (one output coverage for MultiPoint domains)::
 
     CoordsBlock
-    for param in group.params:
+    for param in group.params, if it has data at one of the levels at least:
         for level in group.levels (or [None] when group.levels == ()):
-            ValuesBlock
+            ValuesBlock (NaN at a level without data)
     GroupEnd
 
 A group is one block of points per (param, level): a field is fetched whole and never split.
@@ -63,7 +63,9 @@ class FieldGroup:
     path: dict[str, str]
     #: ISO-8601 'Z' datetimes for the coverage t axis, computed by polytope-mars
     t: tuple[str, ...]
-    #: param ids PRESENT in this group (the ones gribjump has a message for), emission order
+    #: param ids of the group in emission order: those gribjump has a message for, except for a group
+    #: fetched one field per call (area features only), which lists its planned params and writes no
+    #: ValuesBlock for a param without data
     params: tuple[str, ...]
     #: levelist values, () when none (encoders treat () as one implicit level 0 where legacy did)
     levels: tuple[Any, ...]
