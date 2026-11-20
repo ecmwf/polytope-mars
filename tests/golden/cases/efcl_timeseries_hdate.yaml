@@ -1,0 +1,20 @@
+description: EFAS reforecast (efcl) timeseries along hdate, 5 hdates x 4 times (from_polytope_reforecast).
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efcl
+  type: sfo
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: "20230101"
+  time: 12/00/18/06
+  hdate: 20250103/20250101/20250105/20250102/20250104
+  param: "240023"
+  step: "6"
+  feature:
+    type: timeseries
+    points: [[50.73746373267438, 7.107723168102066]]
+    time_axis: hdate

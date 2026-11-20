@@ -6,21 +6,6 @@ from geographiclib.polygonarea import PolygonArea
 from shapely.geometry import LineString, Polygon
 from shapely.ops import split
 
-from .datetimes import count_dates, count_steps, count_times
-
-
-def count_values(value) -> int:
-    """
-    Count the number of integer values in a MARS string such as "1/2/3",
-    "1/to/10" or "1/to/10/by/2" (ranges are inclusive).
-    """
-    parts = str(value).split("/")
-    if "to" not in parts:
-        return len(parts)
-    to_index = parts.index("to")
-    by = int(parts[parts.index("by") + 1]) if "by" in parts else 1
-    return len(range(int(parts[to_index - 1]), int(parts[to_index + 1]) + 1, by))
-
 
 def haversine_distance(lat1, lon1, lat2, lon2):
     """
@@ -157,77 +142,3 @@ def get_boundingbox_area(points):
         area = get_area_piece(piece)
         total_area += area
     return total_area / 1e6  # Convert area from square meters to square kilometers  # noqa: E501
-
-
-def field_area(request, area):
-    """
-    Calculate the area of a request based on the number of fields and the area of the feature.
-    :param request: The request dictionary containing fields and feature dictionary.
-    :param area: The area of the feature in square kilometers.
-    :return: The total area of the request in square kilometers.
-    """
-
-    step_len = 1
-    number_len = 1
-    levelist_len = 1
-
-    # Check if the request contains a range for the feature instead of a step
-    if "feature" in request:
-        if "range" in request["feature"]:
-            if "start" in request["feature"]["range"] and "end" in request["feature"]["range"]:
-                step_len = request["feature"]["range"]["end"] - request["feature"]["range"]["start"] + 1
-            elif "start" in request["feature"]["range"]:
-                step_len = 1
-            elif "end" in request["feature"]["range"]:
-                step_len = 1
-
-    if "step" in request:
-        step_len = count_steps(request["step"])
-
-    if "number" in request:
-        number_len = count_values(request["number"])
-
-    if "levelist" in request:
-        levelist_len = count_values(request["levelist"])
-
-    param = request["param"].split("/")
-    param_len = len(param)
-
-    # date / time lengths — not present when the time axis is month or year
-    date_len = max(count_dates(request["date"]), 1) if "date" in request else 1
-
-    # hdate (reforecast/reanalysis) is an independent date axis alongside date
-    hdate_len = max(count_dates(request["hdate"]), 1) if "hdate" in request else 1
-
-    time_len = max(count_times(request["time"]), 1) if "time" in request else 1
-
-    # month / year lengths — contribute to cost when the time axis is month or year
-    month_len = count_values(request["month"]) if "month" in request else 1
-    year_len = count_values(request["year"]) if "year" in request else 1
-
-    shape_area = area
-
-    lengths = [param_len, step_len, number_len, time_len, date_len, hdate_len, month_len, year_len, levelist_len]
-    return math.prod(lengths) * shape_area
-
-
-def request_cost(request):
-    """
-    Calculate the cost of a request based on the area and the number of fields.
-    Note this is only a heuristic and does not take into account the actual cost of the request.
-
-    :param request: The request dictionary containing fields and feature dictionary.
-    :return: The cost of the request.
-    """
-    if request["feature"]["type"] == "boundingbox":
-        area = get_boundingbox_area(request["feature"]["points"])
-    elif request["feature"]["type"] == "polygon":
-        area = get_polygon_area(request["feature"]["shape"])
-    else:
-        area = len(request["feature"]["points"])
-    field_area_value = field_area(request, area)
-
-    if "dataset" in request:
-        field_area_value *= 2
-
-    return field_area_value

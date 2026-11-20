@@ -1,0 +1,22 @@
+description: climate-dt HEALPix 1024 bounding box on pressure levels, two levels x two params.
+grid: healpix_1024
+request:
+  activity: projections
+  class: d1
+  dataset: climate-dt
+  experiment: ssp3-7.0
+  expver: "0001"
+  generation: "1"
+  model: ifs-nemo
+  realization: "1"
+  resolution: high
+  type: fc
+  stream: clte
+  levtype: pl
+  levelist: 500/850
+  date: "20200101"
+  time: "0000"
+  param: 130/157
+  feature:
+    type: boundingbox
+    points: [[40.0, -105.0], [40.2, -104.8]]

@@ -132,11 +132,12 @@ Result will be a coverageJSON file with the requested data if it is available, f
 
 ### Config
 
-An example config can be found here [example_config.json](example_config.json). This can be edited to change any of the fields. The config is made up of three main components.
+An example config can be found here [example_config.json](example_config.json). This can be edited to change any of the fields. The config is made up of four main components.
 
 1. **datacube:** This option is used to set up what type of datacube is being used at the moment, currently only gribjump is supported.
 2. **options** These are the options used by polytope for interpreting the data available.
-3. **coverageconfig** These options are used by convjsonkit to parse the output of polytope into coverageJSON.
+3. **encoders** Settings of the output encoders: `covjson.param_db`, the parameter database names and units come from, and `tensogram` (fragment size, compression).
+4. **limits** What a request may cost: `max_polygon_points`, and the memory bounds of an extraction (`memory_budget_bytes`, `max_tree_bytes`, `max_points_per_field`) that the extraction is split and refused by.
 
 
 ## Acknowledgements

@@ -1,0 +1,23 @@
+description: >
+  EFAS reforecast (efcl) 2-D trajectory over two hdates, one step
+  (Path.from_polytope_reforecast: one coverage per series, composite [step, lat, lon, level]).
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efcl
+  type: sfo
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: "20230101"
+  time: "0000"
+  hdate: 20250101/20250102
+  param: "240023"
+  step: "6"
+  feature:
+    type: trajectory
+    points: [[50.75, 7.1], [50.73, 7.12], [50.7, 7.15]]
+    axes: [latitude, longitude]
+    inflation: [0.01, 0.01]

@@ -3,7 +3,7 @@ import logging
 from polytope_feature import shapes
 
 from ..feature import Feature
-from ..utils.areas import field_area, get_boundingbox_area
+from ..utils.areas import get_boundingbox_area
 
 
 class BoundingBox(Feature):
@@ -15,8 +15,6 @@ class BoundingBox(Feature):
         if "axes" not in feature_config:
             feature_config["axes"] = ["latitude", "longitude"]
         self.axes = feature_config.pop("axes", [])
-        self.max_area = client_config.polygonrules.max_area
-        self.field_area = 0
 
         if "axes" in feature_config:
             raise ValueError("Bounding box does not have axes in feature, did you mean axes?")  # noqa: E501
@@ -102,12 +100,6 @@ class BoundingBox(Feature):
                 raise ValueError(
                     "Bounding Box axes must contain at most 3 values, latitude, longitude, and levelist"
                 )  # noqa: E501
-
-        self.field_area = field_area(request, self.area_bb)
-        # if self.field_area > self.max_area:
-        #    raise ValueError(
-        #        f"The total request size is too large, area of request shape {self.area_bb} * total number of fields = {field_area(request, self.area_bb)} km\u00b2, must be below {self.max_area} km\u00b2 for total size request. "  # noqa: E501
-        #    )
 
         if len(feature_config["points"]) != 2:
             raise ValueError("Bounding box must have only two points in points")  # noqa: E501

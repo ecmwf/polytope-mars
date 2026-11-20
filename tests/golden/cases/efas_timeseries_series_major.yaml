@@ -1,0 +1,22 @@
+description: >
+  EFAS forecast (class=ce, stream=efas) timeseries over two dates x four steps, two points.
+  TimeSeriesReforecastPlan with ReforecastPlan.forecast() true: the coverages come out series by
+  series rather than point by point (the pointseries_order quirk the header carries).
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efas
+  type: fc
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: 20240101/20240102
+  time: "0000"
+  param: "240023"
+  step: 6/12/18/24
+  feature:
+    type: timeseries
+    points: [[50.75, 7.1], [50.7, 7.15]]
+    time_axis: step

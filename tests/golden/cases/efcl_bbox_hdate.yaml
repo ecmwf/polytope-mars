@@ -1,0 +1,19 @@
+description: EFAS reforecast (efcl) bounding box over two hdates, one time, two steps.
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efcl
+  type: sfo
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: "20230101"
+  time: "0000"
+  hdate: 20250101/20250102
+  param: "240023"
+  step: 6/12
+  feature:
+    type: boundingbox
+    points: [[50.75, 7.1], [50.7, 7.15]]

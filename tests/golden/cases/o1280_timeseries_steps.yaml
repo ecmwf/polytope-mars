@@ -1,0 +1,17 @@
+description: O1280 (ecmwf-time-critical) timeseries along step 0-24, two points, two params.
+grid: octahedral_1280
+request:
+  class: od
+  type: fc
+  expver: "0001"
+  domain: g
+  stream: oper
+  levtype: sfc
+  date: "20240101"
+  time: "0000"
+  step: 0/to/24
+  param: 167/165
+  feature:
+    type: timeseries
+    points: [[51.5, 0.1], [-33.9, 18.4]]
+    time_axis: step

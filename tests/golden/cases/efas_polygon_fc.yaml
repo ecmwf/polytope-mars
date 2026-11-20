@@ -1,0 +1,18 @@
+description: EFAS local_regular polygon (triangle), two steps.
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efas
+  type: fc
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: "20240101"
+  time: "1200"
+  step: 6/12
+  param: "240023"
+  feature:
+    type: polygon
+    shape: [[46.8, 7.9], [46.8, 8.2], [47.0, 8.0], [46.8, 7.9]]

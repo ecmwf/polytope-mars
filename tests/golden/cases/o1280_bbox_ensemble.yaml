@@ -1,0 +1,17 @@
+description: O1280 ensemble (enfo pf) bounding box, three members x two steps.
+grid: octahedral_1280
+request:
+  class: od
+  type: pf
+  expver: "0001"
+  domain: g
+  stream: enfo
+  levtype: sfc
+  date: "20240101"
+  time: "0000"
+  step: 0/6
+  number: 1/2/3
+  param: "167"
+  feature:
+    type: boundingbox
+    points: [[51.6, 0.0], [51.3, 0.3]]

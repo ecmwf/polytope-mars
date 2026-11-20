@@ -1,0 +1,21 @@
+description: climate-dt HEALPix 1024 bounding box, two dates x two hours (merged date/time; from_polytope).
+grid: healpix_1024
+request:
+  activity: projections
+  class: d1
+  dataset: climate-dt
+  experiment: ssp3-7.0
+  expver: "0001"
+  generation: "1"
+  model: ifs-nemo
+  realization: "1"
+  resolution: high
+  type: fc
+  stream: clte
+  levtype: sfc
+  date: 20200101/20200102
+  time: 0000/1200
+  param: "167"
+  feature:
+    type: boundingbox
+    points: [[40.0, -105.0], [40.3, -104.7]]

@@ -1,0 +1,23 @@
+description: >
+  EFAS local_regular bounding box, ensemble (type=pf): two members x three steps x two params.
+  Pins the coverage order of a class=ce request whose tree has both a number and a step axis
+  (the Volga ensemble shape): the legacy reforecast encoder keys coverages by
+  (reference datetime, step, number), i.e. all members of a step before the next step.
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efas
+  type: pf
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: 20240101
+  time: "0000"
+  step: 6/12/18
+  number: 1/2
+  param: 240023/240024
+  feature:
+    type: boundingbox
+    points: [[47.0, 8.0], [46.95, 8.05]]

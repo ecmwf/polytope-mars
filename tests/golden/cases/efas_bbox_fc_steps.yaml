@@ -1,0 +1,18 @@
+description: EFAS local_regular bounding box, fc with three steps (from_polytope_reforecast, separate date/time axes).
+grid: efas_local_regular
+request:
+  class: ce
+  stream: efas
+  type: fc
+  levtype: sfc
+  expver: "0001"
+  origin: ecmf
+  domain: g
+  model: lisflood
+  date: "20240101"
+  time: "0000"
+  step: 6/12/18
+  param: "240023"
+  feature:
+    type: boundingbox
+    points: [[47.0, 8.0], [46.9, 8.1]]

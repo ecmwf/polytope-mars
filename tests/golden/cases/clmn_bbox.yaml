@@ -1,0 +1,21 @@
+description: climate-dt monthly means (clmn) bounding box, one year x three months (from_polytope_month).
+grid: healpix_1024
+request:
+  activity: projections
+  class: d1
+  dataset: climate-dt
+  experiment: ssp3-7.0
+  expver: "0001"
+  generation: "1"
+  model: ifs-nemo
+  realization: "1"
+  resolution: high
+  type: fc
+  stream: clmn
+  levtype: sfc
+  year: "2020"
+  month: 1/2/3
+  param: "167"
+  feature:
+    type: boundingbox
+    points: [[40.0, -105.0], [40.2, -104.8]]

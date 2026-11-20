@@ -3,15 +3,12 @@ import logging
 from polytope_feature import shapes
 
 from ..feature import Feature
-from ..utils.areas import field_area
 
 
 class Position(Feature):
     def __init__(self, feature_config, client_config):
         assert feature_config.pop("type") == "position"
         self.axes = feature_config.pop("axes", [])
-
-        self.max_size = client_config.polygonrules.max_area
 
         if self.axes != []:
             if not isinstance(self.axes, list):
@@ -69,13 +66,6 @@ class Position(Feature):
 
     def parse(self, request, feature_config):
         logging.debug("Feature config: %s", feature_config)
-
-        area = field_area(request, len(feature_config["points"]))
-
-        if area > self.max_size:
-            raise ValueError(
-                f"Number of coordinates*fields for timeseries {area} exceeds total number allowed, please reduce the number of coordinates or fields requested"  # noqa: E501
-            )
 
         if len(feature_config["points"][0]) != 2:
             raise ValueError("Position must have only two values in points")
