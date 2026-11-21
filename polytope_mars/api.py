@@ -579,9 +579,13 @@ class PolytopeMars:
             raise NotImplementedError(f"Datacube type '{self.conf.datacube.type}' not found")  # noqa: E501
 
         logging.debug(f"Send log_context to polytope: {self.log_context}")
+        options = self.conf.options.model_dump()
+        interpolation_options = feature.interpolation_options()
+        if interpolation_options is not None:
+            options["interpolation"] = interpolation_options
         self.api = Polytope(
             datacube=fdbdatacube,
-            options=self.conf.options.model_dump(),
+            options=options,
             context=self.log_context,
         )
 

@@ -33,6 +33,42 @@ class Feature(ABC):
     def required_axes(self):
         pass
 
+    def _pop_grid_option(self, feature_config, axes):
+        """Pop and validate an optional "grid" keyword from a feature config, eg.:
+            {"type": "octahedral", "resolution": 1280, "method": "linear"}
+        Stores it on `self.grid` (None if absent) for `interpolation_options()` to
+        pick up. Works for any shape and any number of axes (eg. a 3D bounding box
+        over latitude/longitude/levelist): the polytope engine slices the lat/lon
+        part of the shape against the output grid and every other axis normally,
+        in a single pass, regardless of how many axes the shape spans.
+        """
+        grid = feature_config.pop("grid", None)
+        if grid is not None:
+            if "latitude" not in axes or "longitude" not in axes:
+                raise ValueError("Grid interpolation requires both 'latitude' and 'longitude' in axes")
+            if "type" not in grid or "resolution" not in grid:
+                raise ValueError(
+                    "'grid' must specify a 'type' and 'resolution', "
+                    "eg. {'type': 'octahedral', 'resolution': 1280}"
+                )
+        self.grid = grid
+        return grid
+
+    def interpolation_options(self):
+        """Return a dict suitable for polytope_feature's "interpolation" option
+        (`{"method": ..., "out_grid": {...}, "in_grid": {...}}`), or `None` if this
+        request doesn't use grid interpolation. Driven by `self.grid`, as set by
+        `_pop_grid_option()` - features that support a "grid" keyword call that
+        from their `__init__`; others keep the default `None` here.
+        """
+        grid = getattr(self, "grid", None)
+        if grid is None:
+            return None
+        return {
+            "method": grid.get("method", "linear"),
+            "out_grid": {"type": grid["type"], "resolution": grid["resolution"]},
+        }
+
     def split_request(self):
         """
         Determines if the request should be split based on the feature configuration.

@@ -9,6 +9,7 @@ class Frame(Feature):
         self.points = feature_config.pop("points", [])
         self.outer_box = feature_config.pop("outer_box", [])
         self.inner_box = feature_config.pop("inner_box", [])
+        self._pop_grid_option(feature_config, ["latitude", "longitude"])
 
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
@@ -48,6 +49,12 @@ class Frame(Feature):
 
     def name(self):
         return "Frame"
+
+    def required_keys(self):
+        return ["type", "outer_box", "inner_box"]
+
+    def required_axes(self):
+        return ["latitude", "longitude"]
 
     def parse(self, request, feature_config):
         return request

@@ -30,6 +30,8 @@ class Path(Feature):
         if "axis" in feature_config:
             raise ValueError("Trajectory does not have axis in feature, did you mean axes?")  # noqa: E501
 
+        self._pop_grid_option(feature_config, self.axes)
+
         assert len(feature_config) == 0, f"Unexpected keys in config: {feature_config.keys()}"
 
     def get_shapes(self):
